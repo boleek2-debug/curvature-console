@@ -7,12 +7,14 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QListWidget,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
+from curvature_console.infrastructure.context_loader import ContextLoadResult
 from curvature_console.presentation.attachment_list import AttachmentList
 
 
@@ -20,6 +22,8 @@ class DepartmentPanel(QFrame):
     """Display one department workspace inside Curvature Console."""
 
     focus_requested = Signal(str)
+    context_refresh_requested = Signal(str)
+    context_preview_requested = Signal(str)
 
     def __init__(
         self,
@@ -53,6 +57,34 @@ class DepartmentPanel(QFrame):
         header_layout.addStretch()
         header_layout.addWidget(self.focus_button)
 
+        self.context_label = QLabel("Context: not loaded")
+        self.context_label.setObjectName(f"{department_id}ContextStatus")
+
+        self.context_files = QListWidget()
+        self.context_files.setObjectName(f"{department_id}ContextFiles")
+        self.context_files.setMaximumHeight(92)
+
+        self.refresh_context_button = QPushButton("Refresh Context")
+        self.refresh_context_button.setObjectName(
+            f"{department_id}RefreshContextButton"
+        )
+        self.refresh_context_button.clicked.connect(
+            self._request_context_refresh
+        )
+
+        self.preview_context_button = QPushButton("Preview Context")
+        self.preview_context_button.setObjectName(
+            f"{department_id}PreviewContextButton"
+        )
+        self.preview_context_button.setEnabled(False)
+        self.preview_context_button.clicked.connect(
+            self._request_context_preview
+        )
+
+        context_button_layout = QHBoxLayout()
+        context_button_layout.addWidget(self.refresh_context_button)
+        context_button_layout.addWidget(self.preview_context_button)
+
         self.conversation_view = QPlainTextEdit()
         self.conversation_view.setObjectName(f"{department_id}Conversation")
         self.conversation_view.setReadOnly(True)
@@ -82,13 +114,38 @@ class DepartmentPanel(QFrame):
         layout.addLayout(header_layout)
         layout.addWidget(self.status_label)
         layout.addWidget(self.responsibility_label)
+        layout.addWidget(self.context_label)
+        layout.addWidget(self.context_files)
+        layout.addLayout(context_button_layout)
         layout.addWidget(self.conversation_view, 1)
         layout.addWidget(self.input_editor)
         layout.addWidget(self.attachment_list)
         layout.addWidget(self.send_button)
 
+    def set_context_result(self, result: ContextLoadResult) -> None:
+        """Display the current context loading result."""
+
+        self.context_files.clear()
+
+        for document in result.documents:
+            self.context_files.addItem(document.label)
+
+        self.context_label.setText(
+            f"Context: {result.loaded_count} loaded · "
+            f"{len(result.errors)} errors"
+        )
+        self.preview_context_button.setEnabled(
+            bool(result.documents or result.errors)
+        )
+
     def _request_focus(self) -> None:
         self.focus_requested.emit(self.department_id)
+
+    def _request_context_refresh(self) -> None:
+        self.context_refresh_requested.emit(self.department_id)
+
+    def _request_context_preview(self) -> None:
+        self.context_preview_requested.emit(self.department_id)
 
     def _update_attachment_status(self, count: int) -> None:
         if count == 0:

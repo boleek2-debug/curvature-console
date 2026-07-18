@@ -1,0 +1,9 @@
+department_id: project
+title: Curvature Project
+role_file: ~/curvature-console/roles/project.md
+repository_path: ~/Curvature
+documents:
+  - CURVATURE.md
+  - BLUEPRINT.md
+  - ROADMAP.md
+  - HANDOFF.md

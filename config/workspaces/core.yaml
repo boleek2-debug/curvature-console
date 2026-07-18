@@ -1,0 +1,10 @@
+department_id: core
+title: Curvature Core
+role_file: ~/curvature-console/roles/core.md
+repository_path: ~/Curvature
+documents:
+  - HANDOFF.md
+  - BLUEPRINT.md
+  - ROADMAP.md
+  - PIPELINE.md
+  - ASSISTANT_ARCHITECTURE.md

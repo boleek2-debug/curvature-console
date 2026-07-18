@@ -1,67 +1,101 @@
 # HANDOFF
 
-Status: Ready for Next Sprint
-Version: 0.2.0
+Status: Active
+Version: 0.3.0
 Owner: Project Curvature
 Last Updated: 2026-07-18
 
 ---
 
-# 1. Completed Sprint
+# 1. Completed Work
 
-ASSISTANT-001B1 — Repository and Application Foundation
+## ASSISTANT-001B1
 
-Completed:
+Completed and verified:
 
-- separate `~/curvature-console` repository
-- dedicated `curvature-console` Conda environment
-- Python 3.11.15
+- standalone repository
+- dedicated Conda environment
 - package foundation
-- PySide6 application entry point
-- minimal desktop main window
-- reproducible environment definition
-- automated application tests
-- repository documentation foundation
+- minimal desktop application
+- 2 automated tests
 
-Verified:
+## ASSISTANT-001B2
 
-- `python -m pytest -v`
-- 2 automated tests passed
-- `python -m curvature_console.main`
-- desktop window opened successfully
-- application title displayed `Curvature Console`
+Completed and verified:
 
-# 2. Linux Qt Environment Decision
+- simultaneous Project, Core and Research panels
+- horizontal splitter
+- independent conversation and input areas
+- resizable panels
+- temporary panel focus
+- restoration to the three-panel layout
+- 6 automated tests
+- commit `00885bd`
 
-The working PySide6 runtime is installed through Conda Forge.
+## Per-Department Attachments
 
-Do not install PySide6 through pip in this environment.
+Completed and verified:
 
-Reason:
+- independent attachment queues
+- file picker
+- drag and drop
+- screenshot paste
+- remove selected
+- clear queue
+- file metadata display
+- no automatic cross-department sharing
+- 11 automated tests
+- commit `8920117`
 
-The pip-provided Qt runtime failed to load the Linux `xcb` platform plugin because of incompatible or unavailable XCB cursor libraries.
+---
 
-The verified configuration is:
+# 2. Active Sprint
 
-- PySide6 from Conda Forge
-- Qt runtime from Conda Forge
-- XCB support libraries from Conda Forge
-- Curvature Console installed with `pip -e . --no-deps`
+ASSISTANT-001B3 — Workspace Configuration and Context Loading
 
-The VS Code `Error refreshing packages` notification is an editor integration issue and did not block tests or application launch.
+Goal:
 
-# 3. Current Repository
+Give all three workspaces explicit identities and load their assigned Project Curvature documents automatically.
 
-Repository:
+Required deliverables:
+
+- YAML workspace definitions
+- Markdown role documents
+- read-only repository reader
+- context loader
+- visible loaded-document list
+- context preview
+- manual per-workspace refresh
+- refresh-all control
+- load-error reporting
+- automated tests
+
+---
+
+# 3. Exact Next Step
+
+1. Save the B3 context package.
+2. Run the complete test suite.
+3. Launch the application.
+4. Verify that each department displays loaded context.
+5. Open each context preview.
+6. Confirm missing files appear as errors without crashing.
+7. Commit after verification.
+
+Expected test result:
+
+```text
+16 passed
+```
+
+---
+
+# 4. Current Repository Relationship
+
+Curvature Console repository:
 
 ```text
 ~/curvature-console
-```
-
-Environment:
-
-```text
-curvature-console
 ```
 
 Project Curvature repository:
@@ -70,65 +104,30 @@ Project Curvature repository:
 ~/Curvature
 ```
 
-Curvature Console repository access remains read-only during the MVP.
+Repository access is read-only during the MVP.
 
-# 4. Exact Next Sprint
+Default workspace context:
 
-ASSISTANT-001B2 — Three-Panel Desktop Shell
+- Project: CURVATURE, BLUEPRINT, ROADMAP and HANDOFF
+- Core: HANDOFF, BLUEPRINT, ROADMAP, PIPELINE and ASSISTANT_ARCHITECTURE
+- Research: LANGUAGE, CURVATURE, ROADMAP and HANDOFF
 
-Goal:
+---
 
-Replace the temporary foundation label with the first real Curvature Console interface.
+# 5. Out of Scope
 
-Required deliverables:
-
-- Project panel
-- Core panel
-- Research panel
-- all three panels visible simultaneously
-- horizontal splitter
-- equal initial widths
-- independent conversation display areas
-- independent input areas
-- department headers
-- visible placeholder status
-- resizable panel widths
-- temporary panel focus
-- return to three-panel view
-- automated tests
-
-# 5. Exact Next Step
-
-At the beginning of the next session:
-
-1. read this HANDOFF
-2. inspect the current repository tree
-3. request the current files that will be modified
-4. design the minimum `DepartmentPanel`
-5. implement the three-panel shell without adding AI, persistence or context loading
-
-Expected files likely include:
-
-- `src/curvature_console/main.py`
-- new presentation package files
-- `tests/test_application.py`
-- new presentation tests
-
-Do not assume their current content without inspecting them.
-
-# 6. Out of Scope for B2
-
-- OpenAI integration
-- context loading
-- role document loading
+- AI integration
 - SQLite
 - conversation persistence
+- layout persistence
 - Department State Bus
 - handoffs
-- Git integration
 - repository writes
+- Git operations
 
-# 7. Engineering Rules
+---
+
+# 6. Engineering Rules
 
 1. Never guess.
 2. Request current files before modifying uncertain code.

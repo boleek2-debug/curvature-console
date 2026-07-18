@@ -1,0 +1,9 @@
+department_id: research
+title: Curvature Research
+role_file: ~/curvature-console/roles/research.md
+repository_path: ~/Curvature
+documents:
+  - LANGUAGE.md
+  - CURVATURE.md
+  - ROADMAP.md
+  - HANDOFF.md
