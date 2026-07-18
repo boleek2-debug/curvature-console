@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QFrame,
@@ -24,12 +26,14 @@ class DepartmentPanel(QFrame):
     focus_requested = Signal(str)
     context_refresh_requested = Signal(str)
     context_preview_requested = Signal(str)
+    workspace_state_changed = Signal(str)
 
     def __init__(
         self,
         department_id: str,
         title: str,
         responsibility: str,
+        attachment_storage_dir: Path | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -97,10 +101,17 @@ class DepartmentPanel(QFrame):
         self.input_editor.setObjectName(f"{department_id}Input")
         self.input_editor.setPlaceholderText(f"Message {title}...")
         self.input_editor.setMaximumHeight(110)
+        self.input_editor.textChanged.connect(self._notify_state_changed)
 
-        self.attachment_list = AttachmentList(department_id=department_id)
+        self.attachment_list = AttachmentList(
+            department_id=department_id,
+            attachment_storage_dir=attachment_storage_dir,
+        )
         self.attachment_list.attachment_count_changed.connect(
             self._update_attachment_status
+        )
+        self.attachment_list.attachments_changed.connect(
+            self._notify_state_changed
         )
 
         self.send_button = QPushButton("Send")
@@ -146,6 +157,9 @@ class DepartmentPanel(QFrame):
 
     def _request_context_preview(self) -> None:
         self.context_preview_requested.emit(self.department_id)
+
+    def _notify_state_changed(self) -> None:
+        self.workspace_state_changed.emit(self.department_id)
 
     def _update_attachment_status(self, count: int) -> None:
         if count == 0:

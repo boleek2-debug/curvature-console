@@ -1,7 +1,7 @@
 # ROADMAP
 
 Status: Active
-Version: 0.3.0
+Version: 0.4.0
 Owner: Project Curvature
 Last Updated: 2026-07-18
 
@@ -15,66 +15,54 @@ Completed and verified.
 
 ## ASSISTANT-001B2 — Three-Panel Desktop Shell
 
-Completed and verified:
-
-- Project, Core and Research visible simultaneously
-- independent conversation and input areas
-- resizable splitter
-- focus and restore
-- automated tests
+Completed and verified.
 
 ## Per-Department Attachments
 
+Completed and verified.
+
+## ASSISTANT-001B3 — Workspace Configuration and Context Loading
+
 Completed and verified:
 
-- independent queues
-- files, screenshots and drag-and-drop
-- removal and clearing
-- metadata display
+- workspace definitions and roles
+- read-only repository access
+- automatic context loading
+- context preview and refresh
 - automated tests
 
 ---
 
 # Active Milestone
 
-## ASSISTANT-001B3 — Workspace Configuration and Context Loading
+## ASSISTANT-001B4 — Local State and Conversation Persistence
 
 Goal:
 
-Give each department a controlled, explicit and previewable context package.
+Restore each department to its previous operational state after application restart.
 
 Required deliverables:
 
-- YAML workspace definitions
-- role documents
-- repository reader
-- document loader
-- read-only repository access
-- visible loaded-context list
-- context preview
-- per-workspace refresh
-- refresh-all control
-- load-error reporting
+- SQLite schema
+- independent department state
+- conversation transcript persistence
+- draft persistence
+- attachment metadata persistence
+- persistent pasted screenshots
+- splitter layout persistence
+- Focus mode persistence
+- restart continuity
 - automated tests
 
 Scope rule:
 
-B3 loads local configuration and documents only.
+B4 stores local operational state only.
 
-It must not add AI, persistence, State Bus or handoffs.
+It must not add AI integration, State Bus, handoffs or repository writes.
 
 ---
 
 # Planned Milestones
-
-## ASSISTANT-001B4 — Local State and Conversation Persistence
-
-- SQLite schema
-- conversation persistence
-- department state
-- attachment metadata persistence
-- layout persistence
-- restart continuity
 
 ## ASSISTANT-001B5 — AI Provider Integration
 

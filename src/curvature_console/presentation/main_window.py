@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
@@ -24,6 +25,7 @@ from curvature_console.infrastructure.context_loader import (
     ContextLoadResult,
     WorkspaceContextLoader,
 )
+from curvature_console.infrastructure.state_store import SQLiteStateStore
 from curvature_console.presentation.context_preview_dialog import (
     ContextPreviewDialog,
 )
@@ -55,6 +57,8 @@ class MainWindow(QMainWindow):
         self,
         application_name: str = "Curvature Console",
         config_directory: Path | None = None,
+        state_path: Path | None = None,
+        data_directory: Path | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -66,16 +70,24 @@ class MainWindow(QMainWindow):
             if config_directory is not None
             else Path.cwd() / "config" / "workspaces"
         )
+        self.data_directory = (
+            data_directory
+            if data_directory is not None
+            else Path.cwd() / "data"
+        )
+        self.state_store = SQLiteStateStore(state_path)
         self.context_loader = WorkspaceContextLoader()
         self.workspace_configs: dict[str, WorkspaceConfig] = {}
         self.context_results: dict[str, ContextLoadResult] = {}
 
+        self._restoring_state = True
         self._focused_department_id: str | None = None
         self._three_panel_sizes = [500, 500, 500]
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setObjectName("departmentSplitter")
         self.splitter.setChildrenCollapsible(False)
+        self.splitter.splitterMoved.connect(self._save_layout_state)
 
         self.department_panels: dict[str, DepartmentPanel] = {}
 
@@ -84,10 +96,14 @@ class MainWindow(QMainWindow):
                 department_id=department_id,
                 title=title,
                 responsibility=responsibility,
+                attachment_storage_dir=(
+                    self.data_directory / "attachments" / department_id
+                ),
             )
             panel.focus_requested.connect(self.focus_department)
             panel.context_refresh_requested.connect(self.refresh_context)
             panel.context_preview_requested.connect(self.preview_context)
+            panel.workspace_state_changed.connect(self.save_department_state)
             self.department_panels[department_id] = panel
             self.splitter.addWidget(panel)
 
@@ -117,6 +133,8 @@ class MainWindow(QMainWindow):
 
         self.load_workspace_configs()
         self.refresh_all_contexts()
+        self.restore_persisted_state()
+        self._restoring_state = False
 
     @property
     def focused_department_id(self) -> str | None:
@@ -202,12 +220,67 @@ class MainWindow(QMainWindow):
         )
         dialog.exec()
 
-    def focus_department(self, department_id: str) -> None:
+    def restore_persisted_state(self) -> None:
+        """Restore department content, attachments and layout."""
+
+        for department_id, panel in self.department_panels.items():
+            state = self.state_store.load_department_state(department_id)
+            if state is not None:
+                panel.conversation_view.setPlainText(state.conversation_text)
+                panel.input_editor.setPlainText(state.draft_text)
+
+            panel.attachment_list.restore_records(
+                self.state_store.load_attachments(department_id)
+            )
+
+        layout = self.state_store.load_layout()
+        if layout is None:
+            return
+
+        self._three_panel_sizes = list(layout.splitter_sizes)
+        self.splitter.setSizes(self._three_panel_sizes)
+
+        if layout.focused_department_id is not None:
+            self.focus_department(
+                layout.focused_department_id,
+                capture_current_sizes=False,
+            )
+
+    def save_department_state(self, department_id: str) -> None:
+        """Persist one department workspace immediately."""
+
+        if self._restoring_state:
+            return
+
+        panel = self.department_panels[department_id]
+        self.state_store.save_department_state(
+            department_id=department_id,
+            conversation_text=panel.conversation_view.toPlainText(),
+            draft_text=panel.input_editor.toPlainText(),
+        )
+        self.state_store.replace_attachments(
+            department_id,
+            panel.attachment_list.records,
+        )
+
+    def save_all_state(self) -> None:
+        """Persist every department and the current layout."""
+
+        for department_id in self.department_panels:
+            self.save_department_state(department_id)
+        self._save_layout_state()
+
+    def focus_department(
+        self,
+        department_id: str,
+        capture_current_sizes: bool = True,
+    ) -> None:
         """Temporarily show one department without destroying other state."""
+
         if department_id not in self.department_panels:
             raise ValueError(f"Unknown department: {department_id}")
 
-        if self._focused_department_id is None:
+        if self._focused_department_id is None and capture_current_sizes:
             current_sizes = self.splitter.sizes()
             if current_sizes and any(current_sizes):
                 self._three_panel_sizes = current_sizes
@@ -220,9 +293,11 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"Focused: {self.department_panels[department_id].title_label.text()}"
         )
+        self._save_layout_state()
 
     def restore_three_panel_view(self) -> None:
         """Restore all three department panels and their previous widths."""
+
         for panel in self.department_panels.values():
             panel.setVisible(True)
 
@@ -231,4 +306,26 @@ class MainWindow(QMainWindow):
         self.restore_button.setEnabled(False)
         self.statusBar().showMessage(
             "Three departments operational — AI not connected"
+        )
+        self._save_layout_state()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Persist operational state before closing."""
+
+        self.save_all_state()
+        self.state_store.close()
+        super().closeEvent(event)
+
+    def _save_layout_state(self, *_args) -> None:
+        if self._restoring_state:
+            return
+
+        if self._focused_department_id is None:
+            sizes = self.splitter.sizes()
+            if len(sizes) == 3 and any(sizes):
+                self._three_panel_sizes = sizes
+
+        self.state_store.save_layout(
+            self._three_panel_sizes,
+            self._focused_department_id,
         )

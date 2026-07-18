@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+from collections.abc import Iterable
 from pathlib import Path
 from uuid import uuid4
 
@@ -24,18 +25,25 @@ from curvature_console.presentation.attachment_record import AttachmentRecord
 
 
 class AttachmentList(QWidget):
-    """Manage an in-memory attachment queue for one department."""
+    """Manage an attachment queue for one department."""
 
     attachment_count_changed = Signal(int)
+    attachments_changed = Signal()
 
     def __init__(
         self,
         department_id: str,
+        attachment_storage_dir: Path | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
 
         self.department_id = department_id
+        self.attachment_storage_dir = (
+            attachment_storage_dir.expanduser()
+            if attachment_storage_dir is not None
+            else None
+        )
         self.setObjectName(f"{department_id}AttachmentArea")
         self.setAcceptDrops(True)
 
@@ -85,6 +93,8 @@ class AttachmentList(QWidget):
         layout.addWidget(self.list_widget)
         layout.addLayout(button_layout)
 
+        self._refresh_state(emit_change=False)
+
     @property
     def records(self) -> tuple[AttachmentRecord, ...]:
         """Return an immutable view of queued attachments."""
@@ -102,10 +112,11 @@ class AttachmentList(QWidget):
         )
         self.add_paths(Path(path) for path in paths)
 
-    def add_paths(self, paths) -> None:
+    def add_paths(self, paths: Iterable[Path]) -> None:
         """Queue existing files, ignoring duplicates and missing paths."""
 
         existing = {record.path.resolve() for record in self._records}
+        changed = False
 
         for raw_path in paths:
             path = Path(raw_path).expanduser()
@@ -120,11 +131,29 @@ class AttachmentList(QWidget):
             self._records.append(record)
             existing.add(resolved)
             self._add_record_item(record)
+            changed = True
 
-        self._refresh_state()
+        self._refresh_state(emit_change=changed)
+
+    def restore_records(
+        self,
+        records: Iterable[AttachmentRecord],
+    ) -> None:
+        """Restore attachment metadata without deleting source files."""
+
+        self._records.clear()
+        self.list_widget.clear()
+
+        for record in records:
+            if not record.path.is_file():
+                continue
+            self._records.append(record)
+            self._add_record_item(record)
+
+        self._refresh_state(emit_change=False)
 
     def paste_screenshot_from_clipboard(self) -> bool:
-        """Save a clipboard image to a temporary PNG and queue it."""
+        """Save a clipboard image and queue it."""
 
         clipboard = QApplication.clipboard()
         image = clipboard.image()
@@ -132,18 +161,26 @@ class AttachmentList(QWidget):
         if image.isNull():
             return False
 
+        if self.attachment_storage_dir is None:
+            storage_dir = Path(tempfile.gettempdir())
+            temporary = True
+        else:
+            storage_dir = self.attachment_storage_dir
+            storage_dir.mkdir(parents=True, exist_ok=True)
+            temporary = False
+
         target = (
-            Path(tempfile.gettempdir())
+            storage_dir
             / f"curvature-console-{self.department_id}-{uuid4().hex}.png"
         )
 
         if not image.save(str(target), "PNG"):
             return False
 
-        record = AttachmentRecord(path=target, temporary=True)
+        record = AttachmentRecord(path=target, temporary=temporary)
         self._records.append(record)
         self._add_record_item(record)
-        self._refresh_state()
+        self._refresh_state(emit_change=True)
         return True
 
     def remove_selected(self) -> None:
@@ -157,19 +194,21 @@ class AttachmentList(QWidget):
         for row in selected_rows:
             record = self._records.pop(row)
             self.list_widget.takeItem(row)
-            self._delete_temporary_file(record)
+            self._delete_managed_file(record)
 
-        self._refresh_state()
+        self._refresh_state(emit_change=bool(selected_rows))
 
     def clear_attachments(self) -> None:
         """Remove all queued attachments."""
 
+        changed = bool(self._records)
+
         for record in self._records:
-            self._delete_temporary_file(record)
+            self._delete_managed_file(record)
 
         self._records.clear()
         self.list_widget.clear()
-        self._refresh_state()
+        self._refresh_state(emit_change=changed)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if event.mimeData().hasUrls():
@@ -192,16 +231,29 @@ class AttachmentList(QWidget):
         item.setToolTip(str(record.path))
         self.list_widget.addItem(item)
 
-    def _refresh_state(self) -> None:
+    def _refresh_state(self, emit_change: bool) -> None:
         count = len(self._records)
         self.header_label.setText(f"Attachments: {count}")
         self.remove_selected_button.setEnabled(count > 0)
         self.clear_button.setEnabled(count > 0)
         self.attachment_count_changed.emit(count)
+        if emit_change:
+            self.attachments_changed.emit()
 
-    @staticmethod
-    def _delete_temporary_file(record: AttachmentRecord) -> None:
-        if not record.temporary:
+    def _delete_managed_file(self, record: AttachmentRecord) -> None:
+        should_delete = record.temporary
+
+        if self.attachment_storage_dir is not None:
+            try:
+                record.path.resolve().relative_to(
+                    self.attachment_storage_dir.resolve()
+                )
+            except ValueError:
+                pass
+            else:
+                should_delete = True
+
+        if not should_delete:
             return
 
         try:
