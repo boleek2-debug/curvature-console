@@ -1,0 +1,13 @@
+name: curvature-console
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.11
+  - pip
+  - pyside6
+  - pyyaml
+  - pytest
+  - pip:
+      - -e . --no-deps

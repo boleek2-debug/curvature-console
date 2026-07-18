@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environments
+.venv/
+venv/
+
+# Build
+build/
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Curvature Console runtime data
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/*.json
+!data/.gitkeep
+
+# Secrets
+.env
+*.key
