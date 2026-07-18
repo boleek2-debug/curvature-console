@@ -22,28 +22,27 @@ The following work is complete and verified:
 - ASSISTANT-001B3 — Workspace Configuration and Context Loading
 - ASSISTANT-001B4 — Local State and Conversation Persistence
 - ASSISTANT-001B5.1 — Task and Thread Handoff Packages
+- ASSISTANT-001B5.2A — Browser Bridge Foundation
 
-Current verification result:
+B5.2A commit:
 
 ```text
-32 passed
+a33fa4e Implement B5.2A browser bridge foundation
 ```
 
 The active implementation unit is:
 
 ```text
-ASSISTANT-001B5.2 — Assistant Response Import
+ASSISTANT-001B5.2B — Automated Send and Receive
 ```
 
 ---
 
 # Product Model
 
-Curvature Console is a local coordination, context, persistence and transfer tool.
+Curvature Console is a local coordination, context, persistence, routing and browser-automation tool.
 
-It does not replace the official ChatGPT application.
-
-Recommended ChatGPT structure:
+Official ChatGPT Projects remain the AI conversation environment:
 
 ```text
 ChatGPT Project: Curvature Project
@@ -51,9 +50,9 @@ ChatGPT Project: Curvature Core
 ChatGPT Project: Curvature Research
 ```
 
-Normal work uses a compact Task Package.
+Curvature Console prepares a controlled Task Package or Thread Handoff Package, sends it automatically through the matching logged-in ChatGPT Project, retrieves the completed assistant response and routes it back to the originating Console department.
 
-Moving to a new chat inside the same ChatGPT Project uses a comprehensive Thread Handoff Package.
+Manual copy-and-paste is not an accepted product workflow.
 
 ---
 
@@ -65,12 +64,13 @@ Therefore:
 
 - paid OpenAI API usage is not part of the default architecture;
 - no OpenAI API key is required;
-- no automatic paid model request is performed;
-- no background process may incur token, tool or search charges;
-- official ChatGPT remains the primary AI conversation environment;
+- no paid provider request is performed;
+- no background process may incur API, token, tool or search charges;
+- official ChatGPT remains the AI conversation environment;
+- browser automation uses the user's existing logged-in ChatGPT Plus session;
 - any future paid provider integration requires a separate explicit decision and must be optional and disabled by default.
 
-The authoritative decision is recorded in `DECISIONS.md`.
+The authoritative decisions are recorded in `DECISIONS.md`.
 
 ---
 
@@ -118,42 +118,105 @@ Operational data is stored under:
 ~/curvature-console/data/
 ```
 
-## Task Package
+## Controlled transfer packages
 
-Used for normal work in the current ChatGPT thread.
+Task Packages are used for normal work in an existing department chat.
 
-Includes:
+Thread Handoff Packages are used when starting a new chat in the same department's ChatGPT Project.
+
+The package builder provides:
 
 - department identity and authority;
-- full role;
-- bounded beginning-and-end excerpts from long non-role documents;
-- newest 8,000 characters of local conversation;
+- full department role;
+- mode-specific repository context;
+- bounded recent local conversation;
 - current task;
 - attachment manifest;
 - response instructions.
 
-Long non-role documents are bounded to 4,000 characters per document.
+B5.1 originally exposed clipboard delivery. That delivery method is superseded by the automated browser bridge. The package builder itself remains the approved payload source.
 
-## Thread Handoff Package
+## Browser bridge foundation
 
-Used when moving to a new chat in the same department's ChatGPT Project.
+B5.2A provides:
 
-Includes:
+- Playwright as an explicit dependency;
+- ordinary Google Chrome startup with a dedicated local profile;
+- local Chrome DevTools Protocol endpoint;
+- CDP connection lifecycle;
+- explicit department-to-project mapping;
+- read-only login and project probe;
+- browser-profile exclusion from Git;
+- unit tests without live network access.
 
-- department identity and authority;
-- full role;
-- full loaded documents;
-- newest 24,000 characters of local conversation;
-- current task;
-- attachment manifest;
-- explicit continuity instructions.
+Verified live automation proof:
 
-Both package types:
+```text
+ordinary Chrome
+→ logged-in ChatGPT Plus session
+→ Curvature Core navigation
+→ automatic message entry
+→ automatic send
+→ response completion detection
+→ exact response extraction
+```
 
-- are previewed before copying;
-- are copied exactly to the system clipboard;
-- perform no network request;
-- invoke no paid API.
+Verified response:
+
+```text
+CURVATURE_AUTOMATION_OK
+```
+
+---
+
+# Browser Runtime
+
+Chrome executable:
+
+```text
+/usr/bin/google-chrome-stable
+```
+
+Dedicated local profile:
+
+```text
+~/curvature-console/data/browser-profile/
+```
+
+CDP endpoint:
+
+```text
+http://127.0.0.1:9222
+```
+
+The browser profile contains private session data and must never be committed.
+
+Start ordinary Chrome manually during development:
+
+```bash
+cd ~/curvature-console
+
+google-chrome-stable \
+  --remote-debugging-port=9222 \
+  --user-data-dir="$HOME/curvature-console/data/browser-profile" \
+  --no-first-run \
+  --no-default-browser-check \
+  https://chatgpt.com
+```
+
+The user performs login manually inside this dedicated profile. Passwords and authentication tokens are never stored in Console source code.
+
+---
+
+# Department Mapping
+
+```text
+project  → Curvature Project
+core     → Curvature Core
+research → Curvature Research
+```
+
+A task and its response must remain bound to the same department.
 
 ---
 
@@ -186,9 +249,9 @@ Curvature Console must not:
 
 PySide6 and its Qt runtime must be installed through Conda Forge.
 
-Do not install PySide6 through pip in the verified Linux environment.
+Playwright is installed as a Python package dependency. The browser bridge controls the system Google Chrome installation through CDP; it does not require the bundled Playwright Chromium for the approved runtime.
 
-The package itself is installed through pip in editable mode with dependency resolution disabled.
+Verified environment:
 
 ```text
 Conda:
@@ -198,9 +261,8 @@ Conda:
 - pytest
 
 pip:
-- Curvature Console package only
-- editable installation
-- --no-deps
+- Curvature Console editable package
+- Playwright dependency
 ```
 
 ---
@@ -210,6 +272,7 @@ pip:
 ```bash
 conda env create -f environment.yml
 conda activate curvature-console
+python -m pip install -e .
 ```
 
 ---
@@ -219,9 +282,16 @@ conda activate curvature-console
 ```bash
 conda activate curvature-console
 
-conda install -c conda-forge   pyside6   pyyaml   pytest   xcb-util-cursor   libxcb   xorg-libxcursor   -y
+conda install -c conda-forge \
+  pyside6 \
+  pyyaml \
+  pytest \
+  xcb-util-cursor \
+  libxcb \
+  xorg-libxcursor \
+  -y
 
-python -m pip install -e . --no-deps
+python -m pip install -e .
 ```
 
 ---
@@ -246,33 +316,33 @@ curvature-console
 python -m pytest -v
 ```
 
-Expected current result:
-
-```text
-32 passed
-```
+Live browser verification is separate from the unit suite and must only run when ordinary Chrome is open with the dedicated profile and CDP port.
 
 ---
 
 # Active Milestone
 
-## ASSISTANT-001B5 — ChatGPT Plus Workflow Integration
+## ASSISTANT-001B5 — ChatGPT Plus Browser Integration
 
 Next implementation unit:
 
 ```text
-ASSISTANT-001B5.2 — Assistant Response Import
+ASSISTANT-001B5.2B — Automated Send and Receive
 ```
 
 Planned behavior:
 
-- select the target department;
-- paste or import the assistant response;
-- preview it before acceptance;
-- preserve the original text;
-- append it to the correct local department state;
+- select the originating Console department;
+- generate the appropriate package;
+- connect to ordinary Chrome through CDP;
+- navigate to the mapped ChatGPT Project;
+- locate the active message editor;
+- send the package automatically;
+- detect response creation and completion;
+- extract the exact assistant response;
+- route it back to the originating department;
 - persist it locally;
-- never send it over the network;
+- display clear login, CAPTCHA, timeout and UI-change errors;
 - never invoke a paid API.
 
-See `ROADMAP.md`, `HANDOFF.md` and `DECISIONS.md`.
+See `ROADMAP.md`, `HANDOFF.md`, `DECISIONS.md` and `PIPELINE.md`.

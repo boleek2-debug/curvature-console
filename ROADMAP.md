@@ -1,7 +1,7 @@
 # ROADMAP
 
 Status: Active
-Version: 0.7.0
+Version: 0.7.1
 Owner: Project Curvature
 Last Updated: 2026-07-18
 
@@ -18,7 +18,8 @@ The MVP:
 - uses official ChatGPT Projects;
 - automates delivery and response retrieval through ordinary logged-in Chrome;
 - performs no hidden paid provider request;
-- keeps browser profile data local.
+- keeps browser profile data local;
+- requires explicit user-triggered sends.
 
 Manual copy-and-paste is not an acceptable product workflow.
 
@@ -44,13 +45,35 @@ Completed. Commit `a934032`.
 
 ## ASSISTANT-001B4 — Local State and Conversation Persistence
 
-Completed with 22 passing tests. Commit `2eec4e6`.
+Completed. Commit `2eec4e6`.
 
 ## ASSISTANT-001B5.1 — Task and Thread Handoff Packages
 
-Completed with 32 passing tests. Commit `c4e1bd1`.
+Completed. Commit `c4e1bd1`.
 
-The payload builder remains approved. The manual clipboard delivery workflow is superseded by browser automation.
+The deterministic package builder remains approved. Clipboard delivery is superseded by browser automation.
+
+## ASSISTANT-001B5.2A — Browser Bridge Foundation
+
+Completed, tested and pushed.
+
+Commit:
+
+```text
+a33fa4e
+```
+
+Delivered:
+
+- Playwright dependency;
+- Chrome/CDP configuration;
+- ordinary Chrome launcher;
+- local persistent profile path;
+- explicit department-to-project mapping;
+- connection lifecycle;
+- read-only login and project probe;
+- profile data excluded from Git;
+- automated unit tests.
 
 ---
 
@@ -66,42 +89,34 @@ Architecture:
 
 ```text
 Curvature Console
+→ controlled package
 → ordinary Chrome with dedicated local profile
-→ Playwright connection over CDP
+→ Playwright over localhost CDP
 → matching official ChatGPT Project
 → automatic task send
 → automatic response retrieval
 → correct Console department
+→ local persistence
 ```
-
-### ASSISTANT-001B5.2A — Browser Bridge Foundation
-
-Deliver:
-
-- Playwright dependency;
-- Chrome/CDP configuration;
-- ordinary Chrome launcher;
-- local persistent profile path;
-- explicit department-to-project mapping;
-- connection lifecycle;
-- read-only login and project probe;
-- profile data excluded from Git;
-- automated unit tests.
 
 ### ASSISTANT-001B5.2B — Automated Send and Receive
 
 Deliver:
 
 - navigate to the mapped ChatGPT Project;
-- locate the active message editor;
-- send a generated Task or Thread Handoff Package;
-- detect response creation;
-- wait until response stabilises or completion is otherwise detected;
-- extract exact assistant response;
+- require exactly one unambiguous project target;
+- locate exactly one visible message editor;
+- enter the generated Task or Thread Handoff Package exactly;
+- send only after explicit user action;
+- capture the assistant-message baseline;
+- detect a new assistant response;
+- detect completion without persisting partial output;
+- extract exact assistant response text;
 - route response to the originating department;
 - persist response immediately;
-- explicit timeout, login, CAPTCHA and UI-change errors;
-- automated tests and manual Project/Core/Research verification.
+- expose explicit Chrome, CDP, login, CAPTCHA, timeout and UI-change errors;
+- automated tests without live ChatGPT;
+- controlled live verification for Project, Core and Research.
 
 ### ASSISTANT-001B5.3 — Structured Department Conversation Records
 
@@ -110,6 +125,7 @@ Deliver:
 - structured user and assistant entries;
 - timestamps;
 - source markers such as `chatgpt-browser-bridge`;
+- task-to-response linkage;
 - migration from existing plain transcript where necessary;
 - restart persistence;
 - automated tests.
@@ -139,6 +155,7 @@ Verify:
 - state persistence;
 - attachment isolation;
 - login-expiry recovery;
+- CAPTCHA and UI-change recovery;
 - zero paid API usage;
 - documentation;
 - complete test suite.
@@ -175,6 +192,7 @@ Verify:
 - optional local summarisation;
 - optional provider abstraction;
 - optional paid API integration;
-- officially supported desktop integration if OpenAI exposes one in the future.
+- officially supported desktop integration if OpenAI exposes one in the future;
+- unattended background agents only after a new explicit architecture decision.
 
-A paid provider may only be reconsidered through a new explicit decision and must never silently replace the ChatGPT Plus browser workflow.
+A paid provider must never silently replace the ChatGPT Plus browser workflow.

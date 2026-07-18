@@ -1,7 +1,7 @@
 # CHANGELOG
 
 Status: Active
-Version: 0.6.0
+Version: 0.7.1
 Owner: Project Curvature
 Last Updated: 2026-07-18
 
@@ -15,9 +15,95 @@ This document records completed and verified Curvature Console work and accepted
 
 ## 2026-07-18
 
+### ASSISTANT-001B5.2A — Browser Bridge Foundation
+
+Completed and verified.
+
+Commit:
+
+```text
+a33fa4e Implement B5.2A browser bridge foundation
+```
+
+Delivered:
+
+- Playwright dependency declared in `pyproject.toml`;
+- `BrowserBridgeConfig`;
+- ordinary Google Chrome launcher;
+- dedicated local browser-profile path;
+- localhost CDP endpoint configuration;
+- Playwright CDP connection lifecycle;
+- explicit Project/Core/Research mapping;
+- read-only connection, login and project probe;
+- runtime browser profile excluded from Git;
+- unit tests without live ChatGPT dependency;
+- updated HANDOFF and ROADMAP architecture.
+
+Department mapping:
+
+```text
+project  → Curvature Project
+core     → Curvature Core
+research → Curvature Research
+```
+
+Live proof completed before implementation:
+
+```text
+ordinary Chrome
+→ persistent local profile
+→ CDP connection
+→ logged-in ChatGPT Plus
+→ Curvature Core navigation
+→ automatic message entry
+→ automatic send
+→ response completion detection
+→ exact response extraction
+```
+
+Verified assistant response:
+
+```text
+CURVATURE_AUTOMATION_OK
+```
+
+The complete automated proof required no manual copy or paste.
+
+Result:
+
+Curvature Console now has a tested foundation for automated ChatGPT Plus interaction without the paid OpenAI API.
+
+### Architecture Decision — Automated ChatGPT Browser Bridge
+
+Accepted:
+
+- manual copy-paste is rejected as a product workflow;
+- the package builder remains the controlled payload source;
+- ordinary logged-in Chrome is controlled locally through CDP;
+- Playwright provides browser automation;
+- browser profile and session data remain local;
+- each response must return to its originating department;
+- failures must be explicit for login expiry, CAPTCHA, timeout and UI changes;
+- user-triggered automation is required during the MVP.
+
+Recorded in:
+
+```text
+DECISIONS.md — ADR-004
+DECISIONS.md — ADR-005
+```
+
 ### ASSISTANT-001B5.1 — Task and Thread Handoff Packages
 
-Completed and verified:
+Completed and verified.
+
+Commit:
+
+```text
+c4e1bd1 Implement B5.1 ChatGPT transfer packages
+```
+
+Delivered:
 
 - deterministic local package builder;
 - compact Task Package;
@@ -30,9 +116,7 @@ Completed and verified:
 - current task inclusion;
 - attachment manifest;
 - package preview;
-- exact clipboard copy;
-- explicit zero-network and zero-paid-API markers;
-- independent Project, Core and Research package generation.
+- exact clipboard copy.
 
 Task Package limits:
 
@@ -41,28 +125,14 @@ Long non-role document: 4,000 characters
 Recent local conversation: 8,000 characters
 ```
 
-Thread Handoff Package limit:
+Thread Handoff Package limits:
 
 ```text
 Recent local conversation: 24,000 characters
 Loaded documents: full content
 ```
 
-Verification:
-
-```text
-32 passed
-```
-
-Manual verification completed for:
-
-- Project Task Package;
-- Project Thread Handoff Package;
-- Core Task Package;
-- Core Thread Handoff Package;
-- Research Task Package;
-- Research Thread Handoff Package;
-- copy-to-clipboard behavior.
+The clipboard delivery UI is superseded as the product path by B5.2 browser automation. The deterministic package builder remains active.
 
 Related Project Curvature documentation commit:
 
@@ -70,20 +140,16 @@ Related Project Curvature documentation commit:
 10ed638 Align Console architecture with ChatGPT Plus workflow
 ```
 
-Result:
-
-Curvature Console now prepares either a compact daily-work package or a comprehensive new-thread continuity package without using a paid API or performing a network request.
-
 ### Architecture Decision — Zero Additional AI Cost
 
 Accepted:
 
 - Curvature Console must not require AI spending beyond the user's existing ChatGPT Plus subscription;
-- the paid OpenAI API is removed from the default MVP architecture;
+- the paid OpenAI API is excluded from the default MVP architecture;
 - no API key is required;
-- no automatic paid model, tool or web-search requests are allowed;
-- official ChatGPT Projects remain the primary AI conversation environment;
-- Curvature Console is the local context, persistence, transfer and coordination layer.
+- no automatic paid provider request is allowed.
+
+The manual workflow portion was later superseded by ADR-004 while the zero-cost rule remained active.
 
 Recorded in:
 
@@ -95,12 +161,6 @@ DECISIONS.md — ADR-002
 
 Completed and verified.
 
-Verification:
-
-```text
-22 passed
-```
-
 Commit:
 
 ```text
@@ -110,12 +170,6 @@ Commit:
 ### ASSISTANT-001B3 — Workspace Configuration and Context Loading
 
 Completed and verified.
-
-Verification:
-
-```text
-16 passed
-```
 
 Commit:
 
@@ -127,12 +181,6 @@ a934032 Implement ASSISTANT-001B3 workspace context loading
 
 Completed and verified.
 
-Verification:
-
-```text
-11 passed
-```
-
 Commit:
 
 ```text
@@ -142,12 +190,6 @@ Commit:
 ### ASSISTANT-001B2 — Three-Panel Desktop Shell
 
 Completed and verified.
-
-Verification:
-
-```text
-6 passed
-```
 
 Commit:
 
@@ -159,12 +201,6 @@ c0085bd Implement ASSISTANT-001B2 three-panel desktop shell
 
 Completed and verified.
 
-Verification:
-
-```text
-2 passed
-```
-
 Commit:
 
 ```text
@@ -174,5 +210,6 @@ a6b46f2 Complete ASSISTANT-001B1 application foundation
 Environment decision:
 
 - PySide6 and Qt are installed through Conda Forge;
-- Curvature Console is installed through pip with `--no-deps`;
-- pip-provided PySide6 is not used on the verified Linux environment.
+- Curvature Console is installed in editable mode;
+- Playwright is an explicit Python dependency;
+- the approved browser runtime is system Google Chrome controlled through CDP.
