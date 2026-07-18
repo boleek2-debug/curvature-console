@@ -9,7 +9,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication
 
 from curvature_console import __version__
-from curvature_console.main import APPLICATION_NAME, MainWindow, create_application
+from curvature_console.main import (
+    APPLICATION_NAME,
+    MainWindow,
+    create_application,
+    create_main_window,
+)
 
 
 def test_package_version() -> None:
@@ -22,8 +27,9 @@ def test_application_and_main_window_can_be_created() -> None:
     assert isinstance(application, QApplication)
     assert application.applicationName() == APPLICATION_NAME
 
-    window = MainWindow()
+    window = create_main_window()
 
+    assert isinstance(window, MainWindow)
     assert window.windowTitle() == APPLICATION_NAME
     assert window.centralWidget() is not None
 

@@ -1,0 +1,83 @@
+"""Tests for the ASSISTANT-001B2 three-panel desktop shell."""
+
+from __future__ import annotations
+
+import os
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+import pytest
+from PySide6.QtWidgets import QPlainTextEdit, QSplitter
+
+from curvature_console.main import create_application
+from curvature_console.presentation.main_window import MainWindow
+
+
+@pytest.fixture
+def window() -> MainWindow:
+    create_application(["curvature-console-three-panel-test"])
+    main_window = MainWindow()
+    main_window.show()
+    yield main_window
+    main_window.close()
+
+
+def test_three_department_panels_exist_and_are_visible(window: MainWindow) -> None:
+    assert set(window.department_panels) == {"project", "core", "research"}
+    assert isinstance(window.splitter, QSplitter)
+    assert window.splitter.count() == 3
+
+    for panel in window.department_panels.values():
+        assert panel.isVisible()
+
+
+def test_each_department_has_independent_conversation_and_input(
+    window: MainWindow,
+) -> None:
+    conversation_objects = []
+    input_objects = []
+
+    for department_id, panel in window.department_panels.items():
+        assert isinstance(panel.conversation_view, QPlainTextEdit)
+        assert isinstance(panel.input_editor, QPlainTextEdit)
+        assert panel.conversation_view.isReadOnly()
+        assert not panel.input_editor.isReadOnly()
+        assert panel.conversation_view.objectName() == (
+            f"{department_id}Conversation"
+        )
+        assert panel.input_editor.objectName() == f"{department_id}Input"
+
+        conversation_objects.append(panel.conversation_view)
+        input_objects.append(panel.input_editor)
+
+    assert len({id(item) for item in conversation_objects}) == 3
+    assert len({id(item) for item in input_objects}) == 3
+
+
+def test_focus_and_restore_preserve_all_panels(window: MainWindow) -> None:
+    window.department_panels["core"].input_editor.setPlainText(
+        "Preserve this Core draft."
+    )
+
+    window.focus_department("core")
+
+    assert window.focused_department_id == "core"
+    assert window.department_panels["core"].isVisible()
+    assert not window.department_panels["project"].isVisible()
+    assert not window.department_panels["research"].isVisible()
+    assert window.restore_button.isEnabled()
+
+    window.restore_three_panel_view()
+
+    assert window.focused_department_id is None
+    assert all(panel.isVisible() for panel in window.department_panels.values())
+    assert not window.restore_button.isEnabled()
+    assert (
+        window.department_panels["core"].input_editor.toPlainText()
+        == "Preserve this Core draft."
+    )
+
+
+def test_unknown_department_cannot_be_focused(window: MainWindow) -> None:
+    with pytest.raises(ValueError, match="Unknown department"):
+        window.focus_department("unknown")
