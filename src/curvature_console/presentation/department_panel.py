@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from curvature_console.presentation.attachment_list import AttachmentList
+
 
 class DepartmentPanel(QFrame):
     """Display one department workspace inside Curvature Console."""
@@ -30,12 +32,12 @@ class DepartmentPanel(QFrame):
         self.department_id = department_id
         self.setObjectName(f"{department_id}Panel")
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setMinimumWidth(260)
+        self.setMinimumWidth(300)
 
         self.title_label = QLabel(title)
         self.title_label.setObjectName(f"{department_id}Title")
 
-        self.status_label = QLabel("STATUS: READY FOR B2")
+        self.status_label = QLabel("STATUS: READY")
         self.status_label.setObjectName(f"{department_id}Status")
 
         self.responsibility_label = QLabel(responsibility)
@@ -62,7 +64,12 @@ class DepartmentPanel(QFrame):
         self.input_editor = QPlainTextEdit()
         self.input_editor.setObjectName(f"{department_id}Input")
         self.input_editor.setPlaceholderText(f"Message {title}...")
-        self.input_editor.setMaximumHeight(120)
+        self.input_editor.setMaximumHeight(110)
+
+        self.attachment_list = AttachmentList(department_id=department_id)
+        self.attachment_list.attachment_count_changed.connect(
+            self._update_attachment_status
+        )
 
         self.send_button = QPushButton("Send")
         self.send_button.setObjectName(f"{department_id}SendButton")
@@ -77,7 +84,14 @@ class DepartmentPanel(QFrame):
         layout.addWidget(self.responsibility_label)
         layout.addWidget(self.conversation_view, 1)
         layout.addWidget(self.input_editor)
+        layout.addWidget(self.attachment_list)
         layout.addWidget(self.send_button)
 
     def _request_focus(self) -> None:
         self.focus_requested.emit(self.department_id)
+
+    def _update_attachment_status(self, count: int) -> None:
+        if count == 0:
+            self.status_label.setText("STATUS: READY")
+        else:
+            self.status_label.setText(f"STATUS: READY · {count} ATTACHED")
