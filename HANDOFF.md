@@ -1,7 +1,7 @@
 # HANDOFF
 
 Status: Active
-Version: 0.6.0
+Version: 0.7.0
 Owner: Project Curvature
 Last Updated: 2026-07-18
 
@@ -19,7 +19,7 @@ It maintains three permanent and equal workspaces:
 
 It is separate from Curvature Platform, World Core, Chronicle Client and gameplay.
 
-Its purpose is to preserve department state, prepare controlled context, support manual ChatGPT Plus workflows and make cross-department work auditable without violating authority boundaries.
+Its purpose is to preserve department state, prepare controlled context and automate work through the user's existing official ChatGPT Projects without requiring the paid OpenAI API.
 
 ---
 
@@ -27,23 +27,18 @@ Its purpose is to preserve department state, prepare controlled context, support
 
 Curvature Console must not introduce mandatory AI costs beyond the user's existing ChatGPT Plus subscription.
 
-The default architecture therefore:
+The approved architecture therefore:
 
 - does not use the paid OpenAI API;
 - does not require `OPENAI_API_KEY`;
-- does not perform automatic model requests;
-- does not perform paid background requests;
-- does not perform paid web-search or tool calls;
-- uses official ChatGPT Projects as the primary AI conversation environment;
-- uses Curvature Console as the local context, persistence, transfer and continuity layer.
+- does not perform paid provider requests;
+- uses official ChatGPT Projects as the AI conversation environment;
+- uses local browser automation through ordinary logged-in Chrome;
+- connects to Chrome through the Chrome DevTools Protocol;
+- keeps the user profile, cookies and session data local;
+- uses Curvature Console as the local context, persistence, routing and continuity layer.
 
-Any future paid provider integration requires a new explicit Project decision and must remain optional, disabled by default and outside the current MVP.
-
-Authoritative record:
-
-```text
-DECISIONS.md — ADR-002
-```
+Browser automation is an explicitly accepted engineering dependency. It must fail visibly when ChatGPT UI changes, login expires, CAPTCHA appears or Chrome is unavailable.
 
 ---
 
@@ -91,24 +86,7 @@ a934032 Implement ASSISTANT-001B3 workspace context loading
 
 ## ASSISTANT-001B4 — Local State and Conversation Persistence
 
-Completed and verified:
-
-- SQLite schema;
-- separate department state;
-- conversation transcript persistence;
-- input draft persistence;
-- attachment metadata persistence;
-- persistent pasted screenshots;
-- splitter-width persistence;
-- Focus-mode persistence;
-- restart continuity;
-- corrected Qt splitter persistence test.
-
-Verification:
-
-```text
-22 passed
-```
+Completed and verified with 22 passing tests.
 
 Commit:
 
@@ -118,205 +96,132 @@ Commit:
 
 ## ASSISTANT-001B5.1 — Task and Thread Handoff Packages
 
-Completed and verified:
+Completed and verified with 32 passing tests.
 
-- deterministic local transfer-package builder;
-- compact Task Package;
-- comprehensive Thread Handoff Package;
-- department identity and authority boundaries;
-- full department role inclusion;
-- mode-specific context inclusion;
-- bounded local conversation;
-- current task inclusion;
-- attachment manifest;
-- package preview;
-- exact copy-to-clipboard action;
-- explicit zero-network and zero-paid-API markers;
-- independent Project, Core and Research package generation;
-- manual verification of both modes.
-
-Task Package behavior:
-
-- full role;
-- bounded beginning-and-end excerpts for long non-role documents;
-- up to 4,000 characters per long non-role document;
-- newest 8,000 characters of local conversation.
-
-Thread Handoff Package behavior:
-
-- full loaded context;
-- newest 24,000 characters of local conversation;
-- explicit continuation instructions for a new chat in the same ChatGPT Project.
-
-Verification:
+Commit:
 
 ```text
-32 passed
+c4e1bd1 Implement B5.1 ChatGPT transfer packages
 ```
 
-Main Project Curvature documentation was aligned with this workflow in:
-
-```text
-10ed638 Align Console architecture with ChatGPT Plus workflow
-```
+The manual copy-and-paste workflow was subsequently rejected because it added work instead of reducing it. B5.1 package generation remains useful as the controlled payload builder, but its delivery will be automated by the browser bridge.
 
 ---
 
-# 4. Active Sprint
+# 4. Verified Browser Automation Proof
 
-## ASSISTANT-001B5 — ChatGPT Plus Workflow Integration
+The following live proof was completed successfully on Linux:
+
+```text
+ordinary Google Chrome
+→ persistent local automation profile
+→ remote debugging port 9222
+→ Playwright CDP connection
+→ logged-in ChatGPT Plus session
+→ Curvature Core project navigation
+→ message-editor detection
+→ automatic message entry
+→ automatic send
+→ assistant-response completion detection
+→ exact response extraction
+```
+
+Verified response:
+
+```text
+CURVATURE_AUTOMATION_OK
+```
+
+No manual copy or paste was used in the end-to-end proof.
+
+---
+
+# 5. Active Sprint
+
+## ASSISTANT-001B5.2 — Automated ChatGPT Browser Bridge
 
 Current implementation unit:
 
 ```text
-ASSISTANT-001B5.2 — Assistant Response Import
+ASSISTANT-001B5.2A — Browser Bridge Foundation
 ```
 
 Goal:
 
-Allow a response copied from official ChatGPT to be previewed, accepted and stored in the correct Console department without changing its original text.
+Provide a tested local foundation for launching ordinary Chrome with the dedicated profile, connecting through CDP and mapping Console departments to official ChatGPT Projects.
 
 ---
 
-# 5. Exact Next Step
+# 6. Exact Next Step
 
-Implement:
+Implement and verify:
+
+- `BrowserBridgeConfig`;
+- ordinary Chrome launcher;
+- dedicated local browser profile;
+- CDP connection lifecycle;
+- Project/Core/Research project mapping;
+- read-only connection and login probe;
+- runtime profile exclusion from Git;
+- unit tests without live network access.
+
+After B5.2A:
 
 ```text
-ASSISTANT-001B5.2 — Assistant Response Import
+ASSISTANT-001B5.2B — Automated Send and Receive
 ```
 
-Required deliverables:
+B5.2B will integrate:
 
-- explicit target department;
-- paste or import action;
-- response preview before acceptance;
-- preservation of original assistant text;
-- append to the selected local department record;
-- no automatic network request;
-- no paid API dependency;
-- automated tests;
-- manual verification in Project, Core and Research.
-
-Before implementation, inspect the current state store, department panel, main window and relevant tests.
+- automatic project navigation;
+- package delivery;
+- message sending;
+- response-start detection;
+- response-completion detection;
+- exact response extraction;
+- department routing;
+- SQLite persistence;
+- visible timeout and login errors.
 
 ---
 
-# 6. Approved ChatGPT Projects Workflow
+# 7. Browser Runtime
 
-Recommended project structure:
-
-```text
-ChatGPT Project: Curvature Project
-ChatGPT Project: Curvature Core
-ChatGPT Project: Curvature Research
-```
-
-Normal task flow:
+Chrome executable:
 
 ```text
-1. Select a Console department.
-2. Refresh or inspect its configured context.
-3. Enter the current task.
-4. Generate a Task Package.
-5. Preview and copy the package.
-6. Paste it into the matching official ChatGPT Project chat.
-7. Receive the response under the existing Plus subscription.
-8. Copy the response.
-9. Import it into the same Console department.
-10. Persist local state.
+/usr/bin/google-chrome-stable
 ```
 
-Thread transition flow:
+Local browser profile:
 
 ```text
-1. Generate a Thread Handoff Package.
-2. Open a new chat in the same department's ChatGPT Project.
-3. Paste the handoff.
-4. Continue from the confirmed exact next step.
+~/curvature-console/data/browser-profile/
 ```
 
-The user remains in control of every transfer.
+CDP endpoint:
 
-ChatGPT Project memory is useful but is not authoritative project storage.
+```text
+http://127.0.0.1:9222
+```
+
+The profile directory contains private session data and must never be committed.
 
 ---
 
-# 7. Storage
-
-Operational state:
+# 8. Department Mapping
 
 ```text
-~/curvature-console/data/curvature_console.sqlite3
+project  → Curvature Project
+core     → Curvature Core
+research → Curvature Research
 ```
 
-Persistent pasted screenshots:
-
-```text
-~/curvature-console/data/attachments/<department>/
-```
-
-Runtime data remains excluded from Git.
-
-Project Curvature repository access remains read-only during the MVP.
+A response must always return to the department that created the task package.
 
 ---
 
-# 8. Department Authority
-
-## Curvature Project
-
-Owns:
-
-- direction;
-- priorities;
-- milestone approval;
-- scope decisions;
-- arbitration.
-
-## Curvature Core
-
-Owns:
-
-- architecture;
-- implementation;
-- schemas;
-- persistence;
-- validation;
-- tests.
-
-## Curvature Research
-
-Owns:
-
-- source evaluation;
-- evidence;
-- hypotheses;
-- confidence;
-- missing knowledge;
-- research graph.
-
-A department may observe concise state from another department, but it must not silently perform another department's work.
-
-Cross-department work requires an explicit handoff.
-
----
-
-# 9. Out of Scope for B5
-
-- paid OpenAI API integration;
-- automatic AI requests;
-- automatic paid web search;
-- automatic repository writes;
-- automatic Git operations;
-- Department State Bus implementation;
-- full cross-department handoff manager;
-- local-model integration;
-- unsupported browser automation.
-
----
-
-# 10. Engineering Rules
+# 9. Engineering Rules
 
 1. Never guess.
 2. Request current files before modifying uncertain code.
@@ -327,5 +232,7 @@ Cross-department work requires an explicit handoff.
 7. Update HANDOFF after completed work.
 8. Code and documentation are written in English.
 9. Development discussion is in Polish.
-10. No hidden or automatic paid operations.
+10. No hidden paid operations.
 11. Preserve department authority boundaries.
+12. No manual copy-paste workflow as the product path.
+13. Browser automation failures must be explicit and recoverable.

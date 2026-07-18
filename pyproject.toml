@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "Three-department development coordination console for Project Curvature."
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
-dependencies = []
+dependencies = [
+    "playwright>=1.61,<2",
+]
 
 [project.scripts]
 curvature-console = "curvature_console.main:main"

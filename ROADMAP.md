@@ -1,7 +1,7 @@
 # ROADMAP
 
 Status: Active
-Version: 0.6.0
+Version: 0.7.0
 Owner: Project Curvature
 Last Updated: 2026-07-18
 
@@ -11,15 +11,16 @@ Last Updated: 2026-07-18
 
 Curvature Console must not require additional AI spending beyond the user's existing ChatGPT Plus subscription.
 
-The current MVP:
+The MVP:
 
 - does not use the paid OpenAI API;
 - does not require an API key;
 - uses official ChatGPT Projects;
-- uses manual, user-controlled transfers;
-- performs no automatic paid request.
+- automates delivery and response retrieval through ordinary logged-in Chrome;
+- performs no hidden paid provider request;
+- keeps browser profile data local.
 
-See `DECISIONS.md` for the authoritative architecture decision.
+Manual copy-and-paste is not an acceptable product workflow.
 
 ---
 
@@ -27,114 +28,80 @@ See `DECISIONS.md` for the authoritative architecture decision.
 
 ## ASSISTANT-001B1 — Repository and Application Foundation
 
-Completed and verified.
-
-Commit:
-
-```text
-a6b46f2
-```
+Completed. Commit `a6b46f2`.
 
 ## ASSISTANT-001B2 — Three-Panel Desktop Shell
 
-Completed and verified.
-
-Commit:
-
-```text
-c0085bd
-```
+Completed. Commit `c0085bd`.
 
 ## Per-Department Attachments
 
-Completed and verified.
-
-Commit:
-
-```text
-8920117
-```
+Completed. Commit `8920117`.
 
 ## ASSISTANT-001B3 — Workspace Configuration and Context Loading
 
-Completed and verified.
-
-Commit:
-
-```text
-a934032
-```
+Completed. Commit `a934032`.
 
 ## ASSISTANT-001B4 — Local State and Conversation Persistence
 
-Completed and verified:
-
-- SQLite operational state;
-- independent department persistence;
-- drafts and conversation text;
-- attachment metadata;
-- persistent screenshots;
-- splitter layout;
-- Focus mode;
-- restart continuity;
-- 22 passing tests.
-
-Commit:
-
-```text
-2eec4e6
-```
+Completed with 22 passing tests. Commit `2eec4e6`.
 
 ## ASSISTANT-001B5.1 — Task and Thread Handoff Packages
 
-Completed and verified:
+Completed with 32 passing tests. Commit `c4e1bd1`.
 
-- deterministic package schema;
-- Task Package;
-- Thread Handoff Package;
-- department identity;
-- department role;
-- responsibility and authority boundary;
-- mode-specific context;
-- bounded local conversation;
-- current task;
-- attachment manifest;
-- preview;
-- exact clipboard copy;
-- zero network requests;
-- zero API dependencies;
-- manual Project, Core and Research verification;
-- 32 passing tests.
+The payload builder remains approved. The manual clipboard delivery workflow is superseded by browser automation.
 
 ---
 
 # Active Milestone
 
-## ASSISTANT-001B5 — ChatGPT Plus Workflow Integration
+## ASSISTANT-001B5 — ChatGPT Plus Browser Integration
 
 Goal:
 
-Enable effective AI-assisted departmental work through the existing ChatGPT Plus subscription without paid API calls.
+Enable automated AI-assisted departmental work through the user's existing ChatGPT Plus account without paid API calls.
 
-Scope rule:
+Architecture:
 
 ```text
-Manual, user-controlled transfer through official ChatGPT.
-No paid provider dependency.
-No automatic network request.
+Curvature Console
+→ ordinary Chrome with dedicated local profile
+→ Playwright connection over CDP
+→ matching official ChatGPT Project
+→ automatic task send
+→ automatic response retrieval
+→ correct Console department
 ```
 
-### ASSISTANT-001B5.2 — Assistant Response Import
+### ASSISTANT-001B5.2A — Browser Bridge Foundation
 
 Deliver:
 
-- paste or import assistant response;
-- explicit target department;
-- preview before acceptance;
-- append to local department state;
-- preserve original text;
-- no network request;
-- automated tests.
+- Playwright dependency;
+- Chrome/CDP configuration;
+- ordinary Chrome launcher;
+- local persistent profile path;
+- explicit department-to-project mapping;
+- connection lifecycle;
+- read-only login and project probe;
+- profile data excluded from Git;
+- automated unit tests.
+
+### ASSISTANT-001B5.2B — Automated Send and Receive
+
+Deliver:
+
+- navigate to the mapped ChatGPT Project;
+- locate the active message editor;
+- send a generated Task or Thread Handoff Package;
+- detect response creation;
+- wait until response stabilises or completion is otherwise detected;
+- extract exact assistant response;
+- route response to the originating department;
+- persist response immediately;
+- explicit timeout, login, CAPTCHA and UI-change errors;
+- automated tests and manual Project/Core/Research verification.
 
 ### ASSISTANT-001B5.3 — Structured Department Conversation Records
 
@@ -142,7 +109,7 @@ Deliver:
 
 - structured user and assistant entries;
 - timestamps;
-- source markers such as `manual-chatgpt-transfer`;
+- source markers such as `chatgpt-browser-bridge`;
 - migration from existing plain transcript where necessary;
 - restart persistence;
 - automated tests.
@@ -167,12 +134,12 @@ Verify:
 - Research workflow;
 - Task Package;
 - Thread Handoff Package;
-- response import;
+- automated send;
+- automated response retrieval;
 - state persistence;
 - attachment isolation;
-- thread transition in ChatGPT Projects;
-- zero network calls;
-- zero API dependencies;
+- login-expiry recovery;
+- zero paid API usage;
 - documentation;
 - complete test suite.
 
@@ -195,8 +162,8 @@ Verify:
 - end-to-end three-department workflow;
 - restart continuity;
 - authority-boundary verification;
-- cost-rule verification;
-- zero-paid-request verification;
+- zero-additional-cost verification;
+- browser-recovery verification;
 - documentation;
 - packaging instructions.
 
@@ -204,23 +171,10 @@ Verify:
 
 # Future Optional Work
 
-The following items are not part of the current MVP:
-
 - local inference using user-owned hardware;
 - optional local summarisation;
 - optional provider abstraction;
 - optional paid API integration;
-- officially supported browser or desktop integration.
+- officially supported desktop integration if OpenAI exposes one in the future.
 
-A paid provider may only be reconsidered through a new explicit decision defining:
-
-- purpose;
-- optionality;
-- default-off behavior;
-- spending controls;
-- privacy;
-- data retention;
-- user approval;
-- fallback behavior.
-
-It must never silently replace the zero-additional-cost workflow.
+A paid provider may only be reconsidered through a new explicit decision and must never silently replace the ChatGPT Plus browser workflow.
