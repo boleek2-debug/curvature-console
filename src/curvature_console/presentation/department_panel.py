@@ -26,6 +26,7 @@ class DepartmentPanel(QFrame):
     focus_requested = Signal(str)
     context_refresh_requested = Signal(str)
     context_preview_requested = Signal(str)
+    transfer_package_requested = Signal(str, str)
     workspace_state_changed = Signal(str)
 
     def __init__(
@@ -38,6 +39,7 @@ class DepartmentPanel(QFrame):
     ) -> None:
         super().__init__(parent)
         self.department_id = department_id
+        self.responsibility = responsibility
         self.setObjectName(f"{department_id}Panel")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setMinimumWidth(300)
@@ -114,12 +116,34 @@ class DepartmentPanel(QFrame):
             self._notify_state_changed
         )
 
-        self.send_button = QPushButton("Send")
-        self.send_button.setObjectName(f"{department_id}SendButton")
-        self.send_button.setEnabled(False)
-        self.send_button.setToolTip(
-            "AI integration will be added in ASSISTANT-001B5."
+        self.task_package_button = QPushButton("Prepare Task Package")
+        self.task_package_button.setObjectName(
+            f"{department_id}TaskPackageButton"
         )
+        self.task_package_button.setToolTip(
+            "Build a compact package for the current ChatGPT thread."
+        )
+        self.task_package_button.clicked.connect(
+            self._request_task_package
+        )
+
+        self.thread_handoff_button = QPushButton(
+            "Prepare Thread Handoff"
+        )
+        self.thread_handoff_button.setObjectName(
+            f"{department_id}ThreadHandoffButton"
+        )
+        self.thread_handoff_button.setToolTip(
+            "Build a comprehensive package for a new chat in the same "
+            "ChatGPT Project."
+        )
+        self.thread_handoff_button.clicked.connect(
+            self._request_thread_handoff
+        )
+
+        transfer_button_layout = QHBoxLayout()
+        transfer_button_layout.addWidget(self.task_package_button)
+        transfer_button_layout.addWidget(self.thread_handoff_button)
 
         layout = QVBoxLayout(self)
         layout.addLayout(header_layout)
@@ -131,7 +155,7 @@ class DepartmentPanel(QFrame):
         layout.addWidget(self.conversation_view, 1)
         layout.addWidget(self.input_editor)
         layout.addWidget(self.attachment_list)
-        layout.addWidget(self.send_button)
+        layout.addLayout(transfer_button_layout)
 
     def set_context_result(self, result: ContextLoadResult) -> None:
         """Display the current context loading result."""
@@ -157,6 +181,15 @@ class DepartmentPanel(QFrame):
 
     def _request_context_preview(self) -> None:
         self.context_preview_requested.emit(self.department_id)
+
+    def _request_task_package(self) -> None:
+        self.transfer_package_requested.emit(self.department_id, "task")
+
+    def _request_thread_handoff(self) -> None:
+        self.transfer_package_requested.emit(
+            self.department_id,
+            "thread_handoff",
+        )
 
     def _notify_state_changed(self) -> None:
         self.workspace_state_changed.emit(self.department_id)

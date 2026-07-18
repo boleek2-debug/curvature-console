@@ -1,8 +1,8 @@
 # ROADMAP
 
-Status: Active  
-Version: 0.5.0  
-Owner: Project Curvature  
+Status: Active
+Version: 0.6.0
+Owner: Project Curvature
 Last Updated: 2026-07-18
 
 ---
@@ -11,19 +11,13 @@ Last Updated: 2026-07-18
 
 Curvature Console must not require additional AI spending beyond the user's existing ChatGPT Plus subscription.
 
-The current MVP does not use the paid OpenAI API.
+The current MVP:
 
-Official ChatGPT remains the AI conversation environment.
-
-Curvature Console provides local:
-
-- department workspaces;
-- context assembly;
-- transfer packages;
-- response import;
-- persistence;
-- attachment manifests;
-- future handoffs and state coordination.
+- does not use the paid OpenAI API;
+- does not require an API key;
+- uses official ChatGPT Projects;
+- uses manual, user-controlled transfers;
+- performs no automatic paid request.
 
 See `DECISIONS.md` for the authoritative architecture decision.
 
@@ -63,12 +57,7 @@ Commit:
 
 ## ASSISTANT-001B3 — Workspace Configuration and Context Loading
 
-Completed and verified:
-
-- workspace definitions and roles;
-- read-only repository access;
-- automatic context loading;
-- context preview and refresh.
+Completed and verified.
 
 Commit:
 
@@ -96,6 +85,27 @@ Commit:
 2eec4e6
 ```
 
+## ASSISTANT-001B5.1 — Task and Thread Handoff Packages
+
+Completed and verified:
+
+- deterministic package schema;
+- Task Package;
+- Thread Handoff Package;
+- department identity;
+- department role;
+- responsibility and authority boundary;
+- mode-specific context;
+- bounded local conversation;
+- current task;
+- attachment manifest;
+- preview;
+- exact clipboard copy;
+- zero network requests;
+- zero API dependencies;
+- manual Project, Core and Research verification;
+- 32 passing tests.
+
 ---
 
 # Active Milestone
@@ -114,64 +124,53 @@ No paid provider dependency.
 No automatic network request.
 ```
 
-### ASSISTANT-001B5.1 — ChatGPT Transfer Package
-
-Deliver:
-
-- deterministic package schema;
-- department identity;
-- department role;
-- responsibility and authority boundary;
-- relevant loaded context;
-- bounded local conversation excerpt;
-- current draft;
-- attachment manifest;
-- preview;
-- copy to clipboard;
-- automated tests.
-
 ### ASSISTANT-001B5.2 — Assistant Response Import
 
 Deliver:
 
-- paste/import assistant response;
+- paste or import assistant response;
 - explicit target department;
 - preview before acceptance;
-- append to local department record;
+- append to local department state;
 - preserve original text;
+- no network request;
 - automated tests.
 
-### ASSISTANT-001B5.3 — Department Conversation Records
+### ASSISTANT-001B5.3 — Structured Department Conversation Records
 
 Deliver:
 
 - structured user and assistant entries;
 - timestamps;
-- source marker such as `manual-chatgpt-transfer`;
-- migration from the existing plain transcript where necessary;
+- source markers such as `manual-chatgpt-transfer`;
+- migration from existing plain transcript where necessary;
 - restart persistence;
 - automated tests.
 
-### ASSISTANT-001B5.4 — Attachment Transfer Manifest
+### ASSISTANT-001B5.4 — Thread Pressure Estimation
 
 Deliver:
 
-- attachment names and paths;
-- type and size metadata where available;
-- explicit statement that files are not transferred automatically;
-- checklist for manual ChatGPT upload;
-- department isolation;
+- local package-size tracking;
+- local conversation-size tracking;
+- GREEN / AMBER / RED advisory state;
+- Thread Handoff recommendation;
+- no claim of exact ChatGPT context capacity;
 - automated tests.
 
 ### ASSISTANT-001B5.5 — Workflow Verification and Closeout
 
 Verify:
 
-- Project transfer workflow;
-- Core transfer workflow;
-- Research transfer workflow;
+- Project workflow;
+- Core workflow;
+- Research workflow;
+- Task Package;
+- Thread Handoff Package;
+- response import;
 - state persistence;
 - attachment isolation;
+- thread transition in ChatGPT Projects;
 - zero network calls;
 - zero API dependencies;
 - documentation;
@@ -211,9 +210,9 @@ The following items are not part of the current MVP:
 - optional local summarisation;
 - optional provider abstraction;
 - optional paid API integration;
-- browser or desktop integration supported by official interfaces.
+- officially supported browser or desktop integration.
 
-A paid provider may only be reconsidered through a new explicit decision that defines:
+A paid provider may only be reconsidered through a new explicit decision defining:
 
 - purpose;
 - optionality;

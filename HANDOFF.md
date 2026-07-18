@@ -1,8 +1,8 @@
 # HANDOFF
 
-Status: Active  
-Version: 0.5.0  
-Owner: Project Curvature  
+Status: Active
+Version: 0.6.0
+Owner: Project Curvature
 Last Updated: 2026-07-18
 
 ---
@@ -17,9 +17,9 @@ It maintains three permanent and equal workspaces:
 - Curvature Core
 - Curvature Research
 
-It is not Curvature Platform, World Core, Chronicle Client or gameplay.
+It is separate from Curvature Platform, World Core, Chronicle Client and gameplay.
 
-Its purpose is to preserve department state, prepare context, support controlled transfers and make cross-department work auditable without violating authority boundaries.
+Its purpose is to preserve department state, prepare controlled context, support manual ChatGPT Plus workflows and make cross-department work auditable without violating authority boundaries.
 
 ---
 
@@ -34,10 +34,10 @@ The default architecture therefore:
 - does not perform automatic model requests;
 - does not perform paid background requests;
 - does not perform paid web-search or tool calls;
-- uses official ChatGPT as the primary AI conversation interface;
-- uses Curvature Console as the local context, persistence and transfer layer.
+- uses official ChatGPT Projects as the primary AI conversation environment;
+- uses Curvature Console as the local context, persistence, transfer and continuity layer.
 
-Any future paid provider integration requires a new explicit project decision and must remain optional, disabled by default and outside the current MVP.
+Any future paid provider integration requires a new explicit Project decision and must remain optional, disabled by default and outside the current MVP.
 
 Authoritative record:
 
@@ -51,13 +51,7 @@ DECISIONS.md — ADR-002
 
 ## ASSISTANT-001B1 — Repository and Application Foundation
 
-Completed and verified:
-
-- standalone repository;
-- dedicated Conda environment;
-- Python package foundation;
-- PySide6 application entry point;
-- automated tests.
+Completed and verified.
 
 Commit:
 
@@ -67,12 +61,7 @@ a6b46f2 Complete ASSISTANT-001B1 application foundation
 
 ## ASSISTANT-001B2 — Three-Panel Desktop Shell
 
-Completed and verified:
-
-- simultaneous Project, Core and Research panels;
-- resizable splitter;
-- Focus and restore;
-- independent department workspaces.
+Completed and verified.
 
 Commit:
 
@@ -82,13 +71,7 @@ c0085bd Implement ASSISTANT-001B2 three-panel desktop shell
 
 ## Per-Department Attachments
 
-Completed and verified:
-
-- independent attachment queues;
-- file selection;
-- screenshot paste;
-- drag-and-drop;
-- no automatic cross-department sharing.
+Completed and verified.
 
 Commit:
 
@@ -98,14 +81,7 @@ Commit:
 
 ## ASSISTANT-001B3 — Workspace Configuration and Context Loading
 
-Completed and verified:
-
-- YAML workspace definitions;
-- Markdown department roles;
-- read-only Project Curvature repository reader;
-- automatic document loading;
-- context preview;
-- manual refresh.
+Completed and verified.
 
 Commit:
 
@@ -140,25 +116,65 @@ Commit:
 2eec4e6 Implement ASSISTANT-001B4 local state persistence
 ```
 
+## ASSISTANT-001B5.1 — Task and Thread Handoff Packages
+
+Completed and verified:
+
+- deterministic local transfer-package builder;
+- compact Task Package;
+- comprehensive Thread Handoff Package;
+- department identity and authority boundaries;
+- full department role inclusion;
+- mode-specific context inclusion;
+- bounded local conversation;
+- current task inclusion;
+- attachment manifest;
+- package preview;
+- exact copy-to-clipboard action;
+- explicit zero-network and zero-paid-API markers;
+- independent Project, Core and Research package generation;
+- manual verification of both modes.
+
+Task Package behavior:
+
+- full role;
+- bounded beginning-and-end excerpts for long non-role documents;
+- up to 4,000 characters per long non-role document;
+- newest 8,000 characters of local conversation.
+
+Thread Handoff Package behavior:
+
+- full loaded context;
+- newest 24,000 characters of local conversation;
+- explicit continuation instructions for a new chat in the same ChatGPT Project.
+
+Verification:
+
+```text
+32 passed
+```
+
+Main Project Curvature documentation was aligned with this workflow in:
+
+```text
+10ed638 Align Console architecture with ChatGPT Plus workflow
+```
+
 ---
 
 # 4. Active Sprint
 
 ## ASSISTANT-001B5 — ChatGPT Plus Workflow Integration
 
+Current implementation unit:
+
+```text
+ASSISTANT-001B5.2 — Assistant Response Import
+```
+
 Goal:
 
-Provide a practical AI-assisted workflow through the user's existing ChatGPT Plus subscription without paid API integration.
-
-The Console remains local and prepares controlled transfer packages for manual exchange with official ChatGPT.
-
-### Planned B5 units
-
-1. `ASSISTANT-001B5.1 — ChatGPT Transfer Package`
-2. `ASSISTANT-001B5.2 — Assistant Response Import`
-3. `ASSISTANT-001B5.3 — Department Conversation Records`
-4. `ASSISTANT-001B5.4 — Attachment Transfer Manifest`
-5. `ASSISTANT-001B5.5 — Workflow Verification and Closeout`
+Allow a response copied from official ChatGPT to be previewed, accepted and stored in the correct Console department without changing its original text.
 
 ---
 
@@ -167,46 +183,62 @@ The Console remains local and prepares controlled transfer packages for manual e
 Implement:
 
 ```text
-ASSISTANT-001B5.1 — ChatGPT Transfer Package
+ASSISTANT-001B5.2 — Assistant Response Import
 ```
 
 Required deliverables:
 
-- department-specific transfer-package builder;
-- package preview;
-- copy-to-clipboard action;
-- role inclusion;
-- loaded-context inclusion;
-- current draft inclusion;
-- bounded local conversation inclusion;
-- attachment manifest;
-- clear department identity and authority boundary;
-- no network request;
-- no API dependency;
-- no API key;
-- automated tests.
+- explicit target department;
+- paste or import action;
+- response preview before acceptance;
+- preservation of original assistant text;
+- append to the selected local department record;
+- no automatic network request;
+- no paid API dependency;
+- automated tests;
+- manual verification in Project, Core and Research.
 
-Before implementation, inspect the current relevant source files and define the exact transfer-package schema.
+Before implementation, inspect the current state store, department panel, main window and relevant tests.
 
 ---
 
-# 6. Intended Manual Workflow
+# 6. Approved ChatGPT Projects Workflow
+
+Recommended project structure:
 
 ```text
-1. Work in one Curvature Console department.
+ChatGPT Project: Curvature Project
+ChatGPT Project: Curvature Core
+ChatGPT Project: Curvature Research
+```
+
+Normal task flow:
+
+```text
+1. Select a Console department.
 2. Refresh or inspect its configured context.
-3. Enter the current task in the department draft.
-4. Generate a ChatGPT transfer package.
-5. Preview the package.
-6. Copy the package to the clipboard.
-7. Paste it into official ChatGPT.
-8. Receive the response under the existing Plus subscription.
-9. Copy the response.
-10. Import or paste it into the same Console department.
-11. Persist the updated department state locally.
+3. Enter the current task.
+4. Generate a Task Package.
+5. Preview and copy the package.
+6. Paste it into the matching official ChatGPT Project chat.
+7. Receive the response under the existing Plus subscription.
+8. Copy the response.
+9. Import it into the same Console department.
+10. Persist local state.
+```
+
+Thread transition flow:
+
+```text
+1. Generate a Thread Handoff Package.
+2. Open a new chat in the same department's ChatGPT Project.
+3. Paste the handoff.
+4. Continue from the confirmed exact next step.
 ```
 
 The user remains in control of every transfer.
+
+ChatGPT Project memory is useful but is not authoritative project storage.
 
 ---
 
@@ -278,9 +310,9 @@ Cross-department work requires an explicit handoff.
 - automatic repository writes;
 - automatic Git operations;
 - Department State Bus implementation;
-- full handoff manager;
+- full cross-department handoff manager;
 - local-model integration;
-- browser automation that attempts to bypass official ChatGPT controls.
+- unsupported browser automation.
 
 ---
 

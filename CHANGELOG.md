@@ -1,8 +1,8 @@
 # CHANGELOG
 
-Status: Active  
-Version: 0.5.0  
-Owner: Project Curvature  
+Status: Active
+Version: 0.6.0
+Owner: Project Curvature
 Last Updated: 2026-07-18
 
 ---
@@ -15,18 +15,75 @@ This document records completed and verified Curvature Console work and accepted
 
 ## 2026-07-18
 
+### ASSISTANT-001B5.1 — Task and Thread Handoff Packages
+
+Completed and verified:
+
+- deterministic local package builder;
+- compact Task Package;
+- comprehensive Thread Handoff Package;
+- full department role inclusion;
+- department identity and authority rules;
+- bounded document excerpts for Task Packages;
+- full loaded context for Thread Handoff Packages;
+- bounded recent local conversation;
+- current task inclusion;
+- attachment manifest;
+- package preview;
+- exact clipboard copy;
+- explicit zero-network and zero-paid-API markers;
+- independent Project, Core and Research package generation.
+
+Task Package limits:
+
+```text
+Long non-role document: 4,000 characters
+Recent local conversation: 8,000 characters
+```
+
+Thread Handoff Package limit:
+
+```text
+Recent local conversation: 24,000 characters
+Loaded documents: full content
+```
+
+Verification:
+
+```text
+32 passed
+```
+
+Manual verification completed for:
+
+- Project Task Package;
+- Project Thread Handoff Package;
+- Core Task Package;
+- Core Thread Handoff Package;
+- Research Task Package;
+- Research Thread Handoff Package;
+- copy-to-clipboard behavior.
+
+Related Project Curvature documentation commit:
+
+```text
+10ed638 Align Console architecture with ChatGPT Plus workflow
+```
+
+Result:
+
+Curvature Console now prepares either a compact daily-work package or a comprehensive new-thread continuity package without using a paid API or performing a network request.
+
 ### Architecture Decision — Zero Additional AI Cost
 
 Accepted:
 
-- Curvature Console must not require AI spending beyond the user's existing ChatGPT Plus subscription.
-- The paid OpenAI API is removed from the default MVP architecture.
-- No API key is required.
-- No automatic paid model, tool or web-search requests are allowed.
-- Official ChatGPT remains the primary AI conversation environment.
-- Curvature Console becomes the local context, persistence, transfer and coordination layer.
-- ASSISTANT-001B5 is redefined as ChatGPT Plus Workflow Integration.
-- The first B5 unit is ChatGPT Transfer Package.
+- Curvature Console must not require AI spending beyond the user's existing ChatGPT Plus subscription;
+- the paid OpenAI API is removed from the default MVP architecture;
+- no API key is required;
+- no automatic paid model, tool or web-search requests are allowed;
+- official ChatGPT Projects remain the primary AI conversation environment;
+- Curvature Console is the local context, persistence, transfer and coordination layer.
 
 Recorded in:
 
@@ -36,18 +93,7 @@ DECISIONS.md — ADR-002
 
 ### ASSISTANT-001B4 — Local State and Conversation Persistence
 
-Completed and verified:
-
-- SQLite schema;
-- independent Project, Core and Research state;
-- conversation text persistence;
-- input draft persistence;
-- attachment metadata persistence;
-- persistent pasted screenshots;
-- splitter-width persistence;
-- Focus-mode persistence;
-- restart continuity;
-- corrected Qt splitter persistence test.
+Completed and verified.
 
 Verification:
 
@@ -63,14 +109,7 @@ Commit:
 
 ### ASSISTANT-001B3 — Workspace Configuration and Context Loading
 
-Completed and verified:
-
-- YAML workspace definitions;
-- Markdown department roles;
-- read-only Project Curvature repository reader;
-- automatic context loading;
-- context preview;
-- manual refresh.
+Completed and verified.
 
 Verification:
 
@@ -86,13 +125,7 @@ a934032 Implement ASSISTANT-001B3 workspace context loading
 
 ### Per-Department Attachments
 
-Completed and verified:
-
-- independent attachment queues;
-- file selection;
-- screenshot paste;
-- drag-and-drop;
-- department isolation.
+Completed and verified.
 
 Verification:
 
@@ -108,12 +141,7 @@ Commit:
 
 ### ASSISTANT-001B2 — Three-Panel Desktop Shell
 
-Completed and verified:
-
-- simultaneous Project, Core and Research panels;
-- resizable splitter;
-- Focus mode;
-- restoration of all departments.
+Completed and verified.
 
 Verification:
 
@@ -129,16 +157,7 @@ c0085bd Implement ASSISTANT-001B2 three-panel desktop shell
 
 ### ASSISTANT-001B1 — Repository and Application Foundation
 
-Completed and verified:
-
-- standalone `curvature-console` repository;
-- dedicated Conda environment;
-- Python package foundation;
-- PySide6 application entry point;
-- minimal desktop main window;
-- reproducible environment definition;
-- automated application tests;
-- initial README, HANDOFF, ROADMAP and CHANGELOG.
+Completed and verified.
 
 Verification:
 

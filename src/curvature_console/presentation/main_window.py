@@ -26,10 +26,18 @@ from curvature_console.infrastructure.context_loader import (
     WorkspaceContextLoader,
 )
 from curvature_console.infrastructure.state_store import SQLiteStateStore
+from curvature_console.infrastructure.transfer_package import (
+    TransferPackageBuilder,
+    TransferPackageMode,
+    TransferPackageRequest,
+)
 from curvature_console.presentation.context_preview_dialog import (
     ContextPreviewDialog,
 )
 from curvature_console.presentation.department_panel import DepartmentPanel
+from curvature_console.presentation.transfer_package_dialog import (
+    TransferPackageDialog,
+)
 
 
 class MainWindow(QMainWindow):
@@ -77,6 +85,7 @@ class MainWindow(QMainWindow):
         )
         self.state_store = SQLiteStateStore(state_path)
         self.context_loader = WorkspaceContextLoader()
+        self.transfer_package_builder = TransferPackageBuilder()
         self.workspace_configs: dict[str, WorkspaceConfig] = {}
         self.context_results: dict[str, ContextLoadResult] = {}
 
@@ -103,6 +112,9 @@ class MainWindow(QMainWindow):
             panel.focus_requested.connect(self.focus_department)
             panel.context_refresh_requested.connect(self.refresh_context)
             panel.context_preview_requested.connect(self.preview_context)
+            panel.transfer_package_requested.connect(
+                self.prepare_transfer_package
+            )
             panel.workspace_state_changed.connect(self.save_department_state)
             self.department_panels[department_id] = panel
             self.splitter.addWidget(panel)
@@ -128,7 +140,9 @@ class MainWindow(QMainWindow):
 
         status_bar = QStatusBar()
         status_bar.setObjectName("applicationStatusBar")
-        status_bar.showMessage("Three departments operational — AI not connected")
+        status_bar.showMessage(
+            "Three departments operational — manual ChatGPT workflow"
+        )
         self.setStatusBar(status_bar)
 
         self.load_workspace_configs()
@@ -220,6 +234,53 @@ class MainWindow(QMainWindow):
         )
         dialog.exec()
 
+    def prepare_transfer_package(
+        self,
+        department_id: str,
+        mode_value: str,
+    ) -> None:
+        """Build and preview one local manual-transfer package."""
+
+        if department_id not in self.department_panels:
+            raise ValueError(f"Unknown department: {department_id}")
+
+        result = self.context_results.get(department_id)
+        if result is None:
+            QMessageBox.information(
+                self,
+                "Context unavailable",
+                "Refresh this workspace context before preparing a package.",
+            )
+            return
+
+        panel = self.department_panels[department_id]
+        try:
+            mode = TransferPackageMode(mode_value)
+        except ValueError as exc:
+            raise ValueError(
+                f"Unknown transfer package mode: {mode_value}"
+            ) from exc
+
+        package = self.transfer_package_builder.build(
+            TransferPackageRequest(
+                mode=mode,
+                department_id=department_id,
+                department_title=panel.title_label.text(),
+                responsibility=panel.responsibility,
+                context=result,
+                conversation_text=panel.conversation_view.toPlainText(),
+                draft_text=panel.input_editor.toPlainText(),
+                attachments=panel.attachment_list.records,
+            )
+        )
+
+        dialog = TransferPackageDialog(
+            department_title=panel.title_label.text(),
+            package=package,
+            parent=self,
+        )
+        dialog.exec()
+
     def restore_persisted_state(self) -> None:
         """Restore department content, attachments and layout."""
 
@@ -305,7 +366,7 @@ class MainWindow(QMainWindow):
         self.splitter.setSizes(self._three_panel_sizes)
         self.restore_button.setEnabled(False)
         self.statusBar().showMessage(
-            "Three departments operational — AI not connected"
+            "Three departments operational — manual ChatGPT workflow"
         )
         self._save_layout_state()
 

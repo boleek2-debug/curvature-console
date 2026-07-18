@@ -21,23 +21,18 @@ The following work is complete and verified:
 - Per-Department Attachment Queues
 - ASSISTANT-001B3 — Workspace Configuration and Context Loading
 - ASSISTANT-001B4 — Local State and Conversation Persistence
+- ASSISTANT-001B5.1 — Task and Thread Handoff Packages
 
 Current verification result:
 
 ```text
-22 passed
+32 passed
 ```
 
-Latest implementation commit:
+The active implementation unit is:
 
 ```text
-2eec4e6 Implement ASSISTANT-001B4 local state persistence
-```
-
-The active milestone is:
-
-```text
-ASSISTANT-001B5 — ChatGPT Plus Workflow Integration
+ASSISTANT-001B5.2 — Assistant Response Import
 ```
 
 ---
@@ -48,18 +43,17 @@ Curvature Console is a local coordination, context, persistence and transfer too
 
 It does not replace the official ChatGPT application.
 
-The intended workflow is:
+Recommended ChatGPT structure:
 
 ```text
-Curvature Console
-→ select a department
-→ prepare a department-specific transfer package
-→ copy the package to the clipboard
-→ continue the conversation in official ChatGPT under the existing Plus subscription
-→ copy the assistant response
-→ paste or import the response into the correct department workspace
-→ persist the local state in SQLite
+ChatGPT Project: Curvature Project
+ChatGPT Project: Curvature Core
+ChatGPT Project: Curvature Research
 ```
+
+Normal work uses a compact Task Package.
+
+Moving to a new chat inside the same ChatGPT Project uses a comprehensive Thread Handoff Package.
 
 ---
 
@@ -70,11 +64,11 @@ Curvature Console must not create additional mandatory AI costs beyond the user'
 Therefore:
 
 - paid OpenAI API usage is not part of the default architecture;
-- Curvature Console must not require an OpenAI API key;
-- Curvature Console must not perform automatic paid model requests;
+- no OpenAI API key is required;
+- no automatic paid model request is performed;
 - no background process may incur token, tool or search charges;
-- the official ChatGPT interface remains the primary AI conversation environment;
-- any future paid provider integration would require a separate explicit project decision and must remain optional and disabled by default.
+- official ChatGPT remains the primary AI conversation environment;
+- any future paid provider integration requires a separate explicit decision and must be optional and disabled by default.
 
 The authoritative decision is recorded in `DECISIONS.md`.
 
@@ -124,37 +118,60 @@ Operational data is stored under:
 ~/curvature-console/data/
 ```
 
-The main database is:
+## Task Package
 
-```text
-~/curvature-console/data/curvature_console.sqlite3
-```
+Used for normal work in the current ChatGPT thread.
 
-Persistent pasted screenshots are stored under:
+Includes:
 
-```text
-~/curvature-console/data/attachments/<department>/
-```
+- department identity and authority;
+- full role;
+- bounded beginning-and-end excerpts from long non-role documents;
+- newest 8,000 characters of local conversation;
+- current task;
+- attachment manifest;
+- response instructions.
 
-Runtime data remains excluded from Git.
+Long non-role documents are bounded to 4,000 characters per document.
+
+## Thread Handoff Package
+
+Used when moving to a new chat in the same department's ChatGPT Project.
+
+Includes:
+
+- department identity and authority;
+- full role;
+- full loaded documents;
+- newest 24,000 characters of local conversation;
+- current task;
+- attachment manifest;
+- explicit continuity instructions.
+
+Both package types:
+
+- are previewed before copying;
+- are copied exactly to the system clipboard;
+- perform no network request;
+- invoke no paid API.
 
 ---
 
 # Repository Boundaries
 
-The Curvature Console repository is:
+Curvature Console repository:
 
 ```text
 ~/curvature-console
 ```
 
-The Project Curvature repository is:
+Project Curvature repository:
 
 ```text
 ~/Curvature
 ```
 
-During the MVP, Curvature Console access to the Project Curvature repository remains read-only.
+During the MVP, Curvature Console access to Project Curvature remains read-only.
 
 Curvature Console must not:
 
@@ -232,7 +249,7 @@ python -m pytest -v
 Expected current result:
 
 ```text
-22 passed
+32 passed
 ```
 
 ---
@@ -241,21 +258,20 @@ Expected current result:
 
 ## ASSISTANT-001B5 — ChatGPT Plus Workflow Integration
 
-The milestone must support the existing ChatGPT Plus workflow without paid API usage.
-
-First implementation unit:
+Next implementation unit:
 
 ```text
-ASSISTANT-001B5.1 — ChatGPT Transfer Package
+ASSISTANT-001B5.2 — Assistant Response Import
 ```
 
 Planned behavior:
 
-- select one department;
-- assemble its role, loaded context, local conversation state, draft and attachment manifest;
-- format a bounded transfer package;
-- preview the package;
-- copy it to the system clipboard;
+- select the target department;
+- paste or import the assistant response;
+- preview it before acceptance;
+- preserve the original text;
+- append it to the correct local department state;
+- persist it locally;
 - never send it over the network;
 - never invoke a paid API.
 
