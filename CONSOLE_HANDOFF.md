@@ -1,9 +1,9 @@
-# HANDOFF
+# CURVATURE CONSOLE HANDOFF
 
 Status: Active
 Version: 0.7.1
 Owner: Project Curvature
-Last Updated: 2026-07-18
+Last Updated: 2026-07-19
 
 ---
 
@@ -20,6 +20,23 @@ It maintains three permanent and equal workspaces:
 It is separate from Curvature Platform, World Core, Chronicle Client and gameplay.
 
 Its purpose is to preserve department state, prepare controlled context and automate work through the user's existing official ChatGPT Projects without requiring the paid OpenAI API.
+
+---
+
+# Documentation Namespace
+
+Canonical Console documents:
+
+```text
+CONSOLE_README.md
+CONSOLE_HANDOFF.md
+CONSOLE_ROADMAP.md
+CONSOLE_CHANGELOG.md
+CONSOLE_DECISIONS.md
+CONSOLE_PIPELINE.md
+```
+
+This namespace prevents collisions with documents from `~/Curvature`.
 
 ---
 
@@ -54,9 +71,9 @@ Non-negotiable rules:
 Authoritative decisions:
 
 ```text
-DECISIONS.md — ADR-002
-DECISIONS.md — ADR-004
-DECISIONS.md — ADR-005
+CONSOLE_DECISIONS.md — ADR-002
+CONSOLE_DECISIONS.md — ADR-004
+CONSOLE_DECISIONS.md — ADR-005
 ```
 
 ---

@@ -1,4 +1,4 @@
-# Curvature Console
+# Curvature Console Repository
 
 Curvature Console is a standalone internal development coordination application for Project Curvature.
 
@@ -9,6 +9,22 @@ It provides three permanent and equal departmental workspaces:
 - Curvature Research
 
 The application is separate from Curvature Platform, World Core, Chronicle Client and gameplay.
+
+---
+
+# Canonical Console Documentation
+
+Console documents use the `CONSOLE_` prefix so they remain unambiguous when
+uploaded together with Project Curvature documents to one ChatGPT Project.
+
+- `CONSOLE_README.md` — source-friendly Console overview
+- `CONSOLE_HANDOFF.md` — current state and exact next step
+- `CONSOLE_ROADMAP.md` — ordered implementation plan
+- `CONSOLE_CHANGELOG.md` — completed and verified work
+- `CONSOLE_DECISIONS.md` — durable architecture decisions
+- `CONSOLE_PIPELINE.md` — development and verification process
+
+`README.md` remains the standard repository landing page.
 
 ---
 
@@ -70,7 +86,7 @@ Therefore:
 - browser automation uses the user's existing logged-in ChatGPT Plus session;
 - any future paid provider integration requires a separate explicit decision and must be optional and disabled by default.
 
-The authoritative decisions are recorded in `DECISIONS.md`.
+The authoritative decisions are recorded in `CONSOLE_CONSOLE_DECISIONS.md`.
 
 ---
 
@@ -345,4 +361,4 @@ Planned behavior:
 - display clear login, CAPTCHA, timeout and UI-change errors;
 - never invoke a paid API.
 
-See `ROADMAP.md`, `HANDOFF.md`, `DECISIONS.md` and `PIPELINE.md`.
+See `CONSOLE_CONSOLE_ROADMAP.md`, `CONSOLE_CONSOLE_HANDOFF.md`, `CONSOLE_CONSOLE_DECISIONS.md` and `CONSOLE_CONSOLE_PIPELINE.md`.

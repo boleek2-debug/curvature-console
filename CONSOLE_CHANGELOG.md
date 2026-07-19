@@ -1,15 +1,35 @@
-# CHANGELOG
+# CURVATURE CONSOLE CHANGELOG
 
 Status: Active
 Version: 0.7.1
 Owner: Project Curvature
-Last Updated: 2026-07-18
+Last Updated: 2026-07-19
 
 ---
 
 # Purpose
 
 This document records completed and verified Curvature Console work and accepted architecture decisions.
+
+---
+
+## 2026-07-19
+
+### CONSOLE-DOCS-001 — Documentation Namespace Migration
+
+Completed:
+
+- namespaced canonical Console documents with the `CONSOLE_` prefix;
+- preserved standard root `README.md`;
+- added `CONSOLE_README.md` for shared ChatGPT Project Sources;
+- updated Console cross-document references;
+- retained main-repository names in workspace configuration and intentional
+  test fixtures.
+
+Result:
+
+Project Curvature and Curvature Console documentation can coexist in one
+ChatGPT Project without filename ambiguity.
 
 ---
 
@@ -89,8 +109,8 @@ Accepted:
 Recorded in:
 
 ```text
-DECISIONS.md — ADR-004
-DECISIONS.md — ADR-005
+CONSOLE_DECISIONS.md — ADR-004
+CONSOLE_DECISIONS.md — ADR-005
 ```
 
 ### ASSISTANT-001B5.1 — Task and Thread Handoff Packages
@@ -154,7 +174,7 @@ The manual workflow portion was later superseded by ADR-004 while the zero-cost 
 Recorded in:
 
 ```text
-DECISIONS.md — ADR-002
+CONSOLE_DECISIONS.md — ADR-002
 ```
 
 ### ASSISTANT-001B4 — Local State and Conversation Persistence

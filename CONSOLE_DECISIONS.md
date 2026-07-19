@@ -1,9 +1,9 @@
-# ARCHITECTURE DECISIONS
+# CURVATURE CONSOLE ARCHITECTURE DECISIONS
 
 Status: Active  
 Version: 1.1.0  
 Owner: Project Curvature  
-Last Updated: 2026-07-18
+Last Updated: 2026-07-19
 
 ---
 
@@ -283,3 +283,43 @@ It must not:
 - automation removes copy-paste without removing user control;
 - live failures remain recoverable;
 - background agents may be considered only through a later architecture decision.
+
+---
+
+# ADR-006 — Namespaced Console Documentation
+
+Status: Accepted
+Date: 2026-07-19
+
+## Context
+
+Project Curvature and Curvature Console are separate repositories, but their
+documents are uploaded to the same ChatGPT Project Sources. Duplicate names
+such as `HANDOFF.md` and `ROADMAP.md` made source identity ambiguous.
+
+## Decision
+
+Canonical Console documents use the `CONSOLE_` prefix:
+
+```text
+CONSOLE_README.md
+CONSOLE_HANDOFF.md
+CONSOLE_ROADMAP.md
+CONSOLE_CHANGELOG.md
+CONSOLE_DECISIONS.md
+CONSOLE_PIPELINE.md
+```
+
+The repository keeps `README.md` as its conventional landing page.
+`CONSOLE_README.md` is preferred for shared Sources.
+
+Workspace configuration and tests that intentionally reference documents from
+the main `~/Curvature` repository retain their unprefixed filenames.
+
+## Consequences
+
+- both repositories can coexist in one source collection;
+- future Console documents use the `CONSOLE_` namespace;
+- old unprefixed Console operational documents are removed rather than kept as
+  duplicate aliases.
+

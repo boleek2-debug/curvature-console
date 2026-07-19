@@ -1,9 +1,9 @@
-# DEVELOPMENT PIPELINE
+# CURVATURE CONSOLE DEVELOPMENT PIPELINE
 
 Status: Active
 Version: 1.0.0
 Owner: Curvature Core
-Last Updated: 2026-07-18
+Last Updated: 2026-07-19
 
 ---
 
@@ -61,7 +61,17 @@ Runtime data and private browser data must never be included in implementation p
 
 ---
 
-# 3. Environment
+# 3. Documentation Namespace
+
+Canonical Console documents use the `CONSOLE_` prefix. `README.md` remains the
+repository landing page. Do not recreate unprefixed Console aliases.
+
+Workspace configuration may continue to reference unprefixed documents from
+the main `~/Curvature` repository.
+
+---
+
+# 4. Environment
 
 Verified environment:
 
@@ -83,7 +93,7 @@ python -m pip install -e .
 
 ---
 
-# 4. Automated Test Pipeline
+# 5. Automated Test Pipeline
 
 Run the full unit suite from the repository root:
 
@@ -111,7 +121,7 @@ Browser code must be testable through:
 
 ---
 
-# 5. Browser Profile Protection
+# 6. Browser Profile Protection
 
 Dedicated browser profile:
 
@@ -139,7 +149,7 @@ The profile must be reported as ignored.
 
 ---
 
-# 6. Live Browser Verification
+# 7. Live Browser Verification
 
 Live browser verification is separate from unit tests.
 
@@ -168,7 +178,7 @@ Live verification must use a harmless, explicit test task and must not modify Pr
 
 ---
 
-# 7. B5.2B Verification Matrix
+# 8. B5.2B Verification Matrix
 
 ASSISTANT-001B5.2B must verify all of the following.
 
@@ -221,7 +231,7 @@ Every failure must be explicit. The bridge must not guess.
 
 ---
 
-# 8. Manual Verification Sequence
+# 9. Manual Verification Sequence
 
 For every department:
 
@@ -248,22 +258,22 @@ Run separately for:
 
 ---
 
-# 9. Documentation Gate
+# 10. Documentation Gate
 
 Before closing a milestone, update as applicable:
 
-- `HANDOFF.md`;
-- `ROADMAP.md`;
-- `CHANGELOG.md`;
+- `CONSOLE_CONSOLE_HANDOFF.md`;
+- `CONSOLE_CONSOLE_ROADMAP.md`;
+- `CONSOLE_CONSOLE_CHANGELOG.md`;
 - `README.md`;
-- `DECISIONS.md`;
-- `PIPELINE.md`.
+- `CONSOLE_CONSOLE_DECISIONS.md`;
+- `CONSOLE_CONSOLE_PIPELINE.md`.
 
 Documentation must not describe superseded manual copy-paste as the active product workflow.
 
 ---
 
-# 10. Commit and Push Gate
+# 11. Commit and Push Gate
 
 Before committing:
 
@@ -293,7 +303,7 @@ Do not use `git add .` when private runtime files may exist.
 
 ---
 
-# 11. Current Exact Next Step
+# 12. Current Exact Next Step
 
 ```text
 ASSISTANT-001B5.2B — Automated Send and Receive

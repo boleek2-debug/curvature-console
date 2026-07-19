@@ -1,9 +1,9 @@
-# ROADMAP
+# CURVATURE CONSOLE ROADMAP
 
 Status: Active
 Version: 0.7.1
 Owner: Project Curvature
-Last Updated: 2026-07-18
+Last Updated: 2026-07-19
 
 ---
 
