@@ -39,17 +39,20 @@ The following work is complete and verified:
 - ASSISTANT-001B4 — Local State and Conversation Persistence
 - ASSISTANT-001B5.1 — Task and Thread Handoff Packages
 - ASSISTANT-001B5.2A — Browser Bridge Foundation
+- ASSISTANT-001B5.2B — Browser Lifecycle and One-Click UX
+- ASSISTANT-001B5.2C — Durable URL-Only Conversation Routing
 
-B5.2A commit:
+Current verification:
 
 ```text
-a33fa4e Implement B5.2A browser bridge foundation
+56 automated tests passed
+live Core response: PROJECT_SCOPED_ROUTE_OK
 ```
 
-The active implementation unit is:
+The next implementation unit is:
 
 ```text
-ASSISTANT-001B5.2B — Automated Send and Receive
+ASSISTANT-001B5.2D — Generated File Download Capture
 ```
 
 ---
@@ -58,13 +61,16 @@ ASSISTANT-001B5.2B — Automated Send and Receive
 
 Curvature Console is a local coordination, context, persistence, routing and browser-automation tool.
 
-Official ChatGPT Projects remain the AI conversation environment:
+One shared official ChatGPT Project remains the AI conversation environment:
 
 ```text
-ChatGPT Project: Curvature Project
-ChatGPT Project: Curvature Core
-ChatGPT Project: Curvature Research
+ChatGPT Project: Curvature
+├── Project department conversation
+├── Core department conversation
+└── Research department conversation
 ```
+
+Routing uses `department_id` and the persisted active conversation URL. Conversation titles are not routing identifiers.
 
 Curvature Console prepares a controlled Task Package or Thread Handoff Package, sends it automatically through the matching logged-in ChatGPT Project, retrieves the completed assistant response and routes it back to the originating Console department.
 
@@ -86,7 +92,7 @@ Therefore:
 - browser automation uses the user's existing logged-in ChatGPT Plus session;
 - any future paid provider integration requires a separate explicit decision and must be optional and disabled by default.
 
-The authoritative decisions are recorded in `CONSOLE_CONSOLE_DECISIONS.md`.
+The authoritative decisions are recorded in `CONSOLE_DECISIONS.md`.
 
 ---
 
@@ -224,15 +230,15 @@ The user performs login manually inside this dedicated profile. Passwords and au
 
 ---
 
-# Department Mapping
+# Department Routing
 
 ```text
-project  → Curvature Project
-core     → Curvature Core
-research → Curvature Research
+project  → persisted project conversation URL
+core     → persisted core conversation URL
+research → persisted research conversation URL
 ```
 
-A task and its response must remain bound to the same department.
+A task and its response must remain bound to the same department. Mutable ChatGPT titles and sidebar labels are never used as routing keys.
 
 ---
 
@@ -340,25 +346,24 @@ Live browser verification is separate from the unit suite and must only run when
 
 ## ASSISTANT-001B5 — ChatGPT Plus Browser Integration
 
-Next implementation unit:
+Completed and verified:
 
 ```text
-ASSISTANT-001B5.2B — Automated Send and Receive
+ASSISTANT-001B5.2B — Browser Lifecycle and One-Click UX
+ASSISTANT-001B5.2C — Durable URL-Only Conversation Routing
 ```
 
-Planned behavior:
+Next:
 
-- select the originating Console department;
-- generate the appropriate package;
-- connect to ordinary Chrome through CDP;
-- navigate to the mapped ChatGPT Project;
-- locate the active message editor;
-- send the package automatically;
-- detect response creation and completion;
-- extract the exact assistant response;
-- route it back to the originating department;
-- persist it locally;
-- display clear login, CAPTCHA, timeout and UI-change errors;
-- never invoke a paid API.
+```text
+ASSISTANT-001B5.2D — Generated File Download Capture
+```
 
-See `CONSOLE_CONSOLE_ROADMAP.md`, `CONSOLE_CONSOLE_HANDOFF.md`, `CONSOLE_CONSOLE_DECISIONS.md` and `CONSOLE_CONSOLE_PIPELINE.md`.
+See `CONSOLE_ROADMAP.md`, `CONSOLE_HANDOFF.md`, `CONSOLE_DECISIONS.md` and `CONSOLE_PIPELINE.md`.
+
+
+# Next Browser Workflow Milestones
+
+- B5.2D — generated-file download capture and Download Inbox;
+- B5.2E — Package Review, path validation, backups, explicit Apply and Git diff;
+- B5.3 — structured department conversation and exchange records.

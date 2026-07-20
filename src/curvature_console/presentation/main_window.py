@@ -21,23 +21,31 @@ from curvature_console.configuration.workspace_config import (
     WorkspaceConfigError,
     load_workspace_config,
 )
+from curvature_console.infrastructure.browser_bridge import (
+    BOOTSTRAP_CONVERSATION_URLS,
+    SHARED_PROJECT_NAME,
+    SHARED_PROJECT_URL,
+    BrowserBridgeConfig,
+    BrowserExchangeRequest,
+)
 from curvature_console.infrastructure.context_loader import (
     ContextLoadResult,
     WorkspaceContextLoader,
 )
 from curvature_console.infrastructure.state_store import SQLiteStateStore
 from curvature_console.infrastructure.transfer_package import (
+    TransferPackage,
     TransferPackageBuilder,
     TransferPackageMode,
     TransferPackageRequest,
+)
+from curvature_console.presentation.browser_bridge_worker import (
+    BrowserBridgeWorker,
 )
 from curvature_console.presentation.context_preview_dialog import (
     ContextPreviewDialog,
 )
 from curvature_console.presentation.department_panel import DepartmentPanel
-from curvature_console.presentation.transfer_package_dialog import (
-    TransferPackageDialog,
-)
 
 
 class MainWindow(QMainWindow):
@@ -67,6 +75,7 @@ class MainWindow(QMainWindow):
         config_directory: Path | None = None,
         state_path: Path | None = None,
         data_directory: Path | None = None,
+        browser_config: BrowserBridgeConfig | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -83,7 +92,11 @@ class MainWindow(QMainWindow):
             if data_directory is not None
             else Path.cwd() / "data"
         )
+        self.browser_config = browser_config or BrowserBridgeConfig.default(
+            Path.cwd()
+        )
         self.state_store = SQLiteStateStore(state_path)
+        self._bootstrap_chat_routes()
         self.context_loader = WorkspaceContextLoader()
         self.transfer_package_builder = TransferPackageBuilder()
         self.workspace_configs: dict[str, WorkspaceConfig] = {}
@@ -92,6 +105,8 @@ class MainWindow(QMainWindow):
         self._restoring_state = True
         self._focused_department_id: str | None = None
         self._three_panel_sizes = [500, 500, 500]
+        self._browser_worker: BrowserBridgeWorker | None = None
+        self._pending_tasks: dict[str, str] = {}
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setObjectName("departmentSplitter")
@@ -141,7 +156,7 @@ class MainWindow(QMainWindow):
         status_bar = QStatusBar()
         status_bar.setObjectName("applicationStatusBar")
         status_bar.showMessage(
-            "Three departments operational — manual ChatGPT workflow"
+            "Three departments operational — ChatGPT browser bridge ready"
         )
         self.setStatusBar(status_bar)
 
@@ -149,6 +164,21 @@ class MainWindow(QMainWindow):
         self.refresh_all_contexts()
         self.restore_persisted_state()
         self._restoring_state = False
+
+    def _bootstrap_chat_routes(self) -> None:
+        """Initialise missing department routes without using chat titles."""
+
+        for department_id, conversation_url in (
+            BOOTSTRAP_CONVERSATION_URLS.items()
+        ):
+            if self.state_store.load_chat_route(department_id) is not None:
+                continue
+            self.state_store.save_chat_route(
+                department_id=department_id,
+                project_name=SHARED_PROJECT_NAME,
+                project_url=SHARED_PROJECT_URL,
+                active_conversation_url=conversation_url,
+            )
 
     @property
     def focused_department_id(self) -> str | None:
@@ -239,8 +269,179 @@ class MainWindow(QMainWindow):
         department_id: str,
         mode_value: str,
     ) -> None:
-        """Build and preview one local manual-transfer package."""
+        """Build and send a task, confirming only a new-thread handoff."""
 
+        if self._browser_worker is not None:
+            QMessageBox.information(
+                self,
+                "ChatGPT operation in progress",
+                "Wait for the current ChatGPT response before sending another "
+                "package.",
+            )
+            return
+
+        package = self._build_transfer_package(department_id, mode_value)
+        if package is None:
+            return
+
+        if package.mode is TransferPackageMode.THREAD_HANDOFF:
+            panel = self.department_panels[department_id]
+            answer = QMessageBox.warning(
+                self,
+                "Start a new ChatGPT thread?",
+                "This Thread Handoff will start a NEW ChatGPT conversation "
+                f"for {panel.title_label.text()}. The current conversation "
+                "will remain unchanged.",
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+
+        self.start_browser_exchange(package)
+
+    def start_browser_exchange(self, package: TransferPackage) -> None:
+        """Start one browser exchange outside the UI thread."""
+
+        department_id = package.department_id
+        panel = self.department_panels[department_id]
+        self._pending_tasks[department_id] = panel.input_editor.toPlainText()
+        self._set_browser_operation_busy(True, department_id)
+        self.statusBar().showMessage(
+            f"Sending {package.mode.display_name} to "
+            f"{panel.title_label.text()}..."
+        )
+
+        route = self.state_store.load_chat_route(department_id)
+        worker = BrowserBridgeWorker(
+            config=self.browser_config,
+            request=BrowserExchangeRequest(
+                department_id=department_id,
+                message_text=package.text,
+                create_new_thread=(
+                    package.mode is TransferPackageMode.THREAD_HANDOFF
+                ),
+                conversation_url=(
+                    route.active_conversation_url
+                    if route is not None
+                    else None
+                ),
+            ),
+        )
+        worker.succeeded.connect(self._handle_browser_success)
+        worker.failed.connect(self._handle_browser_failure)
+        worker.route_unverified.connect(
+            self._handle_browser_route_unverified
+        )
+        worker.stage_changed.connect(self._handle_browser_stage)
+        worker.finished.connect(self._clear_browser_worker)
+        self._browser_worker = worker
+        worker.start()
+
+    def _handle_browser_success(
+        self,
+        department_id: str,
+        project_name: str,
+        project_url: str,
+        conversation_url: str,
+        response_text: str,
+    ) -> None:
+        panel = self.department_panels[department_id]
+        user_task = self._pending_tasks.pop(department_id, "")
+        panel.append_browser_exchange(user_task, response_text)
+        self.state_store.save_chat_route(
+            department_id=department_id,
+            project_name=project_name,
+            project_url=project_url,
+            active_conversation_url=conversation_url,
+        )
+        panel.input_editor.clear()
+        self._set_browser_operation_busy(False, department_id)
+        self.save_department_state(department_id)
+        self.statusBar().showMessage(
+            f"ChatGPT response received and saved: "
+            f"{panel.title_label.text()}"
+        )
+
+    def _handle_browser_route_unverified(
+        self,
+        department_id: str,
+        observed_url: str,
+        response_text: str,
+    ) -> None:
+        """Preserve a received response without changing the stored route."""
+
+        panel = self.department_panels[department_id]
+        user_task = self._pending_tasks.pop(department_id, "")
+        panel.append_browser_exchange(user_task, response_text)
+        panel.input_editor.clear()
+        self._set_browser_operation_busy(False, department_id)
+        self.save_department_state(department_id)
+        self.statusBar().showMessage(
+            f"ChatGPT response saved; route requires verification: "
+            f"{panel.title_label.text()}"
+        )
+        QMessageBox.warning(
+            self,
+            "ChatGPT route requires verification",
+            "The response was received and saved, but the active "
+            "conversation route was not changed.\n\n"
+            f"Observed page URL:\n{observed_url}",
+        )
+
+    def _handle_browser_failure(
+        self,
+        department_id: str,
+        error_message: str,
+    ) -> None:
+        panel = self.department_panels[department_id]
+        self._pending_tasks.pop(department_id, None)
+        self._set_browser_operation_busy(False, department_id)
+        self.statusBar().showMessage(
+            f"ChatGPT browser operation failed: {panel.title_label.text()}"
+        )
+        QMessageBox.critical(
+            self,
+            "ChatGPT browser bridge failed",
+            error_message,
+        )
+
+    def _handle_browser_stage(
+        self,
+        department_id: str,
+        stage: str,
+    ) -> None:
+        panel = self.department_panels[department_id]
+        panel.set_browser_stage(stage)
+        self.statusBar().showMessage(
+            f"{panel.title_label.text()}: {stage}"
+        )
+
+    def _set_browser_operation_busy(
+        self,
+        busy: bool,
+        active_department_id: str | None = None,
+    ) -> None:
+        """Lock only the department currently using the browser bridge."""
+
+        if active_department_id is None:
+            return
+
+        panel = self.department_panels[active_department_id]
+        panel.set_browser_busy(busy)
+
+    def _clear_browser_worker(self) -> None:
+        worker = self._browser_worker
+        self._browser_worker = None
+        if worker is not None:
+            worker.deleteLater()
+
+    def _build_transfer_package(
+        self,
+        department_id: str,
+        mode_value: str,
+    ) -> TransferPackage | None:
         if department_id not in self.department_panels:
             raise ValueError(f"Unknown department: {department_id}")
 
@@ -251,7 +452,7 @@ class MainWindow(QMainWindow):
                 "Context unavailable",
                 "Refresh this workspace context before preparing a package.",
             )
-            return
+            return None
 
         panel = self.department_panels[department_id]
         try:
@@ -261,7 +462,7 @@ class MainWindow(QMainWindow):
                 f"Unknown transfer package mode: {mode_value}"
             ) from exc
 
-        package = self.transfer_package_builder.build(
+        return self.transfer_package_builder.build(
             TransferPackageRequest(
                 mode=mode,
                 department_id=department_id,
@@ -273,13 +474,6 @@ class MainWindow(QMainWindow):
                 attachments=panel.attachment_list.records,
             )
         )
-
-        dialog = TransferPackageDialog(
-            department_title=panel.title_label.text(),
-            package=package,
-            parent=self,
-        )
-        dialog.exec()
 
     def restore_persisted_state(self) -> None:
         """Restore department content, attachments and layout."""
@@ -366,12 +560,22 @@ class MainWindow(QMainWindow):
         self.splitter.setSizes(self._three_panel_sizes)
         self.restore_button.setEnabled(False)
         self.statusBar().showMessage(
-            "Three departments operational — manual ChatGPT workflow"
+            "Three departments operational — ChatGPT browser bridge ready"
         )
         self._save_layout_state()
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Persist operational state before closing."""
+
+        if self._browser_worker is not None:
+            QMessageBox.information(
+                self,
+                "ChatGPT operation in progress",
+                "Wait for the current ChatGPT response before closing "
+                "Curvature Console.",
+            )
+            event.ignore()
+            return
 
         self.save_all_state()
         self.state_store.close()

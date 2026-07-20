@@ -1,4 +1,4 @@
-"""Build deterministic packages for manual transfer to official ChatGPT."""
+"""Build deterministic packages for automated ChatGPT delivery."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from curvature_console.presentation.attachment_record import (
 
 
 class TransferPackageMode(str, Enum):
-    """Supported manual ChatGPT transfer modes."""
+    """Supported ChatGPT package modes."""
 
     TASK = "task"
     THREAD_HANDOFF = "thread_handoff"
@@ -66,7 +66,7 @@ class TransferPackageRequest:
 
 @dataclass(frozen=True, slots=True)
 class TransferPackage:
-    """One locally generated package for manual transfer to ChatGPT."""
+    """One locally generated package for ChatGPT delivery."""
 
     mode: TransferPackageMode
     department_id: str
@@ -78,7 +78,7 @@ class TransferPackage:
 
 
 class TransferPackageBuilder:
-    """Assemble deterministic packages without network operations."""
+    """Assemble deterministic packages without paid API operations."""
 
     def build(self, request: TransferPackageRequest) -> TransferPackage:
         """Return a complete package for the selected mode."""
@@ -147,9 +147,9 @@ class TransferPackageBuilder:
                 f"Package type: {request.mode.display_name}",
                 f"Department: {request.department_title}",
                 f"Department ID: {request.department_id}",
-                "Transfer mode: Manual ChatGPT Plus workflow",
-                "Network action performed by Console: NO",
+                "Delivery mode: Automated ChatGPT Plus browser bridge",
                 "Paid API used by Console: NO",
+                "Originating user action required: YES",
             ]
         )
 
@@ -182,7 +182,6 @@ class TransferPackageBuilder:
                 content = document.content.rstrip()
                 truncated = False
 
-                # The role is always included in full.
                 if (
                     document.label != "ROLE"
                     and document_limit is not None
@@ -239,9 +238,7 @@ class TransferPackageBuilder:
         if len(content) <= limit:
             return content, False
 
-        marker = (
-            "\n\n[... middle omitted by compact Task Package ...]\n\n"
-        )
+        marker = "\n\n[... middle omitted by compact Task Package ...]\n\n"
         available = max(2, limit - len(marker))
         beginning_length = available // 2
         ending_length = available - beginning_length
@@ -291,8 +288,8 @@ class TransferPackageBuilder:
         parts = [
             "## ATTACHMENT MANIFEST",
             "",
-            "Files are listed locally but are NOT uploaded automatically.",
-            "Upload required files manually to the ChatGPT conversation.",
+            "Files are listed locally but are not uploaded by B5.2B.",
+            "State clearly when an attachment must be uploaded before work can continue.",
         ]
 
         if not records:
@@ -318,6 +315,10 @@ class TransferPackageBuilder:
             "",
             f"Respond as {request.department_title}.",
             "Use the loaded context and current task above.",
+            "The CURRENT USER TASK is the immediate instruction and takes "
+            "priority over general response style.",
+            "If the CURRENT USER TASK requests an exact response, output "
+            "exactly that response and nothing else.",
             "Treat attachment contents as unavailable until they are uploaded "
             "to this ChatGPT conversation.",
             "State clearly when a required attachment or fact is missing.",

@@ -12,6 +12,7 @@ from curvature_console.presentation.main_window import MainWindow
 
 
 APPLICATION_NAME = "Curvature Console"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def create_application(argv: Sequence[str] | None = None) -> QApplication:
@@ -30,6 +31,7 @@ def create_application(argv: Sequence[str] | None = None) -> QApplication:
 def create_main_window(
     state_path: Path | None = None,
     data_directory: Path | None = None,
+    config_directory: Path | None = None,
 ) -> MainWindow:
     """Create the main Curvature Console window."""
 
@@ -37,17 +39,19 @@ def create_main_window(
         application_name=APPLICATION_NAME,
         state_path=state_path,
         data_directory=data_directory,
+        config_directory=config_directory,
     )
 
 
 def main() -> int:
-    """Launch Curvature Console."""
+    """Launch Curvature Console from any current working directory."""
 
     application = create_application()
-    data_directory = Path.cwd() / "data"
+    data_directory = PROJECT_ROOT / "data"
     window = create_main_window(
         state_path=data_directory / "curvature_console.sqlite3",
         data_directory=data_directory,
+        config_directory=PROJECT_ROOT / "config" / "workspaces",
     )
     window.show()
     return application.exec()

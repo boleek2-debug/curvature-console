@@ -1,9 +1,47 @@
 # CURVATURE CONSOLE CHANGELOG
 
 Status: Active
-Version: 0.7.1
+Version: 0.8.0
 Owner: Project Curvature
-Last Updated: 2026-07-19
+Last Updated: 2026-07-20
+
+---
+
+## 2026-07-20
+
+### ASSISTANT-001B5.2B / B5.2C — Reliable One-Click Browser Routing
+
+Completed and verified; final commit hash pending closeout commit.
+
+Delivered:
+
+- normal Task sending in one click;
+- one confirmation only for Thread Handoff;
+- independent department-panel availability during an exchange;
+- explicit browser lifecycle stages and recoverable failures;
+- cleanup of Console-owned browser processes;
+- visible Chrome fallback after headless rendering failure;
+- automatic response retrieval and SQLite persistence;
+- one shared ChatGPT Project architecture;
+- URL-only routing by department;
+- removal of conversation-title routing;
+- persisted active conversation URL and URL history;
+- support for direct `/c/<id>` routes;
+- support for project-scoped `/g/<project-id>/c/<id>` routes;
+- shared Project URL reserved for new conversations.
+
+Verified:
+
+- UI no longer remains indefinitely at `WAITING FOR CHATGPT` when the browser fails;
+- only the active department panel is disabled;
+- Project and Research remain usable while Core is sending;
+- actual observed project-scoped URL was captured before changing validation;
+- successful Core live response: `PROJECT_SCOPED_ROUTE_OK`;
+- complete automated suite: `56 passed`.
+
+Result:
+
+Curvature Console can send a normal Task to the persisted department conversation, retrieve the response and restore the originating panel without using mutable conversation titles or the paid OpenAI API.
 
 ---
 

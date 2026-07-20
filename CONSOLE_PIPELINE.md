@@ -1,9 +1,9 @@
 # CURVATURE CONSOLE DEVELOPMENT PIPELINE
 
 Status: Active
-Version: 1.0.0
+Version: 1.1.0
 Owner: Curvature Core
-Last Updated: 2026-07-19
+Last Updated: 2026-07-20
 
 ---
 
@@ -178,26 +178,43 @@ Live verification must use a harmless, explicit test task and must not modify Pr
 
 ---
 
-# 8. B5.2B Verification Matrix
+# 8. Browser Lifecycle, One-Click and URL-Routing Verification Matrix
 
-ASSISTANT-001B5.2B must verify all of the following.
+ASSISTANT-001B5.2B must verify all of the following, including cleanup after every terminal outcome.
 
-## Project routing
+## Department routing
 
 ```text
-project  → Curvature Project
-core     → Curvature Core
-research → Curvature Research
+department_id
+→ persisted active_conversation_url
 ```
 
-The bridge must refuse unknown departments.
+Requirements:
+
+- one shared ChatGPT Project;
+- no routing by conversation title, sidebar label or visual order;
+- accept verified direct and project-scoped conversation URL forms;
+- use the shared Project URL only for a new Thread Handoff conversation;
+- refuse unknown departments and ambiguous routes.
+
+## Lifecycle
+
+- Playwright stops after success;
+- Playwright stops after failure;
+- Console-owned headless Chrome terminates after success or failure;
+- failed CDP startup terminates the launched process;
+- externally owned Chrome is detached but not terminated;
+- all send surfaces unlock after success or failure;
+- lifecycle stage changes remain visible.
 
 ## Send
 
 - correct project selected;
 - exactly one visible message editor selected;
 - package text entered exactly;
-- explicit user action initiated the send;
+- one explicit click initiated a normal Task send;
+- no normal Task confirmation dialog was shown;
+- Thread Handoff required exactly one confirmation;
 - exactly one message submitted.
 
 ## Receive
@@ -262,12 +279,12 @@ Run separately for:
 
 Before closing a milestone, update as applicable:
 
-- `CONSOLE_CONSOLE_HANDOFF.md`;
-- `CONSOLE_CONSOLE_ROADMAP.md`;
-- `CONSOLE_CONSOLE_CHANGELOG.md`;
+- `CONSOLE_HANDOFF.md`;
+- `CONSOLE_ROADMAP.md`;
+- `CONSOLE_CHANGELOG.md`;
 - `README.md`;
-- `CONSOLE_CONSOLE_DECISIONS.md`;
-- `CONSOLE_CONSOLE_PIPELINE.md`.
+- `CONSOLE_DECISIONS.md`;
+- `CONSOLE_PIPELINE.md`.
 
 Documentation must not describe superseded manual copy-paste as the active product workflow.
 
@@ -305,8 +322,17 @@ Do not use `git add .` when private runtime files may exist.
 
 # 12. Current Exact Next Step
 
+Close and push the verified B5.2B/B5.2C implementation:
+
 ```text
-ASSISTANT-001B5.2B — Automated Send and Receive
+56 tests passed
+live Core routing verified
+documentation aligned
+commit and push pending
 ```
 
-B5.2B must integrate the verified live proof into Curvature Console without manual copy-paste and without paid API usage.
+After the working tree is clean, begin:
+
+```text
+ASSISTANT-001B5.2D — Generated File Download Capture
+```

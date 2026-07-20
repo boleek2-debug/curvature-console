@@ -1,9 +1,9 @@
 # CURVATURE CONSOLE HANDOFF
 
 Status: Active
-Version: 0.7.1
+Version: 0.9.0
 Owner: Project Curvature
-Last Updated: 2026-07-19
+Last Updated: 2026-07-20
 
 ---
 
@@ -17,13 +17,23 @@ It maintains three permanent and equal workspaces:
 - Curvature Core
 - Curvature Research
 
-It is separate from Curvature Platform, World Core, Chronicle Client and gameplay.
-
-Its purpose is to preserve department state, prepare controlled context and automate work through the user's existing official ChatGPT Projects without requiring the paid OpenAI API.
+The Console preserves department context and local state, sends controlled packages through the user's existing ChatGPT Plus session, retrieves responses, and routes them back to the originating department without using the paid OpenAI API.
 
 ---
 
-# Documentation Namespace
+# 2. Repository and Documentation Boundaries
+
+Curvature Console repository:
+
+```text
+~/curvature-console
+```
+
+Project Curvature repository:
+
+```text
+~/Curvature
+```
 
 Canonical Console documents:
 
@@ -36,200 +46,166 @@ CONSOLE_DECISIONS.md
 CONSOLE_PIPELINE.md
 ```
 
-This namespace prevents collisions with documents from `~/Curvature`.
+Console currently reads Project Curvature context but does not automatically edit that repository or perform Git operations.
 
 ---
 
-# 2. Active Architecture
+# 3. Verified Active Architecture
 
-The approved architecture:
+ChatGPT uses one shared Project:
 
 ```text
-Curvature Console
-→ controlled Task or Thread Handoff Package
-→ ordinary logged-in Google Chrome
-→ localhost Chrome DevTools Protocol
-→ Playwright
-→ matching official ChatGPT Project
+ChatGPT Project: Curvature
+```
+
+The three Console departments use separate conversations inside that shared Project.
+
+Routing never depends on mutable conversation titles, sidebar labels, or visual order.
+
+```text
+department_id
+→ active_conversation_url stored in SQLite
+→ project-scoped ChatGPT conversation
+```
+
+The shared Project URL is used only when creating a new conversation:
+
+```text
+https://chatgpt.com/g/g-p-6a5ccf24ed988191b1589e5beca5b7c5/project
+```
+
+Verified conversation URL forms:
+
+```text
+https://chatgpt.com/c/<conversation-id>
+https://chatgpt.com/g/<project-id>/c/<conversation-id>
+```
+
+Current browser workflow:
+
+```text
+one-click Task
+→ deterministic Task Package
+→ Playwright over localhost CDP
+→ dedicated logged-in Chrome profile
+→ active department conversation URL
 → automatic send
 → automatic response retrieval
-→ originating Console department
+→ originating Console panel
 → SQLite persistence
 ```
 
-Non-negotiable rules:
-
-- no paid OpenAI API;
-- no `OPENAI_API_KEY`;
-- no manual copy-paste product workflow;
-- no hidden paid operations;
-- explicit user-triggered sends during the MVP;
-- local browser profile and session data;
-- visible failure on login expiry, CAPTCHA, timeout or UI change;
-- strict department routing.
-
-Authoritative decisions:
-
-```text
-CONSOLE_DECISIONS.md — ADR-002
-CONSOLE_DECISIONS.md — ADR-004
-CONSOLE_DECISIONS.md — ADR-005
-```
+Thread Handoff remains the only send action requiring confirmation.
 
 ---
 
-# 3. Completed Work
+# 4. Completed and Verified Work
 
-## ASSISTANT-001B1 — Repository and Application Foundation
+Completed foundations:
 
-Commit:
+- ASSISTANT-001B1 — Repository and Application Foundation
+- ASSISTANT-001B2 — Three-Panel Desktop Shell
+- Per-Department Attachment Queues
+- ASSISTANT-001B3 — Workspace Configuration and Context Loading
+- ASSISTANT-001B4 — Local State and Conversation Persistence
+- ASSISTANT-001B5.1 — Task and Thread Handoff Packages
+- ASSISTANT-001B5.2A — Browser Bridge Foundation
 
-```text
-a6b46f2 Complete ASSISTANT-001B1 application foundation
-```
-
-## ASSISTANT-001B2 — Three-Panel Desktop Shell
-
-Commit:
-
-```text
-c0085bd Implement ASSISTANT-001B2 three-panel desktop shell
-```
-
-## Per-Department Attachments
-
-Commit:
+Current implementation closeout:
 
 ```text
-8920117 Add per-department attachment queues
+ASSISTANT-001B5.2B — Browser Lifecycle and One-Click UX
+ASSISTANT-001B5.2C — Durable URL-Only Conversation Routing
 ```
 
-## ASSISTANT-001B3 — Workspace Configuration and Context Loading
+Verified:
 
-Commit:
-
-```text
-a934032 Implement ASSISTANT-001B3 workspace context loading
-```
-
-## ASSISTANT-001B4 — Local State and Conversation Persistence
-
-Commit:
-
-```text
-2eec4e6 Implement ASSISTANT-001B4 local state persistence
-```
-
-## ASSISTANT-001B5.1 — Task and Thread Handoff Packages
-
-Commit:
-
-```text
-c4e1bd1 Implement B5.1 ChatGPT transfer packages
-```
-
-The deterministic package builder remains approved.
-
-The manual clipboard delivery workflow is superseded by browser automation.
-
-## ASSISTANT-001B5.2A — Browser Bridge Foundation
-
-Completed, tested, committed and pushed.
-
-Commit:
-
-```text
-a33fa4e Implement B5.2A browser bridge foundation
-```
-
-Delivered:
-
-- Playwright dependency;
-- Chrome/CDP configuration;
-- ordinary Chrome launcher;
-- dedicated local browser profile;
-- department-to-project mapping;
-- CDP connection lifecycle;
-- read-only login and project probe;
-- browser-profile Git exclusion;
-- automated unit tests.
+- normal Task sending requires one click;
+- Thread Handoff retains one confirmation;
+- only the originating department panel is disabled during its exchange;
+- other department panels remain usable;
+- browser lifecycle failures return explicit errors instead of leaving the UI stuck;
+- headless failure can fall back to visible Chrome;
+- response retrieval and local persistence work;
+- routing does not use conversation titles;
+- project-scoped conversation URLs are accepted;
+- a successful live Core exchange returned `PROJECT_SCOPED_ROUTE_OK`;
+- full automated suite passed with `56 passed`.
 
 ---
 
-# 4. Verified Live Browser Proof
+# 5. Current Working Tree
 
-Successfully verified on Linux:
-
-```text
-ordinary Google Chrome
-→ dedicated local profile
-→ remote debugging port 9222
-→ Playwright CDP connection
-→ logged-in ChatGPT Plus session
-→ Curvature Core navigation
-→ message-editor detection
-→ automatic message entry
-→ automatic send
-→ response completion detection
-→ exact response extraction
-```
-
-Verified response:
+The implementation and documentation are currently uncommitted on top of:
 
 ```text
-CURVATURE_AUTOMATION_OK
+a5a59ed Namespace Curvature Console documentation
 ```
 
-No manual copy or paste was used.
-
----
-
-# 5. Active Sprint
-
-## ASSISTANT-001B5 — ChatGPT Plus Browser Integration
-
-Current implementation unit:
-
-```text
-ASSISTANT-001B5.2B — Automated Send and Receive
-```
-
-Goal:
-
-Integrate the proven browser automation into Curvature Console so that a package can be sent from the originating department and the completed assistant response can be retrieved, routed and persisted automatically.
+Do not start the next implementation sprint until the current closeout is committed and pushed.
 
 ---
 
 # 6. Exact Next Step
 
-Before implementation, inspect:
+Run the closeout gate:
 
-- `browser_bridge.py`;
-- `transfer_package.py`;
-- `department_panel.py`;
-- `main_window.py`;
-- `state_store.py`;
-- relevant UI and persistence tests.
+```bash
+cd ~/curvature-console
+conda activate curvature-console
 
-Implement:
+python -m pytest -q
+git diff --check
+git check-ignore -v data/browser-profile/
+git status --short
+git diff --stat
+```
 
-- navigation to the mapped ChatGPT Project;
-- visible-editor selection;
-- exact package entry;
-- user-triggered send;
-- assistant baseline capture;
-- new-response detection;
-- response-completion detection;
-- exact response extraction;
-- routing to the originating department;
-- immediate SQLite persistence;
-- explicit browser/login/CAPTCHA/timeout/UI-change errors;
-- unit tests without live ChatGPT;
-- live verification for Project, Core and Research.
+Then stage explicit project files only, commit and push:
+
+```bash
+git add   CONSOLE_CHANGELOG.md   CONSOLE_DECISIONS.md   CONSOLE_HANDOFF.md   CONSOLE_PIPELINE.md   CONSOLE_README.md   CONSOLE_ROADMAP.md   README.md   CURVATURE_PACKAGE.json   PACKAGE_MANIFEST.md   scripts   src   tests
+
+git commit -m "Complete reliable ChatGPT conversation routing"
+git push
+git status
+```
+
+Required final state:
+
+```text
+Your branch is up to date with 'origin/main'.
+nothing to commit, working tree clean
+```
+
+After the push, record the resulting commit hash in this HANDOFF and CHANGELOG.
+
+The next sprint is:
+
+```text
+ASSISTANT-001B5.2D — Generated File Download Capture
+```
 
 ---
 
-# 7. Browser Runtime
+# 7. Next Sprint Scope
+
+B5.2D must:
+
+- capture files generated by the active ChatGPT response;
+- save them to a Console-controlled Download Inbox outside repositories;
+- bind every file to its department, exchange and conversation URL;
+- preserve safe filenames without silent overwrite;
+- report download success and failure visibly;
+- remain testable without live ChatGPT.
+
+Repository application is not part of B5.2D.
+
+Safe package review and repository Apply belong to B5.2E.
+
+---
+
+# 8. Runtime Paths
 
 Chrome executable:
 
@@ -237,7 +213,7 @@ Chrome executable:
 /usr/bin/google-chrome-stable
 ```
 
-Local browser profile:
+Dedicated browser profile:
 
 ```text
 ~/curvature-console/data/browser-profile/
@@ -249,77 +225,33 @@ CDP endpoint:
 http://127.0.0.1:9222
 ```
 
-The profile contains private session data and must never be committed or included in diagnostics.
-
-Development launch command:
-
-```bash
-cd ~/curvature-console
-
-google-chrome-stable \
-  --remote-debugging-port=9222 \
-  --user-data-dir="$HOME/curvature-console/data/browser-profile" \
-  --no-first-run \
-  --no-default-browser-check \
-  https://chatgpt.com
-```
-
----
-
-# 8. Department Mapping
-
-```text
-project  → Curvature Project
-core     → Curvature Core
-research → Curvature Research
-```
-
-A response must always return to the department that created the package.
-
-Unknown or ambiguous targets must stop the operation.
-
----
-
-# 9. Storage and Boundaries
-
-Operational state:
+SQLite state:
 
 ```text
 ~/curvature-console/data/curvature_console.sqlite3
 ```
 
-Persistent attachments:
+Attachments:
 
 ```text
 ~/curvature-console/data/attachments/<department>/
 ```
 
-Private browser state:
-
-```text
-~/curvature-console/data/browser-profile/
-```
-
-Project Curvature repository access remains read-only during the MVP.
-
-Console must not execute automatic Git operations.
+The browser profile contains private session data and must never be committed or included in implementation packages.
 
 ---
 
-# 10. Engineering Rules
+# 9. Engineering Rules
 
 1. Never guess.
-2. Request current files before modifying uncertain code.
+2. Inspect current files before modifying uncertain code.
 3. Deliver complete replacement files.
-4. Label every file as replace, create or leave unchanged.
+4. Label files as replace, create or leave unchanged.
 5. One sprint has one goal.
-6. Test → controlled live verification → documentation → commit → push.
-7. Update HANDOFF after completed work.
-8. Code and documentation are written in English.
-9. Development discussion is in Polish.
-10. No hidden paid operations.
-11. Preserve department authority boundaries.
-12. No manual copy-paste workflow as the product path.
-13. Browser automation failures must be explicit and recoverable.
-14. Browser profile data must never enter Git.
-15. Every automated send requires an explicit user action during the MVP.
+6. Test → live verification → documentation → commit → push.
+7. Route by stable stored URLs, never mutable titles.
+8. Keep departments operationally isolated.
+9. No hidden paid operations.
+10. Browser failures must be explicit and recoverable.
+11. Generated files enter an inbox before any repository write.
+12. Repository changes require explicit review and approval.

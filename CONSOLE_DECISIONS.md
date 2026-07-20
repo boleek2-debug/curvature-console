@@ -1,9 +1,9 @@
 # CURVATURE CONSOLE ARCHITECTURE DECISIONS
 
-Status: Active  
-Version: 1.1.0  
-Owner: Project Curvature  
-Last Updated: 2026-07-19
+Status: Active
+Version: 1.2.0
+Owner: Project Curvature
+Last Updated: 2026-07-20
 
 ---
 
@@ -17,7 +17,7 @@ A decision remains active until it is explicitly superseded by a later decision 
 
 # ADR-001 — Separate Internal Console
 
-Status: Accepted  
+Status: Accepted
 Date: 2026-07-18
 
 ## Context
@@ -54,7 +54,7 @@ It provides three permanent and equal workspaces:
 
 # ADR-002 — Zero Additional AI Cost
 
-Status: Accepted; workflow section superseded by ADR-004  
+Status: Accepted; workflow section superseded by ADR-004
 Date: 2026-07-18
 
 ## Context
@@ -112,7 +112,7 @@ Such integration must be:
 
 # ADR-003 — Read-Only Project Repository During MVP
 
-Status: Accepted  
+Status: Accepted
 Date: 2026-07-18
 
 ## Context
@@ -141,8 +141,8 @@ remains read-only.
 
 # ADR-004 — Automated ChatGPT Browser Bridge
 
-Status: Accepted  
-Date: 2026-07-18  
+Status: Accepted
+Date: 2026-07-18
 Supersedes: ADR-002 manual-transfer workflow and browser-automation prohibition
 
 ## Context
@@ -251,7 +251,7 @@ Trade-offs:
 
 # ADR-005 — User-Triggered Automation During MVP
 
-Status: Accepted  
+Status: Accepted
 Date: 2026-07-18
 
 ## Context
@@ -323,3 +323,112 @@ the main `~/Curvature` repository retain their unprefixed filenames.
 - old unprefixed Console operational documents are removed rather than kept as
   duplicate aliases.
 
+
+
+---
+
+# ADR-007 — One-Click Normal Send and Handoff Confirmation
+
+Status: Accepted
+Date: 2026-07-20
+
+## Context
+
+A preview-and-confirm dialog for every normal Task Package added unnecessary work and contradicted the Console goal of being faster than direct browser use.
+
+Starting a new conversation has a larger continuity impact than sending to the active department conversation.
+
+## Decision
+
+- normal Task sending is one explicit click;
+- that click builds the current package and starts the browser exchange;
+- no additional confirmation is shown for a normal Task;
+- Thread Handoff remains a separate action;
+- Thread Handoff is the only send action that requires confirmation;
+- the confirmation must state that a new ChatGPT conversation will be created and the current one will remain unchanged;
+- only one browser exchange may be active at a time;
+- every send surface is locked during that exchange and restored after success or failure.
+
+## Consequences
+
+- ordinary work requires fewer UI steps;
+- new-thread creation remains deliberate;
+- UI lifecycle behavior becomes part of browser-bridge verification.
+
+---
+
+# ADR-008 — Generated Files Require Review Before Repository Apply
+
+Status: Accepted
+Date: 2026-07-20
+
+## Context
+
+Automatic download capture can remove manual file transfer, but automatically writing downloaded AI-generated files into a repository would create path, conflict and integrity risks.
+
+## Decision
+
+Generated files must first enter a Console-controlled Download Inbox outside the repository.
+
+Before Apply, Console must provide Package Review that:
+
+- identifies the target repository from explicit package metadata;
+- validates every path as repository-relative;
+- rejects absolute paths, traversal and escaping symlinks;
+- classifies Create, Replace, Conflict and Skip actions;
+- shows the complete proposed file list;
+- requires explicit user approval;
+- backs up replaced files;
+- displays a Git diff after application.
+
+Automatic commit and push are excluded until accepted by a later decision.
+
+## Consequences
+
+- download capture and repository writes remain separate trust boundaries;
+- AI proposes files, but the user approves application;
+- unsafe or ambiguous packages stop before repository mutation.
+
+---
+
+# ADR-009 — One Shared ChatGPT Project and URL-Only Routing
+
+Status: Accepted
+Date: 2026-07-20
+
+## Context
+
+The three permanent Console departments are separate conversations inside one shared ChatGPT Project named `Curvature`.
+
+ChatGPT may automatically change conversation titles. Sidebar labels and visual order are presentation details and are not stable routing identifiers.
+
+A live diagnostic observed the project-scoped conversation form:
+
+```text
+https://chatgpt.com/g/<project-id>/c/<conversation-id>
+```
+
+Direct conversation URLs may also use:
+
+```text
+https://chatgpt.com/c/<conversation-id>
+```
+
+## Decision
+
+- Curvature Console uses one shared ChatGPT Project;
+- every department is identified internally by immutable `department_id`;
+- every department stores its current `active_conversation_url` in SQLite;
+- routing must never use conversation titles, sidebar text or visible position;
+- both verified conversation URL forms are valid;
+- the shared Project URL is used only to create a new Thread Handoff conversation;
+- after creating a new conversation, Console records the resulting conversation URL as the department's active route;
+- unknown or ambiguous routes stop the operation instead of guessing.
+
+## Consequences
+
+- automatic title changes do not break routing;
+- department continuity survives UI title changes;
+- route history can support recovery and audit;
+- ChatGPT web routes remain an observed UI contract rather than an official public API;
+- browser changes must produce explicit diagnostics before routing rules are modified.

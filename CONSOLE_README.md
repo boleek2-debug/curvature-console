@@ -1,10 +1,10 @@
 # CURVATURE CONSOLE — SOURCE OVERVIEW
 
 Status: Active
-Version: 1.0.0
+Version: 1.2.0
 Owner: Project Curvature
 Repository: `~/curvature-console`
-Last Updated: 2026-07-19
+Last Updated: 2026-07-20
 
 ---
 
@@ -36,8 +36,16 @@ write that repository or execute Git operations in it.
 # Active State
 
 ```text
-Completed: ASSISTANT-001B5.2A — Browser Bridge Foundation
-Active:    ASSISTANT-001B5.2B — Automated Send and Receive
+Completed: ASSISTANT-001B5.2B — Browser Lifecycle and One-Click UX
+Completed: ASSISTANT-001B5.2C — Durable URL-Only Conversation Routing
+Next:      ASSISTANT-001B5.2D — Generated File Download Capture
+```
+
+Current verification:
+
+```text
+56 automated tests passed
+live Core response: PROJECT_SCOPED_ROUTE_OK
 ```
 
 # Active Architecture
@@ -47,11 +55,21 @@ Curvature Console
 → controlled package
 → ordinary logged-in Chrome
 → Playwright over localhost CDP
-→ matching official ChatGPT Project
+→ one shared ChatGPT Project: Curvature
+→ persisted department conversation URL
 → automatic response retrieval
 → originating Console department
 → SQLite persistence
 ```
+
+# Routing Rule
+
+```text
+department_id
+→ active_conversation_url
+```
+
+Conversation titles, sidebar labels and visual order are never routing keys.
 
 # Non-Negotiable Rules
 
@@ -63,3 +81,19 @@ Curvature Console
 - strict department routing;
 - explicit browser failures;
 - test → verify → document → commit → push.
+
+
+# Approved Next Workflow
+
+```text
+one-click Task send
+→ automatic response retrieval
+→ generated-file download capture
+→ Download Inbox
+→ Package Review
+→ explicit Apply approval
+→ backup and repository update
+→ Git diff
+```
+
+Thread Handoff remains the only send action with a confirmation dialog.

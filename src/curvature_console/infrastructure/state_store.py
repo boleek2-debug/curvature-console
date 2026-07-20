@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Iterable
 
@@ -27,6 +28,25 @@ class LayoutState:
     focused_department_id: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class DepartmentChatRoute:
+    """Persistent routing state for one department."""
+
+    department_id: str
+    project_name: str
+    project_url: str
+    active_conversation_url: str
+
+
+@dataclass(frozen=True, slots=True)
+class DepartmentChatHistoryEntry:
+    """One previous or newly activated department conversation."""
+
+    department_id: str
+    conversation_url: str
+    activated_at: str
+
+
 class SQLiteStateStore:
     """Store Curvature Console state in SQLite."""
 
@@ -44,8 +64,6 @@ class SQLiteStateStore:
         self._initialize_schema()
 
     def close(self) -> None:
-        """Close the SQLite connection."""
-
         self._connection.close()
 
     def save_department_state(
@@ -54,8 +72,6 @@ class SQLiteStateStore:
         conversation_text: str,
         draft_text: str,
     ) -> None:
-        """Insert or update one department state."""
-
         with self._connection:
             self._connection.execute(
                 """
@@ -76,8 +92,6 @@ class SQLiteStateStore:
         self,
         department_id: str,
     ) -> DepartmentState | None:
-        """Load one department state."""
-
         row = self._connection.execute(
             """
             SELECT conversation_text, draft_text
@@ -95,13 +109,128 @@ class SQLiteStateStore:
             draft_text=row["draft_text"],
         )
 
+    def save_chat_route(
+        self,
+        department_id: str,
+        project_name: str,
+        project_url: str,
+        active_conversation_url: str,
+    ) -> None:
+        """Persist active project and conversation routing."""
+
+        timestamp = datetime.now(UTC).isoformat()
+        with self._connection:
+            previous = self._connection.execute(
+                """
+                SELECT active_conversation_url
+                FROM department_chat_route
+                WHERE department_id = ?
+                """,
+                (department_id,),
+            ).fetchone()
+
+            self._connection.execute(
+                """
+                INSERT INTO department_chat_route (
+                    department_id,
+                    project_name,
+                    project_url,
+                    active_conversation_url,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(department_id) DO UPDATE SET
+                    project_name = excluded.project_name,
+                    project_url = excluded.project_url,
+                    active_conversation_url =
+                        excluded.active_conversation_url,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    department_id,
+                    project_name,
+                    project_url,
+                    active_conversation_url,
+                    timestamp,
+                ),
+            )
+
+            if (
+                previous is None
+                or previous["active_conversation_url"]
+                != active_conversation_url
+            ):
+                self._connection.execute(
+                    """
+                    INSERT OR IGNORE INTO department_chat_history (
+                        department_id,
+                        conversation_url,
+                        activated_at
+                    )
+                    VALUES (?, ?, ?)
+                    """,
+                    (
+                        department_id,
+                        active_conversation_url,
+                        timestamp,
+                    ),
+                )
+
+    def load_chat_route(
+        self,
+        department_id: str,
+    ) -> DepartmentChatRoute | None:
+        row = self._connection.execute(
+            """
+            SELECT
+                department_id,
+                project_name,
+                project_url,
+                active_conversation_url
+            FROM department_chat_route
+            WHERE department_id = ?
+            """,
+            (department_id,),
+        ).fetchone()
+
+        if row is None:
+            return None
+
+        return DepartmentChatRoute(
+            department_id=row["department_id"],
+            project_name=row["project_name"],
+            project_url=row["project_url"],
+            active_conversation_url=row["active_conversation_url"],
+        )
+
+    def load_chat_history(
+        self,
+        department_id: str,
+    ) -> tuple[DepartmentChatHistoryEntry, ...]:
+        rows = self._connection.execute(
+            """
+            SELECT department_id, conversation_url, activated_at
+            FROM department_chat_history
+            WHERE department_id = ?
+            ORDER BY activated_at
+            """,
+            (department_id,),
+        ).fetchall()
+
+        return tuple(
+            DepartmentChatHistoryEntry(
+                department_id=row["department_id"],
+                conversation_url=row["conversation_url"],
+                activated_at=row["activated_at"],
+            )
+            for row in rows
+        )
+
     def save_layout(
         self,
         splitter_sizes: Iterable[int],
         focused_department_id: str | None,
     ) -> None:
-        """Persist splitter widths and focus state."""
-
         sizes = tuple(int(size) for size in splitter_sizes)
         if len(sizes) != 3:
             raise ValueError("Exactly three splitter sizes are required.")
@@ -124,8 +253,6 @@ class SQLiteStateStore:
             )
 
     def load_layout(self) -> LayoutState | None:
-        """Load splitter widths and focus state."""
-
         row = self._connection.execute(
             """
             SELECT value
@@ -160,8 +287,6 @@ class SQLiteStateStore:
         department_id: str,
         records: Iterable[AttachmentRecord],
     ) -> None:
-        """Replace persisted attachment metadata for one department."""
-
         with self._connection:
             self._connection.execute(
                 "DELETE FROM attachment WHERE department_id = ?",
@@ -192,8 +317,6 @@ class SQLiteStateStore:
         self,
         department_id: str,
     ) -> tuple[AttachmentRecord, ...]:
-        """Load existing attachment paths for one department."""
-
         rows = self._connection.execute(
             """
             SELECT path, temporary
@@ -205,7 +328,6 @@ class SQLiteStateStore:
         ).fetchall()
 
         records: list[AttachmentRecord] = []
-
         for row in rows:
             path = Path(row["path"])
             if not path.is_file():
@@ -216,7 +338,6 @@ class SQLiteStateStore:
                     temporary=bool(row["temporary"]),
                 )
             )
-
         return tuple(records)
 
     def _initialize_schema(self) -> None:
@@ -242,6 +363,21 @@ class SQLiteStateStore:
                     path TEXT NOT NULL,
                     temporary INTEGER NOT NULL DEFAULT 0,
                     PRIMARY KEY (department_id, position)
+                );
+
+                CREATE TABLE IF NOT EXISTS department_chat_route (
+                    department_id TEXT PRIMARY KEY,
+                    project_name TEXT NOT NULL,
+                    project_url TEXT NOT NULL,
+                    active_conversation_url TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS department_chat_history (
+                    department_id TEXT NOT NULL,
+                    conversation_url TEXT NOT NULL,
+                    activated_at TEXT NOT NULL,
+                    PRIMARY KEY (department_id, conversation_url)
                 );
                 """
             )

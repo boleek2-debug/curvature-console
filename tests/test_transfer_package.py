@@ -169,3 +169,18 @@ def test_empty_content_is_marked_explicitly() -> None:
     assert "[No local conversation recorded]" in package.text
     assert "[No current task draft]" in package.text
     assert "[No attachments queued]" in package.text
+
+def test_response_instructions_prioritise_exact_user_task(
+    tmp_path: Path,
+) -> None:
+    package = TransferPackageBuilder().build(_request(tmp_path))
+
+    assert (
+        "The CURRENT USER TASK is the immediate instruction"
+        in package.text
+    )
+    assert (
+        "If the CURRENT USER TASK requests an exact response"
+        in package.text
+    )
+    assert "exactly that response and nothing else" in package.text

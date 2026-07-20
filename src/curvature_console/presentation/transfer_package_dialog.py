@@ -1,9 +1,8 @@
-"""Preview and copy one manual ChatGPT transfer package."""
+"""Preview and approve one automated ChatGPT transfer package."""
 
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QApplication,
     QDialog,
     QDialogButtonBox,
     QLabel,
@@ -17,7 +16,7 @@ from curvature_console.infrastructure.transfer_package import TransferPackage
 
 
 class TransferPackageDialog(QDialog):
-    """Display a generated package and copy it to the clipboard."""
+    """Display a generated package before explicit browser delivery."""
 
     def __init__(
         self,
@@ -48,21 +47,19 @@ class TransferPackageDialog(QDialog):
         self.preview.setReadOnly(True)
         self.preview.setPlainText(package.text)
 
-        self.copy_button = QPushButton("Copy to Clipboard")
-        self.copy_button.setObjectName("copyTransferPackageButton")
-        self.copy_button.clicked.connect(self.copy_to_clipboard)
+        self.send_button = QPushButton("Send to ChatGPT")
+        self.send_button.setObjectName("sendTransferPackageButton")
+        self.send_button.setToolTip(
+            "Send this exact package through the dedicated logged-in Chrome "
+            "profile."
+        )
+        self.send_button.clicked.connect(self.accept)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.summary_label)
         layout.addWidget(self.preview, 1)
-        layout.addWidget(self.copy_button)
+        layout.addWidget(self.send_button)
         layout.addWidget(buttons)
-
-    def copy_to_clipboard(self) -> None:
-        """Copy the unmodified package text to the system clipboard."""
-
-        QApplication.clipboard().setText(self.package.text)
-        self.copy_button.setText("Copied")

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Signal
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -116,26 +117,25 @@ class DepartmentPanel(QFrame):
             self._notify_state_changed
         )
 
-        self.task_package_button = QPushButton("Prepare Task Package")
+        self.task_package_button = QPushButton("Send Task")
         self.task_package_button.setObjectName(
             f"{department_id}TaskPackageButton"
         )
         self.task_package_button.setToolTip(
-            "Build a compact package for the current ChatGPT thread."
+            "Preview and send a compact package to the current ChatGPT "
+            "department project."
         )
         self.task_package_button.clicked.connect(
             self._request_task_package
         )
 
-        self.thread_handoff_button = QPushButton(
-            "Prepare Thread Handoff"
-        )
+        self.thread_handoff_button = QPushButton("Send Thread Handoff")
         self.thread_handoff_button.setObjectName(
             f"{department_id}ThreadHandoffButton"
         )
         self.thread_handoff_button.setToolTip(
-            "Build a comprehensive package for a new chat in the same "
-            "ChatGPT Project."
+            "Preview and send a comprehensive handoff package to the same "
+            "ChatGPT department project."
         )
         self.thread_handoff_button.clicked.connect(
             self._request_thread_handoff
@@ -172,6 +172,42 @@ class DepartmentPanel(QFrame):
         self.preview_context_button.setEnabled(
             bool(result.documents or result.errors)
         )
+
+    def set_browser_stage(self, stage: str) -> None:
+        """Display the current browser lifecycle stage."""
+
+        self.status_label.setText(f"STATUS: {stage.upper()}")
+
+    def set_browser_busy(self, busy: bool) -> None:
+        """Reflect one active browser operation in this panel."""
+
+        self.task_package_button.setEnabled(not busy)
+        self.thread_handoff_button.setEnabled(not busy)
+        self.input_editor.setEnabled(not busy)
+        if busy:
+            self.status_label.setText("STATUS: CONNECTING")
+        else:
+            self._update_attachment_status(len(self.attachment_list.records))
+
+    def append_browser_exchange(
+        self,
+        user_task: str,
+        assistant_response: str,
+    ) -> None:
+        """Append one browser-mediated exchange without altering response text."""
+
+        existing = self.conversation_view.toPlainText().rstrip()
+        sections = [
+            existing,
+            "=== USER TASK ===",
+            user_task.strip() or "[No current task draft]",
+            "=== ASSISTANT RESPONSE ===",
+            assistant_response,
+        ]
+        self.conversation_view.setPlainText(
+            "\n\n".join(section for section in sections if section != "")
+        )
+        self.conversation_view.moveCursor(QTextCursor.MoveOperation.End)
 
     def _request_focus(self) -> None:
         self.focus_requested.emit(self.department_id)

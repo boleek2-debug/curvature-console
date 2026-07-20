@@ -87,3 +87,40 @@ def test_missing_attachment_is_not_restored(tmp_path: Path) -> None:
     assert reopened.load_attachments("project") == ()
 
     reopened.close()
+
+
+def test_chat_route_and_history_survive_reopen(tmp_path: Path) -> None:
+    database = tmp_path / "state.sqlite3"
+
+    store = SQLiteStateStore(database)
+    store.save_chat_route(
+        "core",
+        "Curvature Core",
+        "https://chatgpt.com/g/g-p-core/project",
+        "https://chatgpt.com/c/first-core-chat",
+    )
+    store.save_chat_route(
+        "core",
+        "Curvature Core",
+        "https://chatgpt.com/g/g-p-core/project",
+        "https://chatgpt.com/c/second-core-chat",
+    )
+    store.close()
+
+    reopened = SQLiteStateStore(database)
+    route = reopened.load_chat_route("core")
+    history = reopened.load_chat_history("core")
+
+    assert route is not None
+    assert route.project_name == "Curvature Core"
+    assert route.project_url == "https://chatgpt.com/g/g-p-core/project"
+    assert (
+        route.active_conversation_url
+        == "https://chatgpt.com/c/second-core-chat"
+    )
+    assert [entry.conversation_url for entry in history] == [
+        "https://chatgpt.com/c/first-core-chat",
+        "https://chatgpt.com/c/second-core-chat",
+    ]
+
+    reopened.close()
