@@ -281,3 +281,46 @@ def test_request_id_and_department_must_both_match(tmp_path) -> None:
     assert window._pending_exchange("request-1", "research") is None
     assert window._pending_exchange("request-2", "core") is None
     window.close()
+
+
+def test_browser_success_displays_and_persists_generated_download(
+    tmp_path,
+) -> None:
+    from curvature_console.infrastructure.browser_bridge import CapturedDownload
+    from curvature_console.presentation.main_window import PendingBrowserExchange
+
+    create_application(["curvature-console-download-success-test"])
+    state_path = tmp_path / "state.sqlite3"
+    window = MainWindow(state_path=state_path, data_directory=tmp_path / "data")
+    request_id = "request-download"
+    saved_path = tmp_path / "download-inbox" / "result.zip"
+    saved_path.parent.mkdir()
+    saved_path.write_bytes(b"zip")
+    window._pending_exchanges[request_id] = PendingBrowserExchange(
+        request_id=request_id,
+        department_id="core",
+        user_task="Create a file.",
+    )
+
+    window._handle_browser_success(
+        request_id,
+        "core",
+        "Curvature",
+        "https://chatgpt.com/g/project/project",
+        "https://chatgpt.com/c/core",
+        "File created.",
+        (
+            CapturedDownload(
+                original_filename="result.zip",
+                saved_path=saved_path,
+                source_url="sandbox:/mnt/data/result.zip",
+            ),
+        ),
+    )
+
+    panel = window.department_panels["core"]
+    assert panel.download_label.text() == "Downloads: 1"
+    assert "result.zip" in panel.download_list.item(0).text()
+    assert window.state_store.load_generated_downloads("core")[0].saved_path == saved_path
+
+    window.close()

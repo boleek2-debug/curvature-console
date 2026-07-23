@@ -16,9 +16,9 @@ from curvature_console.infrastructure.browser_bridge import (
 class BrowserBridgeWorker(QThread):
     """Run one immutable request outside the Qt UI thread."""
 
-    succeeded = Signal(str, str, str, str, str, str)
+    succeeded = Signal(str, str, str, str, str, str, object)
     failed = Signal(str, str, str)
-    route_unverified = Signal(str, str, str, str)
+    route_unverified = Signal(str, str, str, str, object)
     stage_changed = Signal(str, str, str)
 
     def __init__(
@@ -58,6 +58,7 @@ class BrowserBridgeWorker(QThread):
                 self.request.department_id,
                 route_failure.observed_url,
                 route_failure.response_text,
+                route_failure.downloads,
             )
             return
 
@@ -84,4 +85,5 @@ class BrowserBridgeWorker(QThread):
             result.project_url,
             result.conversation_url,
             result.response_text,
+            result.downloads,
         )

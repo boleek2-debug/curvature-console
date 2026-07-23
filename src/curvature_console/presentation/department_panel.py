@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from curvature_console.infrastructure.context_loader import ContextLoadResult
+from curvature_console.infrastructure.state_store import GeneratedDownloadRecord
 from curvature_console.presentation.attachment_list import AttachmentList
 
 
@@ -106,6 +107,13 @@ class DepartmentPanel(QFrame):
         self.input_editor.setMaximumHeight(110)
         self.input_editor.textChanged.connect(self._notify_state_changed)
 
+        self.download_label = QLabel("Downloads: 0")
+        self.download_label.setObjectName(f"{department_id}DownloadStatus")
+
+        self.download_list = QListWidget()
+        self.download_list.setObjectName(f"{department_id}DownloadList")
+        self.download_list.setMaximumHeight(76)
+
         self.attachment_list = AttachmentList(
             department_id=department_id,
             attachment_storage_dir=attachment_storage_dir,
@@ -155,6 +163,8 @@ class DepartmentPanel(QFrame):
         layout.addWidget(self.conversation_view, 1)
         layout.addWidget(self.input_editor)
         layout.addWidget(self.attachment_list)
+        layout.addWidget(self.download_label)
+        layout.addWidget(self.download_list)
         layout.addLayout(transfer_button_layout)
 
     def set_context_result(self, result: ContextLoadResult) -> None:
@@ -208,6 +218,20 @@ class DepartmentPanel(QFrame):
             "\n\n".join(section for section in sections if section != "")
         )
         self.conversation_view.moveCursor(QTextCursor.MoveOperation.End)
+
+
+    def set_generated_downloads(
+        self,
+        records: tuple[GeneratedDownloadRecord, ...],
+    ) -> None:
+        """Display generated files captured for this department."""
+
+        self.download_list.clear()
+        for record in records:
+            self.download_list.addItem(
+                f"{record.original_filename} → {record.saved_path}"
+            )
+        self.download_label.setText(f"Downloads: {len(records)}")
 
     def _request_focus(self) -> None:
         self.focus_requested.emit(self.department_id)

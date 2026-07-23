@@ -274,3 +274,17 @@ The browser profile contains private session data and must never be committed or
 10. Browser failures must be explicit and recoverable.
 11. Generated files enter an inbox before any repository write.
 12. Repository changes require explicit review and approval.
+
+
+---
+
+# B5.2D Current Step
+
+1. Apply the B5.2D implementation package.
+2. Run the complete automated test suite and `git diff --check`.
+3. Start Curvature Console and verify all three contexts remain error-free.
+4. In Core, request one small generated ZIP file through `Send Task`.
+5. Confirm that Console captures the file automatically.
+6. Confirm the file appears in the Core download list and survives restart.
+7. Confirm collision-safe naming with a second file using the same name.
+8. Commit and push only after live verification.

@@ -316,3 +316,19 @@ Environment decision:
 - Curvature Console is installed in editable mode;
 - Playwright is an explicit Python dependency;
 - the approved browser runtime is system Google Chrome controlled through CDP.
+
+
+---
+
+## 2026-07-23 — B5.2D Implementation Candidate
+
+Prepared, not yet accepted:
+
+- response-scoped generated-file detection;
+- Playwright download capture;
+- collision-safe inbox storage;
+- SQLite download metadata;
+- per-department download records in the UI;
+- automated tests for link detection, filename safety, persistence and UI display.
+
+Completion remains pending automated verification in the project environment and live ChatGPT generated-file capture.

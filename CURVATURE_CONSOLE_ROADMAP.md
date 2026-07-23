@@ -280,3 +280,17 @@ Verify:
 - unattended background agents only after a new explicit architecture decision.
 
 A paid provider must never silently replace the ChatGPT Plus browser workflow.
+
+
+## B5.2D Implementation Verification
+
+Acceptance requires:
+
+- download event belongs to the current request page;
+- link belongs to the newly generated assistant response;
+- original filename is preserved;
+- filename collisions do not overwrite existing files;
+- metadata records request, department and conversation;
+- downloaded files remain visible after restart;
+- unrelated browser pages and downloads are untouched;
+- live generated ZIP capture succeeds.

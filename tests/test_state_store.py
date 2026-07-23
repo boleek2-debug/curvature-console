@@ -124,3 +124,40 @@ def test_chat_route_and_history_survive_reopen(tmp_path: Path) -> None:
     ]
 
     reopened.close()
+
+
+def test_generated_download_metadata_survives_reopen(
+    tmp_path: Path,
+) -> None:
+    from curvature_console.infrastructure.browser_bridge import CapturedDownload
+
+    database = tmp_path / "state.sqlite3"
+    saved = tmp_path / "download-inbox" / "package.zip"
+    saved.parent.mkdir()
+    saved.write_bytes(b"zip")
+
+    store = SQLiteStateStore(database)
+    store.save_generated_downloads(
+        request_id="request-123",
+        department_id="core",
+        conversation_url="https://chatgpt.com/c/core-id",
+        downloads=(
+            CapturedDownload(
+                original_filename="package.zip",
+                saved_path=saved,
+                source_url="sandbox:/mnt/data/package.zip",
+            ),
+        ),
+    )
+    store.close()
+
+    reopened = SQLiteStateStore(database)
+    records = reopened.load_generated_downloads("core")
+
+    assert len(records) == 1
+    assert records[0].request_id == "request-123"
+    assert records[0].original_filename == "package.zip"
+    assert records[0].saved_path == saved
+    assert records[0].conversation_url == "https://chatgpt.com/c/core-id"
+
+    reopened.close()

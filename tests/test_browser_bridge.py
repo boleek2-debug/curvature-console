@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from curvature_console.infrastructure.browser_bridge import (
+    CapturedDownload,
     BOOTSTRAP_CONVERSATION_URLS,
     SHARED_PROJECT_NAME,
     SHARED_PROJECT_URL,
@@ -295,3 +296,82 @@ def test_matching_request_marker_confirms_user_message(tmp_path: Path) -> None:
         baseline_count=0,
         request_id="request-abc",
     )
+
+
+def test_generated_file_link_detection(tmp_path: Path) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    assert bridge._is_generated_file_link(
+        "sandbox:/mnt/data/result.zip",
+        None,
+    )
+    assert bridge._is_generated_file_link(
+        "https://chatgpt.com/backend/file",
+        "result.zip",
+    )
+    assert bridge._is_generated_file_link(
+        "https://chatgpt.com/backend-api/files/file-123",
+        None,
+    )
+    assert bridge._is_generated_file_link(
+        "https://chatgpt.com/backend-api/estuary/content?id=file-123",
+        None,
+    )
+    assert bridge._is_generated_file_link(
+        "https://files.oaiusercontent.com/file-123/result.zip",
+        None,
+    )
+    assert bridge._is_generated_file_link(
+        "https://chatgpt.com/opaque-link",
+        None,
+        "Download result.zip",
+    )
+    assert not bridge._is_generated_file_link(
+        "https://example.com/report",
+        None,
+        "Read report",
+    )
+
+
+def test_collision_safe_download_path_preserves_original_name(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "package.zip").write_bytes(b"first")
+    (inbox / "package (2).zip").write_bytes(b"second")
+
+    target = bridge._collision_safe_path(inbox, "package.zip")
+
+    assert target == inbox / "package (3).zip"
+
+
+def test_collision_safe_download_path_removes_directory_components(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+
+    target = bridge._collision_safe_path(inbox, "../../unsafe.txt")
+
+    assert target == inbox / "unsafe.txt"
+
+
+def test_route_unverified_preserves_captured_downloads(
+    tmp_path: Path,
+) -> None:
+    download = CapturedDownload(
+        original_filename="result.zip",
+        saved_path=tmp_path / "result.zip",
+        source_url="https://example.test/result.zip",
+    )
+
+    error = BrowserBridgeRouteUnverified(
+        observed_url="chrome-error://chromewebdata/",
+        response_text="Download result.zip",
+        downloads=(download,),
+    )
+
+    assert error.downloads == (download,)

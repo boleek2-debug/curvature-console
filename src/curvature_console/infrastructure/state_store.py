@@ -39,6 +39,19 @@ class DepartmentChatRoute:
 
 
 @dataclass(frozen=True, slots=True)
+class GeneratedDownloadRecord:
+    """Persisted generated file associated with one browser request."""
+
+    request_id: str
+    department_id: str
+    conversation_url: str
+    original_filename: str
+    saved_path: Path
+    source_url: str
+    captured_at: str
+
+
+@dataclass(frozen=True, slots=True)
 class DepartmentChatHistoryEntry:
     """One previous or newly activated department conversation."""
 
@@ -226,6 +239,87 @@ class SQLiteStateStore:
             for row in rows
         )
 
+
+    def save_generated_downloads(
+        self,
+        request_id: str,
+        department_id: str,
+        conversation_url: str,
+        downloads: Iterable[object],
+    ) -> None:
+        """Persist generated files captured for one completed response."""
+
+        timestamp = datetime.now(UTC).isoformat()
+        rows = []
+        for position, download in enumerate(downloads):
+            rows.append(
+                (
+                    request_id,
+                    position,
+                    department_id,
+                    conversation_url,
+                    str(download.original_filename),
+                    str(Path(download.saved_path).expanduser()),
+                    str(download.source_url),
+                    timestamp,
+                )
+            )
+
+        if not rows:
+            return
+
+        with self._connection:
+            self._connection.executemany(
+                """
+                INSERT OR REPLACE INTO generated_download (
+                    request_id,
+                    position,
+                    department_id,
+                    conversation_url,
+                    original_filename,
+                    saved_path,
+                    source_url,
+                    captured_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+
+    def load_generated_downloads(
+        self,
+        department_id: str,
+    ) -> tuple[GeneratedDownloadRecord, ...]:
+        rows = self._connection.execute(
+            """
+            SELECT
+                request_id,
+                department_id,
+                conversation_url,
+                original_filename,
+                saved_path,
+                source_url,
+                captured_at
+            FROM generated_download
+            WHERE department_id = ?
+            ORDER BY captured_at, request_id, position
+            """,
+            (department_id,),
+        ).fetchall()
+
+        return tuple(
+            GeneratedDownloadRecord(
+                request_id=row["request_id"],
+                department_id=row["department_id"],
+                conversation_url=row["conversation_url"],
+                original_filename=row["original_filename"],
+                saved_path=Path(row["saved_path"]),
+                source_url=row["source_url"],
+                captured_at=row["captured_at"],
+            )
+            for row in rows
+        )
+
     def save_layout(
         self,
         splitter_sizes: Iterable[int],
@@ -372,6 +466,21 @@ class SQLiteStateStore:
                     active_conversation_url TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS generated_download (
+                    request_id TEXT NOT NULL,
+                    position INTEGER NOT NULL,
+                    department_id TEXT NOT NULL,
+                    conversation_url TEXT NOT NULL,
+                    original_filename TEXT NOT NULL,
+                    saved_path TEXT NOT NULL,
+                    source_url TEXT NOT NULL,
+                    captured_at TEXT NOT NULL,
+                    PRIMARY KEY (request_id, position)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_generated_download_department
+                ON generated_download (department_id, captured_at);
 
                 CREATE TABLE IF NOT EXISTS department_chat_history (
                     department_id TEXT NOT NULL,

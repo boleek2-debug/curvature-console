@@ -103,7 +103,7 @@ Research  — dedicated Console-only conversation not created yet
 
 # Current Goal
 
-Complete and verify the dual-repository context model.
+Implement and verify `ASSISTANT-001B5.2D — Generated File Download Capture`.
 
 Required verification:
 
@@ -126,3 +126,22 @@ Required verification:
 7. Create and verify dedicated Project and Research conversations.
 8. Resume `ASSISTANT-001B5.2D — Generated File Download Capture` only after all
    three department routes pass live verification.
+
+
+---
+
+# B5.2D Implementation Candidate
+
+The current package adds:
+
+- generated-file link detection scoped to the new assistant response;
+- Playwright download-event capture;
+- automatic per-user download inbox creation;
+- original filename preservation;
+- collision-safe filenames;
+- request, department and conversation association;
+- SQLite persistence;
+- per-department downloaded-file list;
+- automated bridge, persistence and UI tests.
+
+Live browser verification is still required before B5.2D is accepted.

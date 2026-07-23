@@ -375,6 +375,7 @@ class MainWindow(QMainWindow):
         project_url: str,
         conversation_url: str,
         response_text: str,
+        downloads: object = (),
     ) -> None:
         pending = self._pending_exchange(request_id, department_id)
         if pending is None:
@@ -383,6 +384,15 @@ class MainWindow(QMainWindow):
         self._pending_exchanges.pop(request_id, None)
         panel = self.department_panels[department_id]
         panel.append_browser_exchange(pending.user_task, response_text)
+        self.state_store.save_generated_downloads(
+            request_id=request_id,
+            department_id=department_id,
+            conversation_url=conversation_url,
+            downloads=tuple(downloads),
+        )
+        panel.set_generated_downloads(
+            self.state_store.load_generated_downloads(department_id)
+        )
         self.state_store.save_chat_route(
             department_id=department_id,
             project_name=project_name,
@@ -403,6 +413,7 @@ class MainWindow(QMainWindow):
         department_id: str,
         observed_url: str,
         response_text: str,
+        downloads: object = (),
     ) -> None:
         """Preserve only the response belonging to the current request."""
 
@@ -413,6 +424,21 @@ class MainWindow(QMainWindow):
         self._pending_exchanges.pop(request_id, None)
         panel = self.department_panels[department_id]
         panel.append_browser_exchange(pending.user_task, response_text)
+        route = self.state_store.load_chat_route(department_id)
+        conversation_url = (
+            route.active_conversation_url
+            if route is not None
+            else observed_url
+        )
+        self.state_store.save_generated_downloads(
+            request_id=request_id,
+            department_id=department_id,
+            conversation_url=conversation_url,
+            downloads=tuple(downloads),
+        )
+        panel.set_generated_downloads(
+            self.state_store.load_generated_downloads(department_id)
+        )
         panel.input_editor.clear()
         self._set_browser_operation_busy(False, department_id)
         self.save_department_state(department_id)
@@ -534,6 +560,9 @@ class MainWindow(QMainWindow):
 
             panel.attachment_list.restore_records(
                 self.state_store.load_attachments(department_id)
+            )
+            panel.set_generated_downloads(
+                self.state_store.load_generated_downloads(department_id)
             )
 
         layout = self.state_store.load_layout()

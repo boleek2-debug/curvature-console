@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
+import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Final
-from urllib.parse import urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 from playwright.sync_api import Browser, BrowserContext, Locator, Page, Playwright
 from playwright.sync_api import sync_playwright
@@ -70,6 +72,7 @@ class BrowserBridgeStage(StrEnum):
     RECEIVING = "Receiving"
     HUMAN_ACTION_REQUIRED = "Human action required"
     COMPLETED = "Completed"
+    CAPTURING_DOWNLOADS = "Capturing downloads"
     CLEANING_UP = "Cleaning up"
 
 
@@ -116,9 +119,15 @@ class BrowserBridgeMessageNotConfirmed(BrowserBridgeError):
 class BrowserBridgeRouteUnverified(BrowserBridgeError):
     """A response was received, but the resulting URL was not verified."""
 
-    def __init__(self, observed_url: str, response_text: str) -> None:
+    def __init__(
+        self,
+        observed_url: str,
+        response_text: str,
+        downloads: tuple[CapturedDownload, ...] = (),
+    ) -> None:
         self.observed_url = observed_url
         self.response_text = response_text
+        self.downloads = downloads
         super().__init__(
             "ChatGPT returned a response, but Curvature Console could not "
             "verify the conversation route. Observed page URL: "
@@ -143,6 +152,14 @@ class BrowserBridgeConfig:
     response_poll_interval_seconds: float = 0.5
     stable_response_seconds: float = 2.0
     human_action_timeout_seconds: float = 300.0
+    download_timeout_seconds: float = 30.0
+    download_directory: Path = (
+        Path.home()
+        / ".local"
+        / "share"
+        / "curvature-console"
+        / "download-inbox"
+    )
 
     @property
     def cdp_url(self) -> str:
@@ -174,6 +191,7 @@ class BrowserBridgeConfig:
             "Response poll interval": self.response_poll_interval_seconds,
             "Stable response duration": self.stable_response_seconds,
             "Human action timeout": self.human_action_timeout_seconds,
+            "Download timeout": self.download_timeout_seconds,
         }
         for label, value in positive_values.items():
             if value <= 0:
@@ -192,6 +210,15 @@ class BrowserExchangeRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class CapturedDownload:
+    """One generated file captured from the current assistant response."""
+
+    original_filename: str
+    saved_path: Path
+    source_url: str
+
+
+@dataclass(frozen=True, slots=True)
 class BrowserExchangeResult:
     """One completed and request-bound browser exchange."""
 
@@ -201,6 +228,7 @@ class BrowserExchangeResult:
     project_url: str
     conversation_url: str
     response_text: str
+    downloads: tuple[CapturedDownload, ...] = ()
 
 
 class ChromeLauncher:
@@ -425,11 +453,18 @@ class ChatGPTBrowserBridge:
         )
         self._report_stage(BrowserBridgeStage.RECEIVING)
 
+        self._report_stage(BrowserBridgeStage.CAPTURING_DOWNLOADS)
+        downloads = self._capture_generated_downloads(
+            page=page,
+            assistant_message_index=baseline_assistant_count,
+        )
+
         conversation_url = page.url
         if not self._is_conversation_url(conversation_url):
             raise BrowserBridgeRouteUnverified(
                 observed_url=conversation_url,
                 response_text=response_text,
+                downloads=downloads,
             )
 
         if not request.create_new_thread:
@@ -446,7 +481,497 @@ class ChatGPTBrowserBridge:
             project_url=SHARED_PROJECT_URL,
             conversation_url=conversation_url,
             response_text=response_text,
+            downloads=downloads,
         )
+
+    def _capture_generated_downloads(
+        self,
+        page: Page,
+        assistant_message_index: int,
+    ) -> tuple[CapturedDownload, ...]:
+        """Capture generated files through the authenticated browser session.
+
+        The rendered ChatGPT link is read from the new assistant article, but
+        it is not clicked. Clicking delegates to Chrome's native download
+        manager and may open a Save As dialog. Instead, BrowserContext.request
+        fetches the URL with the same authenticated cookie jar as the page.
+        """
+
+        messages = page.locator(ASSISTANT_MESSAGE_SELECTOR)
+        if messages.count() <= assistant_message_index:
+            return ()
+
+        response = messages.nth(assistant_message_index)
+        article = response.locator("xpath=ancestor-or-self::article[1]")
+        container = article if article.count() else response
+
+        candidates = self._wait_for_download_candidates(
+            page=page,
+            container=container,
+        )
+        if not candidates:
+            response_text = (response.inner_text() or "").strip()
+            if re.search(
+                r"(?im)^\s*download\s+\S+\.\w{1,12}\s*$",
+                response_text,
+            ):
+                diagnostic = self._download_dom_diagnostic(container)
+                raise BrowserBridgeError(
+                    "ChatGPT displayed a generated-file response, but the "
+                    "download control was not found in the assistant turn. "
+                    f"Observed controls: {diagnostic}"
+                )
+            return ()
+
+        directory = self.config.download_directory.expanduser()
+        directory.mkdir(parents=True, exist_ok=True)
+        captured: list[CapturedDownload] = []
+
+        for element, href in candidates:
+            self._assert_runtime_alive(page)
+            link_text = (element.inner_text() or "").strip()
+            download_attribute = element.get_attribute("download")
+            resolved_href = href or self._resolve_download_href(element)
+            if not resolved_href:
+                resolved_href = self._discover_download_url_by_click(
+                    page=page,
+                    element=element,
+                )
+
+            captured.append(
+                self._download_generated_file_via_session(
+                    page=page,
+                    href=resolved_href,
+                    link_text=link_text,
+                    download_attribute=download_attribute,
+                    directory=directory,
+                )
+            )
+
+        return tuple(captured)
+
+    def _resolve_download_href(self, element: Locator) -> str:
+        """Resolve a URL from the control, its ancestors or descendants."""
+
+        script = """
+        (node) => {
+            const attributeNames = [
+                "href",
+                "data-href",
+                "data-url",
+                "data-download-url",
+                "data-file-url"
+            ];
+
+            const read = (candidate) => {
+                if (!candidate) {
+                    return "";
+                }
+                for (const name of attributeNames) {
+                    const value = candidate.getAttribute?.(name);
+                    if (value) {
+                        return value;
+                    }
+                }
+                if (typeof candidate.href === "string" && candidate.href) {
+                    return candidate.href;
+                }
+                return "";
+            };
+
+            let current = node;
+            while (current) {
+                const direct = read(current);
+                if (direct) {
+                    return direct;
+                }
+                current = current.parentElement;
+            }
+
+            const nested = node.querySelector?.(
+                "a[href], [data-href], [data-url], " +
+                "[data-download-url], [data-file-url]"
+            );
+            return read(nested);
+        }
+        """
+        try:
+            return str(element.evaluate(script) or "").strip()
+        except Exception:
+            return ""
+
+    def _discover_download_url_by_click(
+        self,
+        page: Page,
+        element: Locator,
+    ) -> str:
+        """Capture the request URL from a JS-only file control.
+
+        The request is aborted before Chrome's native download manager can
+        complete it. If that abort temporarily sends the dedicated page to
+        ``chrome-error://chromewebdata/``, the bridge restores the original
+        conversation before returning.
+        """
+
+        captured_url = ""
+        original_url = page.url
+        context = page.context
+
+        def intercept(route, request) -> None:
+            nonlocal captured_url
+            if (
+                not captured_url
+                and self._is_generated_download_request_url(request.url)
+            ):
+                captured_url = request.url
+                route.abort()
+                return
+            route.continue_()
+
+        try:
+            context.route("**/*", intercept)
+            element.click()
+            deadline = time.monotonic() + min(
+                10.0,
+                self.config.download_timeout_seconds,
+            )
+            while time.monotonic() < deadline:
+                self._assert_runtime_alive(page)
+                if captured_url:
+                    break
+                page.wait_for_timeout(100)
+        except Exception as exc:
+            raise BrowserBridgeError(
+                "Could not capture the generated-file request URL from the "
+                f"rendered control: {exc}"
+            ) from exc
+        finally:
+            try:
+                context.unroute("**/*", intercept)
+            except Exception:
+                pass
+
+        if not captured_url:
+            raise BrowserBridgeError(
+                "The generated-file control had no href and its click did not "
+                "produce a recognised file request."
+            )
+
+        self._restore_conversation_after_download_intercept(
+            page=page,
+            original_url=original_url,
+        )
+        return captured_url
+
+    def _restore_conversation_after_download_intercept(
+        self,
+        page: Page,
+        original_url: str,
+    ) -> None:
+        """Restore the dedicated conversation after an aborted download."""
+
+        if self._is_conversation_url(page.url):
+            return
+        if not self._is_conversation_url(original_url):
+            return
+
+        try:
+            page.goto(
+                original_url,
+                wait_until="domcontentloaded",
+                timeout=int(
+                    self.config.navigation_timeout_seconds * 1000
+                ),
+            )
+            self._assert_runtime_alive(page)
+            self._verify_requested_route(original_url, page.url)
+        except Exception as exc:
+            raise BrowserBridgeError(
+                "The generated file was captured, but the dedicated ChatGPT "
+                "conversation could not be restored after intercepting the "
+                f"download request: {exc}"
+            ) from exc
+
+    def _is_generated_download_request_url(self, url: str) -> bool:
+        parsed = urlparse(url.strip())
+        host = parsed.netloc.lower()
+        path = parsed.path.lower()
+
+        if host == "chatgpt.com" and (
+            path.startswith("/backend-api/files/")
+            or path.startswith("/backend-api/estuary/content")
+            or path.startswith("/backend-api/files/download/")
+        ):
+            return True
+
+        return host.endswith(".oaiusercontent.com")
+
+    def _download_generated_file_via_session(
+        self,
+        page: Page,
+        href: str,
+        link_text: str,
+        download_attribute: str | None,
+        directory: Path,
+    ) -> CapturedDownload:
+        """Fetch one generated file atomically through the page cookie jar."""
+
+        if not href:
+            raise BrowserBridgeError(
+                "The generated-file control exposed no URL, and no download "
+                "request URL could be captured from its click."
+            )
+
+        source_url = urljoin(page.url, href)
+        try:
+            response = page.context.request.get(
+                source_url,
+                timeout=int(
+                    self.config.download_timeout_seconds * 1000
+                ),
+                fail_on_status_code=False,
+            )
+        except Exception as exc:
+            raise BrowserBridgeError(
+                "Could not fetch the generated file through the authenticated "
+                f"browser session: {source_url}: {exc}"
+            ) from exc
+
+        if not response.ok:
+            raise BrowserBridgeError(
+                "Generated-file request failed: "
+                f"HTTP {response.status} for {source_url}"
+            )
+
+        try:
+            content = response.body()
+        except Exception as exc:
+            raise BrowserBridgeError(
+                f"Could not read generated-file response body: {exc}"
+            ) from exc
+
+        if not content:
+            raise BrowserBridgeError(
+                "Generated-file response was empty. No record was stored."
+            )
+
+        original_name = self._generated_filename(
+            source_url=source_url,
+            headers=response.headers,
+            download_attribute=download_attribute,
+            link_text=link_text,
+        )
+        destination = self._collision_safe_path(
+            directory,
+            original_name,
+        )
+
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                prefix=".download-",
+                suffix=".part",
+                dir=directory,
+                delete=False,
+            ) as temporary_file:
+                temporary_file.write(content)
+                temporary_file.flush()
+                os.fsync(temporary_file.fileno())
+                temporary_path = Path(temporary_file.name)
+
+            os.replace(temporary_path, destination)
+            temporary_path = None
+        except Exception as exc:
+            raise BrowserBridgeError(
+                f"Could not save generated file to {destination}: {exc}"
+            ) from exc
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+
+        if destination.stat().st_size <= 0:
+            destination.unlink(missing_ok=True)
+            raise BrowserBridgeError(
+                "Generated file was written with zero bytes. "
+                "No record was stored."
+            )
+
+        return CapturedDownload(
+            original_filename=original_name,
+            saved_path=destination,
+            source_url=source_url,
+        )
+
+    def _generated_filename(
+        self,
+        source_url: str,
+        headers: dict[str, str],
+        download_attribute: str | None,
+        link_text: str,
+    ) -> str:
+        """Resolve a safe original filename from response and DOM metadata."""
+
+        content_disposition = headers.get("content-disposition", "")
+        encoded_match = re.search(
+            r"filename\*=UTF-8''([^;]+)",
+            content_disposition,
+            flags=re.IGNORECASE,
+        )
+        if encoded_match:
+            name = unquote(encoded_match.group(1).strip())
+            if Path(name).name:
+                return Path(name).name
+
+        quoted_match = re.search(
+            r'filename="?([^";]+)"?',
+            content_disposition,
+            flags=re.IGNORECASE,
+        )
+        if quoted_match:
+            name = quoted_match.group(1).strip()
+            if Path(name).name:
+                return Path(name).name
+
+        if download_attribute:
+            name = Path(download_attribute).name
+            if name:
+                return name
+
+        normalized_text = " ".join(link_text.strip().split())
+        if normalized_text.lower().startswith("download "):
+            name = Path(normalized_text[9:].strip()).name
+            if name:
+                return name
+
+        url_name = Path(unquote(urlparse(source_url).path)).name
+        return url_name or "generated-file"
+
+    def _wait_for_download_candidates(
+        self,
+        page: Page,
+        container: Locator,
+    ) -> list[tuple[Locator, str]]:
+        deadline = time.monotonic() + min(
+            10.0,
+            self.config.download_timeout_seconds,
+        )
+
+        while time.monotonic() < deadline:
+            self._assert_runtime_alive(page)
+            candidates = self._find_download_candidates(container)
+            if candidates:
+                return candidates
+            time.sleep(0.25)
+
+        return []
+
+    def _find_download_candidates(
+        self,
+        container: Locator,
+    ) -> list[tuple[Locator, str]]:
+        controls = container.locator(
+            'a, button, [role="link"], [role="button"]'
+        )
+        candidates: list[tuple[Locator, str]] = []
+
+        for index in range(controls.count()):
+            control = controls.nth(index)
+            try:
+                if not control.is_visible():
+                    continue
+                href = (control.get_attribute("href") or "").strip()
+                download_attribute = control.get_attribute("download")
+                link_text = (control.inner_text() or "").strip()
+            except Exception:
+                continue
+
+            if self._is_generated_file_link(
+                href=href,
+                download_attribute=download_attribute,
+                link_text=link_text,
+            ):
+                candidates.append((control, href))
+
+        return candidates
+
+    def _download_dom_diagnostic(self, container: Locator) -> str:
+        controls = container.locator(
+            'a, button, [role="link"], [role="button"]'
+        )
+        details: list[str] = []
+
+        for index in range(min(controls.count(), 12)):
+            control = controls.nth(index)
+            try:
+                details.append(
+                    "{"
+                    f"tag={control.evaluate('(node) => node.tagName')}, "
+                    f"role={control.get_attribute('role')!r}, "
+                    f"href={control.get_attribute('href')!r}, "
+                    f"download={control.get_attribute('download')!r}, "
+                    f"text={(control.inner_text() or '').strip()!r}"
+                    "}"
+                )
+            except Exception as exc:
+                details.append(f"{{unreadable={exc}}}")
+
+        return "; ".join(details) if details else "[no controls]"
+
+    def _is_generated_file_link(
+        self,
+        href: str,
+        download_attribute: str | None,
+        link_text: str = "",
+    ) -> bool:
+        """Return whether a rendered control represents a generated file."""
+
+        if download_attribute is not None:
+            return True
+
+        normalized_href = href.strip().lower()
+        if normalized_href.startswith("sandbox:/mnt/data/"):
+            return True
+
+        parsed = urlparse(normalized_href)
+        host = parsed.netloc
+        path = parsed.path
+
+        if host == "chatgpt.com" and (
+            path.startswith("/backend-api/files/")
+            or path.startswith("/backend-api/estuary/content")
+            or path.startswith("/backend-api/files/download/")
+        ):
+            return True
+
+        if host.endswith(".oaiusercontent.com"):
+            return True
+
+        normalized_text = " ".join(link_text.strip().lower().split())
+        if normalized_text.startswith("download "):
+            filename = normalized_text.removeprefix("download ").strip()
+            return bool(Path(filename).suffix)
+
+        return False
+
+    def _collision_safe_path(
+        self,
+        directory: Path,
+        original_filename: str,
+    ) -> Path:
+        safe_name = Path(original_filename).name or "download"
+        candidate = directory / safe_name
+        if not candidate.exists():
+            return candidate
+
+        stem = candidate.stem
+        suffix = candidate.suffix
+        counter = 2
+        while True:
+            candidate = directory / f"{stem} ({counter}){suffix}"
+            if not candidate.exists():
+                return candidate
+            counter += 1
 
     def _verify_requested_route(
         self,
