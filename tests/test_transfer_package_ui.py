@@ -96,9 +96,18 @@ def test_browser_success_appends_and_persists_response(tmp_path) -> None:
     window = MainWindow(state_path=state_path, data_directory=tmp_path / "data")
     panel = window.department_panels["core"]
     panel.input_editor.setPlainText("Exact user task.")
-    window._pending_tasks["core"] = "Exact user task."
+    request_id = "request-success"
+    from curvature_console.presentation.main_window import (
+        PendingBrowserExchange,
+    )
+    window._pending_exchanges[request_id] = PendingBrowserExchange(
+        request_id=request_id,
+        department_id="core",
+        user_task="Exact user task.",
+    )
 
     window._handle_browser_success(
+        request_id,
         "core",
         "Curvature Core",
         "https://chatgpt.com/g/g-p-core/project",
@@ -178,6 +187,7 @@ def test_route_unverified_signal_exists() -> None:
     worker = BrowserBridgeWorker(
         BrowserBridgeConfig.default(),
         BrowserExchangeRequest(
+            request_id="request-signal-test",
             department_id="core",
             message_text="task",
             create_new_thread=False,
@@ -200,13 +210,22 @@ def test_route_unverified_preserves_response_without_changing_route(
     panel = window.department_panels["core"]
     original_route = window.state_store.load_chat_route("core")
     assert original_route is not None
-    window._pending_tasks["core"] = "Diagnostic task"
+    request_id = "request-route-unverified"
+    from curvature_console.presentation.main_window import (
+        PendingBrowserExchange,
+    )
+    window._pending_exchanges[request_id] = PendingBrowserExchange(
+        request_id=request_id,
+        department_id="core",
+        user_task="Diagnostic task",
+    )
     monkeypatch.setattr(
         "curvature_console.presentation.main_window.QMessageBox.warning",
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
     )
 
     window._handle_browser_route_unverified(
+        request_id,
         "core",
         "https://chatgpt.com/g/observed-route",
         "Observed response",
@@ -217,4 +236,48 @@ def test_route_unverified_preserves_response_without_changing_route(
     assert "Observed response" in transcript
     unchanged_route = window.state_store.load_chat_route("core")
     assert unchanged_route == original_route
+    window.close()
+
+
+def test_stale_request_result_is_ignored(tmp_path) -> None:
+    create_application(["curvature-console-stale-request-test"])
+    window = MainWindow(
+        state_path=tmp_path / "state.sqlite3",
+        data_directory=tmp_path / "data",
+    )
+    panel = window.department_panels["core"]
+    before = panel.conversation_view.toPlainText()
+
+    window._handle_browser_success(
+        "unknown-request",
+        "core",
+        "Curvature",
+        "https://chatgpt.com/g/project/project",
+        "https://chatgpt.com/c/core",
+        "must not be stored",
+    )
+
+    assert panel.conversation_view.toPlainText() == before
+    window.close()
+
+
+def test_request_id_and_department_must_both_match(tmp_path) -> None:
+    create_application(["curvature-console-request-binding-test"])
+    window = MainWindow(
+        state_path=tmp_path / "state.sqlite3",
+        data_directory=tmp_path / "data",
+    )
+    from curvature_console.presentation.main_window import (
+        PendingBrowserExchange,
+    )
+
+    window._pending_exchanges["request-1"] = PendingBrowserExchange(
+        request_id="request-1",
+        department_id="core",
+        user_task="Core task",
+    )
+
+    assert window._pending_exchange("request-1", "core") is not None
+    assert window._pending_exchange("request-1", "research") is None
+    assert window._pending_exchange("request-2", "core") is None
     window.close()

@@ -4,7 +4,7 @@ Status: Active
 Version: 1.2.0
 Owner: Project Curvature
 Repository: `~/curvature-console`
-Last Updated: 2026-07-20
+Last Updated: 2026-07-23
 
 ---
 
@@ -36,16 +36,21 @@ write that repository or execute Git operations in it.
 # Active State
 
 ```text
-Completed: ASSISTANT-001B5.2B — Browser Lifecycle and One-Click UX
-Completed: ASSISTANT-001B5.2C — Durable URL-Only Conversation Routing
-Next:      ASSISTANT-001B5.2D — Generated File Download Capture
+Completed: ASSISTANT-001B5.2C5 — Lightweight Task Delivery
+Core verified: ASSISTANT-001B5.2R — Deterministic Browser Bridge Rewrite
+Rollout next: dedicated Project and Research conversations
+Paused: ASSISTANT-001B5.2D — Generated File Download Capture
 ```
 
 Current verification:
 
 ```text
-56 automated tests passed
-live Core response: PROJECT_SCOPED_ROUTE_OK
+61 automated tests passed
+live Core responses:
+- CORE_BRIDGE_REWRITE_OK
+- CORE_RESTART_ROUTE_OK
+- CORE_SECOND_REQUEST_OK
+controlled request-page closure: explicit failure, no false response stored
 ```
 
 # Active Architecture
@@ -97,3 +102,41 @@ one-click Task send
 ```
 
 Thread Handoff remains the only send action with a confirmation dialog.
+
+
+# Task Payload Rule
+
+Normal `Send Task` is lightweight for Project, Core and Research.
+
+It sends the current task, concise department authority and attachment
+metadata. It does not resend full project documentation or local conversation
+history.
+
+`Send Thread Handoff` remains the comprehensive continuity package.
+
+
+# Deterministic Browser Request Rule
+
+The browser bridge never uses the currently active or first visible ChatGPT
+tab.
+
+Every send operation creates a dedicated request page and binds the complete
+exchange to an immutable `request_id` and `department_id`.
+
+
+# Dedicated Department Conversation Rule
+
+Each Console department uses a dedicated Console-only conversation inside the
+shared ChatGPT Project.
+
+Core is the first verified operational department. Project and Research are
+activated only after their own dedicated conversations receive full Thread
+Handoffs and their routes pass live verification.
+
+# Hybrid Browser Ownership Rule
+
+The request page is always temporary.
+
+Console may close only browser resources it owns. Existing user browser sessions
+remain untouched. Console-owned browser processes may be closed when their
+exchange lifecycle ends.

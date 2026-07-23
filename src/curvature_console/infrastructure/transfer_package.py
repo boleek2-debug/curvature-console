@@ -40,8 +40,8 @@ class TransferPackagePolicy:
     def for_mode(cls, mode: TransferPackageMode) -> "TransferPackagePolicy":
         if mode is TransferPackageMode.TASK:
             return cls(
-                conversation_character_limit=8_000,
-                document_character_limit=4_000,
+                conversation_character_limit=1,
+                document_character_limit=1,
             )
         return cls(
             conversation_character_limit=24_000,
@@ -84,6 +84,50 @@ class TransferPackageBuilder:
         """Return a complete package for the selected mode."""
 
         self._validate_request(request)
+
+        if request.mode is TransferPackageMode.TASK:
+            return self._build_task_package(request)
+
+        return self._build_thread_handoff_package(request)
+
+    def _build_task_package(
+        self,
+        request: TransferPackageRequest,
+    ) -> TransferPackage:
+        """Build a lightweight normal-task payload.
+
+        Normal tasks run inside an existing departmental conversation in the
+        shared ChatGPT Project. They intentionally do not resend the full role,
+        repository documents or local conversation transcript.
+        """
+
+        sections = [
+            self._header(request),
+            self._authority_section(request),
+            self._task_context_rule_section(),
+            self._draft_section(request.draft_text),
+            self._attachment_section(request.attachments),
+            self._instructions_section(request),
+        ]
+
+        return TransferPackage(
+            mode=request.mode,
+            department_id=request.department_id,
+            text="\n\n".join(
+                section.rstrip() for section in sections
+            ).rstrip() + "\n",
+            conversation_was_truncated=False,
+            truncated_document_count=0,
+            included_document_count=0,
+            attachment_count=len(request.attachments),
+        )
+
+    def _build_thread_handoff_package(
+        self,
+        request: TransferPackageRequest,
+    ) -> TransferPackage:
+        """Build the comprehensive continuity package for a new chat."""
+
         policy = request.policy or TransferPackagePolicy.for_mode(request.mode)
 
         conversation, conversation_truncated = self._bounded_text(
@@ -93,7 +137,6 @@ class TransferPackageBuilder:
 
         context_text, truncated_documents = self._context_section(
             request.context,
-            request.mode,
             policy.document_character_limit,
         )
 
@@ -113,7 +156,9 @@ class TransferPackageBuilder:
         return TransferPackage(
             mode=request.mode,
             department_id=request.department_id,
-            text="\n\n".join(section.rstrip() for section in sections).rstrip() + "\n",
+            text="\n\n".join(
+                section.rstrip() for section in sections
+            ).rstrip() + "\n",
             conversation_was_truncated=conversation_truncated,
             truncated_document_count=truncated_documents,
             included_document_count=request.context.loaded_count,
@@ -166,10 +211,26 @@ class TransferPackageBuilder:
             ]
         )
 
+    def _task_context_rule_section(self) -> str:
+        return "\n".join(
+            [
+                "## EXISTING CONVERSATION CONTEXT",
+                "",
+                "This is a normal task in the department's existing ChatGPT "
+                "conversation.",
+                "Use the conversation history and shared Project Sources already "
+                "available in ChatGPT.",
+                "The Console intentionally does not resend full role documents, "
+                "repository documentation or local conversation history for "
+                "normal tasks.",
+                "Request a Thread Handoff when full continuity context is needed "
+                "in a new chat.",
+            ]
+        )
+
     def _context_section(
         self,
         context: ContextLoadResult,
-        mode: TransferPackageMode,
         document_limit: int | None,
     ) -> tuple[str, int]:
         parts = ["## LOADED DEPARTMENT CONTEXT"]
@@ -215,18 +276,6 @@ class TransferPackageBuilder:
                 ]
             )
 
-        if mode is TransferPackageMode.TASK:
-            parts.extend(
-                [
-                    "",
-                    "### TASK PACKAGE CONTEXT RULE",
-                    "",
-                    "Long non-role documents may be represented by bounded "
-                    "beginning-and-end excerpts.",
-                    "Use the source path to request a full document when required.",
-                ]
-            )
-
         return "\n".join(parts), truncated_count
 
     def _document_excerpt(
@@ -238,7 +287,7 @@ class TransferPackageBuilder:
         if len(content) <= limit:
             return content, False
 
-        marker = "\n\n[... middle omitted by compact Task Package ...]\n\n"
+        marker = "\n\n[... middle omitted by bounded package ...]\n\n"
         available = max(2, limit - len(marker))
         beginning_length = available // 2
         ending_length = available - beginning_length
@@ -288,8 +337,10 @@ class TransferPackageBuilder:
         parts = [
             "## ATTACHMENT MANIFEST",
             "",
-            "Files are listed locally but are not uploaded by B5.2B.",
-            "State clearly when an attachment must be uploaded before work can continue.",
+            "Files are listed locally but are not uploaded by the current "
+            "browser bridge.",
+            "State clearly when an attachment must be uploaded before work can "
+            "continue.",
         ]
 
         if not records:
@@ -314,7 +365,6 @@ class TransferPackageBuilder:
             "## RESPONSE INSTRUCTIONS",
             "",
             f"Respond as {request.department_title}.",
-            "Use the loaded context and current task above.",
             "The CURRENT USER TASK is the immediate instruction and takes "
             "priority over general response style.",
             "If the CURRENT USER TASK requests an exact response, output "
@@ -331,7 +381,7 @@ class TransferPackageBuilder:
             lines.extend(
                 [
                     "",
-                    "This package starts a new chat in the same department's "
+                    "This package starts a new chat in the shared Curvature "
                     "ChatGPT Project.",
                     "Treat it as a continuity handoff from the previous thread.",
                     "Confirm the understood current state and exact next step "

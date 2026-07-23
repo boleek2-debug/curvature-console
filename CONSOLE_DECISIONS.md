@@ -3,7 +3,7 @@
 Status: Active
 Version: 1.2.0
 Owner: Project Curvature
-Last Updated: 2026-07-20
+Last Updated: 2026-07-23
 
 ---
 
@@ -432,3 +432,136 @@ https://chatgpt.com/c/<conversation-id>
 - route history can support recovery and audit;
 - ChatGPT web routes remain an observed UI contract rather than an official public API;
 - browser changes must produce explicit diagnostics before routing rules are modified.
+
+
+---
+
+# ADR-010 — Lightweight Normal Task Payload
+
+Status: Accepted
+Date: 2026-07-23
+
+## Context
+
+The existing normal Task Package resent the full role, repository documents and
+local conversation history during every message. A live browser test showed that
+the repeated payload could heavily slow Chrome and cause the editor fill
+operation to time out.
+
+All three departments already operate inside persistent conversations in one
+shared ChatGPT Project with shared Project Sources.
+
+## Decision
+
+Normal `Send Task` delivery for Project, Core and Research uses a lightweight
+payload containing only:
+
+- department identity;
+- concise authority boundary;
+- current user task;
+- attachment manifest;
+- concise response instructions.
+
+Normal Task delivery does not resend:
+
+- full role documents;
+- repository documentation;
+- local conversation history.
+
+The comprehensive context package is reserved for `Send Thread Handoff`.
+
+## Consequences
+
+- normal messages are materially smaller;
+- browser entry is faster and less likely to time out;
+- repeated context consumption is reduced;
+- all three departments use the same lightweight builder path;
+- continuity for a new conversation remains explicit through Thread Handoff.
+
+
+---
+
+# ADR-011 — Dedicated Page and Request-Bound Browser Exchange
+
+Status: Accepted
+Date: 2026-07-23
+
+## Context
+
+Live verification showed that a bridge using an arbitrary existing ChatGPT page
+could send to the wrong conversation, miss a department request or associate an
+unrelated response with a panel.
+
+## Decision
+
+Every browser exchange is immutable and identified by `request_id`.
+
+Each exchange owns:
+
+- one `department_id`;
+- one exact persisted conversation URL;
+- one dedicated page created for that request;
+- one confirmed user message;
+- one newly observed assistant response.
+
+The result is accepted by the UI only when both `request_id` and
+`department_id` match the pending request.
+
+Existing unrelated ChatGPT pages are never selected for delivery and are never
+closed by the bridge.
+
+## Consequences
+
+- arbitrary-tab routing is removed;
+- stale or foreign results are ignored;
+- a failed user-message confirmation cannot produce a stored assistant result;
+- live verification can be performed deterministically by department.
+
+
+---
+
+# ADR-012 — Dedicated Department Conversations and Hybrid Browser Lifecycle
+
+Status: Accepted
+Date: 2026-07-23
+
+## Context
+
+Core live validation showed that deterministic automation requires a conversation
+reserved for Console traffic. Mixing manual messages with a request-monitored
+conversation can create unrelated new user messages during an exchange.
+
+The browser bridge may connect to an existing Chrome session or launch its own
+temporary browser process.
+
+## Decision
+
+Each department uses one dedicated Console-only conversation inside the shared
+ChatGPT Project `Curvature`.
+
+Rollout order:
+
+1. Core validates the complete workflow.
+2. Core receives a full Thread Handoff and becomes the first operational
+   Console-managed department.
+3. Project and Research receive dedicated conversations using the same model.
+4. Their routes are persisted only after their handoffs are accepted.
+
+Browser ownership rules:
+
+- a dedicated request page is always closed after the exchange;
+- a browser session not launched by Console is never closed by Console;
+- a browser process launched by Console for an exchange may be closed when that
+  Console-owned exchange lifecycle ends;
+- login or human-verification recovery may temporarily require visible Chrome;
+- ownership, not visibility, determines whether Console may close a browser.
+
+## Consequences
+
+- manual development discussion can remain separate from automated department
+  conversations;
+- each department route is deterministic;
+- unrelated browser sessions remain untouched;
+- Console may run with an existing browser or with its own hybrid fallback;
+- Thread Handoff is the continuity mechanism when activating a new dedicated
+  conversation.

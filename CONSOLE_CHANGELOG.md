@@ -3,7 +3,51 @@
 Status: Active
 Version: 0.8.0
 Owner: Project Curvature
-Last Updated: 2026-07-20
+Last Updated: 2026-07-23
+
+---
+
+## 2026-07-23
+
+### ASSISTANT-001B5.2C5 / B5.2R — Lightweight Deterministic Core Workflow
+
+Implemented and Core-verified.
+
+Delivered:
+
+- lightweight normal Task payload;
+- full context reserved for Thread Handoff;
+- immutable request identifiers;
+- dedicated request page per exchange;
+- exact persisted conversation routing;
+- request marker confirmation;
+- request-bound response delivery;
+- rejection of stale or foreign results;
+- explicit failure when the request page closes;
+- preservation of the task draft after failure;
+- dedicated Console-only Core conversation;
+- hybrid browser ownership lifecycle.
+
+Verified:
+
+```text
+61 automated tests passed
+git diff --check passed
+CORE_BRIDGE_REWRITE_OK
+CORE_RESTART_ROUTE_OK
+CORE_SECOND_REQUEST_OK
+controlled request-page closure failed explicitly
+false response was not stored
+unrelated Chrome session remained open
+```
+
+Result:
+
+Curvature Console now has a deterministic and restart-safe Core workflow. The
+same model is ready to be rolled out to dedicated Project and Research
+conversations after the Core Thread Handoff is accepted.
+
+B5.2D remains paused until all three department routes pass live verification.
 
 ---
 
@@ -11,7 +55,7 @@ Last Updated: 2026-07-20
 
 ### ASSISTANT-001B5.2B / B5.2C — Reliable One-Click Browser Routing
 
-Completed and verified; final commit hash pending closeout commit.
+Completed, verified and pushed.
 
 Delivered:
 
@@ -37,7 +81,8 @@ Verified:
 - Project and Research remain usable while Core is sending;
 - actual observed project-scoped URL was captured before changing validation;
 - successful Core live response: `PROJECT_SCOPED_ROUTE_OK`;
-- complete automated suite: `56 passed`.
+- complete automated suite: `56 passed`;
+- implementation closeout present in clean commit `b557ce6eb5556277d0b65114b3f5893c302d78b2`.
 
 Result:
 

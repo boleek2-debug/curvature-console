@@ -1,4 +1,4 @@
-"""Background worker for one browser-mediated ChatGPT exchange."""
+"""Background worker for one deterministic ChatGPT exchange."""
 
 from __future__ import annotations
 
@@ -14,12 +14,12 @@ from curvature_console.infrastructure.browser_bridge import (
 
 
 class BrowserBridgeWorker(QThread):
-    """Run blocking Playwright work outside the Qt UI thread."""
+    """Run one immutable request outside the Qt UI thread."""
 
-    succeeded = Signal(str, str, str, str, str)
-    failed = Signal(str, str)
-    route_unverified = Signal(str, str, str)
-    stage_changed = Signal(str, str)
+    succeeded = Signal(str, str, str, str, str, str)
+    failed = Signal(str, str, str)
+    route_unverified = Signal(str, str, str, str)
+    stage_changed = Signal(str, str, str)
 
     def __init__(
         self,
@@ -34,6 +34,7 @@ class BrowserBridgeWorker(QThread):
         bridge = ChatGPTBrowserBridge(
             self.config,
             stage_callback=lambda stage: self.stage_changed.emit(
+                self.request.request_id,
                 self.request.department_id,
                 stage.value,
             ),
@@ -41,6 +42,7 @@ class BrowserBridgeWorker(QThread):
         result = None
         failure: Exception | None = None
         route_failure: BrowserBridgeRouteUnverified | None = None
+
         try:
             result = bridge.send_and_receive_hybrid(self.request)
         except BrowserBridgeRouteUnverified as exc:
@@ -52,6 +54,7 @@ class BrowserBridgeWorker(QThread):
 
         if route_failure is not None:
             self.route_unverified.emit(
+                self.request.request_id,
                 self.request.department_id,
                 route_failure.observed_url,
                 route_failure.response_text,
@@ -59,17 +62,23 @@ class BrowserBridgeWorker(QThread):
             return
 
         if failure is not None:
-            self.failed.emit(self.request.department_id, str(failure))
+            self.failed.emit(
+                self.request.request_id,
+                self.request.department_id,
+                str(failure),
+            )
             return
 
         if result is None:
             self.failed.emit(
+                self.request.request_id,
                 self.request.department_id,
                 "Browser bridge ended without a result.",
             )
             return
 
         self.succeeded.emit(
+            result.request_id,
             result.department_id,
             result.project_name,
             result.project_url,

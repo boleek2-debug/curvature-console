@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+from uuid import uuid4
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent
@@ -46,6 +48,15 @@ from curvature_console.presentation.context_preview_dialog import (
     ContextPreviewDialog,
 )
 from curvature_console.presentation.department_panel import DepartmentPanel
+
+
+@dataclass(frozen=True, slots=True)
+class PendingBrowserExchange:
+    """UI state belonging to exactly one immutable browser request."""
+
+    request_id: str
+    department_id: str
+    user_task: str
 
 
 class MainWindow(QMainWindow):
@@ -106,7 +117,7 @@ class MainWindow(QMainWindow):
         self._focused_department_id: str | None = None
         self._three_panel_sizes = [500, 500, 500]
         self._browser_worker: BrowserBridgeWorker | None = None
-        self._pending_tasks: dict[str, str] = {}
+        self._pending_exchanges: dict[str, PendingBrowserExchange] = {}
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setObjectName("departmentSplitter")
@@ -302,11 +313,17 @@ class MainWindow(QMainWindow):
         self.start_browser_exchange(package)
 
     def start_browser_exchange(self, package: TransferPackage) -> None:
-        """Start one browser exchange outside the UI thread."""
+        """Start one immutable request with its own request identifier."""
 
         department_id = package.department_id
         panel = self.department_panels[department_id]
-        self._pending_tasks[department_id] = panel.input_editor.toPlainText()
+        request_id = uuid4().hex
+        pending = PendingBrowserExchange(
+            request_id=request_id,
+            department_id=department_id,
+            user_task=panel.input_editor.toPlainText(),
+        )
+        self._pending_exchanges[request_id] = pending
         self._set_browser_operation_busy(True, department_id)
         self.statusBar().showMessage(
             f"Sending {package.mode.display_name} to "
@@ -317,6 +334,7 @@ class MainWindow(QMainWindow):
         worker = BrowserBridgeWorker(
             config=self.browser_config,
             request=BrowserExchangeRequest(
+                request_id=request_id,
                 department_id=department_id,
                 message_text=package.text,
                 create_new_thread=(
@@ -339,17 +357,32 @@ class MainWindow(QMainWindow):
         self._browser_worker = worker
         worker.start()
 
+    def _pending_exchange(
+        self,
+        request_id: str,
+        department_id: str,
+    ) -> PendingBrowserExchange | None:
+        pending = self._pending_exchanges.get(request_id)
+        if pending is None or pending.department_id != department_id:
+            return None
+        return pending
+
     def _handle_browser_success(
         self,
+        request_id: str,
         department_id: str,
         project_name: str,
         project_url: str,
         conversation_url: str,
         response_text: str,
     ) -> None:
+        pending = self._pending_exchange(request_id, department_id)
+        if pending is None:
+            return
+
+        self._pending_exchanges.pop(request_id, None)
         panel = self.department_panels[department_id]
-        user_task = self._pending_tasks.pop(department_id, "")
-        panel.append_browser_exchange(user_task, response_text)
+        panel.append_browser_exchange(pending.user_task, response_text)
         self.state_store.save_chat_route(
             department_id=department_id,
             project_name=project_name,
@@ -366,15 +399,20 @@ class MainWindow(QMainWindow):
 
     def _handle_browser_route_unverified(
         self,
+        request_id: str,
         department_id: str,
         observed_url: str,
         response_text: str,
     ) -> None:
-        """Preserve a received response without changing the stored route."""
+        """Preserve only the response belonging to the current request."""
 
+        pending = self._pending_exchange(request_id, department_id)
+        if pending is None:
+            return
+
+        self._pending_exchanges.pop(request_id, None)
         panel = self.department_panels[department_id]
-        user_task = self._pending_tasks.pop(department_id, "")
-        panel.append_browser_exchange(user_task, response_text)
+        panel.append_browser_exchange(pending.user_task, response_text)
         panel.input_editor.clear()
         self._set_browser_operation_busy(False, department_id)
         self.save_department_state(department_id)
@@ -392,11 +430,16 @@ class MainWindow(QMainWindow):
 
     def _handle_browser_failure(
         self,
+        request_id: str,
         department_id: str,
         error_message: str,
     ) -> None:
+        pending = self._pending_exchange(request_id, department_id)
+        if pending is None:
+            return
+
+        self._pending_exchanges.pop(request_id, None)
         panel = self.department_panels[department_id]
-        self._pending_tasks.pop(department_id, None)
         self._set_browser_operation_busy(False, department_id)
         self.statusBar().showMessage(
             f"ChatGPT browser operation failed: {panel.title_label.text()}"
@@ -409,9 +452,13 @@ class MainWindow(QMainWindow):
 
     def _handle_browser_stage(
         self,
+        request_id: str,
         department_id: str,
         stage: str,
     ) -> None:
+        if self._pending_exchange(request_id, department_id) is None:
+            return
+
         panel = self.department_panels[department_id]
         panel.set_browser_stage(stage)
         self.statusBar().showMessage(
@@ -419,6 +466,7 @@ class MainWindow(QMainWindow):
         )
 
     def _set_browser_operation_busy(
+
         self,
         busy: bool,
         active_department_id: str | None = None,

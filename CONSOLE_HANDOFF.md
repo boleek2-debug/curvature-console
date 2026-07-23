@@ -3,7 +3,7 @@
 Status: Active
 Version: 0.9.0
 Owner: Project Curvature
-Last Updated: 2026-07-20
+Last Updated: 2026-07-23
 
 ---
 
@@ -136,57 +136,80 @@ Verified:
 
 # 5. Current Working Tree
 
-The implementation and documentation are currently uncommitted on top of:
+Current repository baseline:
 
 ```text
-a5a59ed Namespace Curvature Console documentation
+branch: main
+commit before rewrite: b557ce6eb5556277d0b65114b3f5893c302d78b2
+main == origin/main before the uncommitted rewrite
+61 automated tests passed
+git diff --check passed
 ```
 
-Do not start the next implementation sprint until the current closeout is committed and pushed.
+B5.2C5 lightweight Task delivery is implemented and verified in code:
 
----
+- normal `Send Task` omits full role documents;
+- normal `Send Task` omits repository documentation;
+- normal `Send Task` omits local conversation history;
+- full continuity remains exclusive to `Send Thread Handoff`.
+
+B5.2R deterministic browser routing is implemented.
+
+Verified Core contract:
+
+```text
+one request_id
+→ one department_id
+→ one persisted Core conversation URL
+→ one dedicated request page
+→ one confirmed user message
+→ one confirmed assistant response
+→ one request-bound Core panel result
+```
+
+Live Core verification completed:
+
+- dedicated Core conversation created;
+- Core route updated in SQLite;
+- exact Core route opened;
+- request marker persisted in the web conversation;
+- `CORE_BRIDGE_REWRITE_OK` returned correctly;
+- restart route returned `CORE_RESTART_ROUTE_OK`;
+- second request returned `CORE_SECOND_REQUEST_OK`;
+- dedicated request tab opened and closed;
+- browser pages not owned by Console remained open;
+- Console-owned hybrid browser lifecycle completed cleanly;
+- manually closing the request page produced an explicit error;
+- the interrupted request did not store a false response;
+- the task draft remained available after failure.
+
+Project and Research are intentionally not yet activated on the rewritten bridge.
+They will receive dedicated Console-only conversations after the Core workflow
+handoff is accepted.
+
+B5.2D remains paused until the deterministic bridge is rolled out and verified
+for all three departments.
 
 # 6. Exact Next Step
 
-Run the closeout gate:
-
-```bash
-cd ~/curvature-console
-conda activate curvature-console
-
-python -m pytest -q
-git diff --check
-git check-ignore -v data/browser-profile/
-git status --short
-git diff --stat
-```
-
-Then stage explicit project files only, commit and push:
-
-```bash
-git add   CONSOLE_CHANGELOG.md   CONSOLE_DECISIONS.md   CONSOLE_HANDOFF.md   CONSOLE_PIPELINE.md   CONSOLE_README.md   CONSOLE_ROADMAP.md   README.md   CURVATURE_PACKAGE.json   PACKAGE_MANIFEST.md   scripts   src   tests
-
-git commit -m "Complete reliable ChatGPT conversation routing"
-git push
-git status
-```
-
-Required final state:
-
-```text
-Your branch is up to date with 'origin/main'.
-nothing to commit, working tree clean
-```
-
-After the push, record the resulting commit hash in this HANDOFF and CHANGELOG.
-
-The next sprint is:
-
-```text
-ASSISTANT-001B5.2D — Generated File Download Capture
-```
-
----
+1. Apply this documentation closeout package.
+2. Run:
+   - complete automated tests;
+   - `git diff --check`;
+   - `git status --short`.
+3. Commit and push the B5.2C5 and B5.2R implementation with current documentation.
+4. Generate a full Core Thread Handoff Package.
+5. Send the handoff through Console to the dedicated Core conversation.
+6. Confirm that dedicated Core understands:
+   - the current repository state;
+   - the deterministic bridge architecture;
+   - the completed Core verification;
+   - that Project and Research still require dedicated Console-only conversations;
+   - that B5.2D remains paused.
+7. Continue normal development through Curvature Console.
+8. Create and activate dedicated Project and Research conversations using the
+   same verified model.
+9. Resume B5.2D only after all three department routes pass live verification.
 
 # 7. Next Sprint Scope
 

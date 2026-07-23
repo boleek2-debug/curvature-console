@@ -3,7 +3,7 @@
 Status: Active
 Version: 0.9.0
 Owner: Project Curvature
-Last Updated: 2026-07-20
+Last Updated: 2026-07-23
 
 ---
 
@@ -97,7 +97,65 @@ Delivered:
 
 ---
 
-# Active Closeout
+# Active Corrective Unit
+
+## ASSISTANT-001B5.2R — Deterministic Browser Bridge Rewrite
+
+Core implementation and live validation completed.
+
+Delivered:
+
+- immutable `request_id`;
+- request-bound `department_id`;
+- exact persisted conversation URL;
+- one dedicated page per request;
+- confirmation of the current user message;
+- request marker correlation;
+- capture of only the newly generated assistant response;
+- UI acceptance only when request and department both match;
+- explicit failure when the request page closes;
+- preservation of the draft after failure;
+- no arbitrary existing-tab selection;
+- no closure of unrelated browser pages.
+
+Verified on Core:
+
+```text
+61 automated tests passed
+CORE_BRIDGE_REWRITE_OK
+CORE_RESTART_ROUTE_OK
+CORE_SECOND_REQUEST_OK
+controlled page-close failure passed
+```
+
+Rollout policy:
+
+1. Core is the validation department.
+2. After documentation, commit, push and full Thread Handoff, normal work moves
+   to the dedicated Core conversation through Console.
+3. Dedicated Console-only conversations are then created for Project and
+   Research.
+4. B5.2R closes only after Project and Research pass the same live contract.
+
+## ASSISTANT-001B5.2C5 — Lightweight Task Delivery
+
+Implemented and verified in code.
+
+Normal Task packages contain only:
+
+- request marker;
+- department identity;
+- concise authority reminder;
+- current user task;
+- attachment manifest;
+- concise response instructions.
+
+They do not resend full role documents, repository documentation or local
+conversation history.
+
+Full continuity remains exclusive to Thread Handoff.
+
+# Previous Closeout
 
 Before starting new implementation:
 
@@ -117,6 +175,8 @@ tests
 # Next Milestones
 
 ## ASSISTANT-001B5.2D — Generated File Download Capture
+
+Approved and paused until B5.2R is verified for Core, Project and Research.
 
 Deliver:
 

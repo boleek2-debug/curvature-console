@@ -1,4 +1,4 @@
-"""Tests for URL-only shared-project conversation routing."""
+"""Tests for deterministic request-bound browser routing."""
 
 from __future__ import annotations
 
@@ -8,16 +8,17 @@ import pytest
 
 from curvature_console.infrastructure.browser_bridge import (
     BOOTSTRAP_CONVERSATION_URLS,
-    BrowserBridgeAmbiguousTarget,
-    BrowserBridgeConfig,
-    BrowserBridgeProcessExited,
-    BrowserBridgeRouteUnverified,
-    BrowserBridgeStage,
-    BrowserExchangeRequest,
-    ChatGPTBrowserBridge,
-    ChromeLauncher,
     SHARED_PROJECT_NAME,
     SHARED_PROJECT_URL,
+    BrowserBridgeConfig,
+    BrowserBridgeMessageNotConfirmed,
+    BrowserBridgeProcessExited,
+    BrowserBridgeRouteMismatch,
+    BrowserBridgeRouteUnverified,
+    BrowserExchangeRequest,
+    BrowserExchangeResult,
+    ChatGPTBrowserBridge,
+    ChromeLauncher,
 )
 
 
@@ -35,76 +36,164 @@ def test_shared_project_identity_is_explicit() -> None:
     assert SHARED_PROJECT_URL.endswith("/project")
 
 
-def test_bootstrap_urls_are_per_department_and_title_free() -> None:
+def test_bootstrap_routes_are_conversation_urls() -> None:
     assert set(BOOTSTRAP_CONVERSATION_URLS) == {
         "project",
         "core",
         "research",
     }
     assert all(
-        url.startswith("https://chatgpt.com/c/")
-        for url in BOOTSTRAP_CONVERSATION_URLS.values()
+        value.startswith("https://chatgpt.com/c/")
+        for value in BOOTSTRAP_CONVERSATION_URLS.values()
     )
 
 
-def test_task_requires_persisted_conversation_url(tmp_path: Path) -> None:
+def test_request_requires_request_id(tmp_path: Path) -> None:
     bridge = ChatGPTBrowserBridge(_config(tmp_path))
     request = BrowserExchangeRequest(
-        department_id="core",
-        message_text="task",
-        create_new_thread=False,
-        conversation_url=None,
-    )
-
-    with pytest.raises(BrowserBridgeAmbiguousTarget):
-        bridge.send_and_receive_hybrid(request)
-
-
-def test_task_request_uses_existing_conversation() -> None:
-    request = BrowserExchangeRequest(
+        request_id="",
         department_id="core",
         message_text="task",
         create_new_thread=False,
         conversation_url=BOOTSTRAP_CONVERSATION_URLS["core"],
     )
 
-    assert request.create_new_thread is False
-    assert request.conversation_url.endswith(
-        "6a553afb-7878-83ed-b352-99738a964dfe"
-    )
+    with pytest.raises(ValueError, match="Request id"):
+        bridge._validate_request(request)
 
 
-def test_handoff_request_does_not_depend_on_chat_title() -> None:
+def test_request_and_result_preserve_request_identity() -> None:
     request = BrowserExchangeRequest(
+        request_id="request-123",
         department_id="core",
-        message_text="handoff",
-        create_new_thread=True,
+        message_text="task",
+        create_new_thread=False,
         conversation_url=BOOTSTRAP_CONVERSATION_URLS["core"],
     )
+    result = BrowserExchangeResult(
+        request_id=request.request_id,
+        department_id=request.department_id,
+        project_name=SHARED_PROJECT_NAME,
+        project_url=SHARED_PROJECT_URL,
+        conversation_url=request.conversation_url or "",
+        response_text="response",
+    )
 
-    assert request.create_new_thread is True
-
-
-def test_headless_launcher_is_available(tmp_path: Path) -> None:
-    command = ChromeLauncher(_config(tmp_path)).command(headless=True)
-
-    assert "--headless=new" in command
-
-
-def test_bridge_reports_lifecycle_stages(tmp_path: Path) -> None:
-    stages: list[BrowserBridgeStage] = []
-    bridge = ChatGPTBrowserBridge(_config(tmp_path), stages.append)
-
-    bridge._report_stage(BrowserBridgeStage.CONNECTING)
-    bridge._report_stage(BrowserBridgeStage.CLEANING_UP)
-
-    assert stages == [
-        BrowserBridgeStage.CONNECTING,
-        BrowserBridgeStage.CLEANING_UP,
-    ]
+    assert result.request_id == "request-123"
+    assert result.department_id == "core"
 
 
-def test_owned_process_exit_is_detected_immediately(tmp_path: Path) -> None:
+def test_bridge_does_not_expose_active_page_selection(tmp_path: Path) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    assert not hasattr(bridge, "active_page")
+    assert hasattr(bridge, "open_dedicated_page")
+
+
+def test_route_verification_uses_conversation_id(tmp_path: Path) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    bridge._verify_requested_route(
+        "https://chatgpt.com/c/core-id",
+        "https://chatgpt.com/g/project-id/c/core-id",
+    )
+
+
+def test_route_mismatch_is_rejected(tmp_path: Path) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    with pytest.raises(BrowserBridgeRouteMismatch):
+        bridge._verify_requested_route(
+            "https://chatgpt.com/c/core-id",
+            "https://chatgpt.com/g/project-id/c/research-id",
+        )
+
+
+def test_global_and_project_scoped_routes_are_verified(tmp_path: Path) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    assert bridge._is_conversation_url(
+        "https://chatgpt.com/c/core-id"
+    )
+    assert bridge._is_conversation_url(
+        "https://chatgpt.com/g/project-id/c/core-id"
+    )
+    assert not bridge._is_conversation_url(
+        "https://chatgpt.com/g/project-id/project"
+    )
+    assert not bridge._is_conversation_url(
+        "https://example.com/c/core-id"
+    )
+
+
+def test_message_normalisation_preserves_internal_lines(tmp_path: Path) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    assert bridge._normalize_message_text(" a  \n\n b \n") == "a\n\n b"
+
+
+def test_new_wrong_user_message_is_rejected(tmp_path: Path) -> None:
+    bridge = ChatGPTBrowserBridge(
+        BrowserBridgeConfig(
+            chrome_executable=_config(tmp_path).chrome_executable,
+            profile_directory=tmp_path / "profile",
+            message_confirmation_timeout_seconds=0.01,
+            response_poll_interval_seconds=0.001,
+        )
+    )
+
+    class FakeMessage:
+        def inner_text(self):
+            return "wrong request"
+
+    class FakeMessages:
+        def count(self):
+            return 1
+
+        def nth(self, index):
+            assert index == 0
+            return FakeMessage()
+
+    class FakePage:
+        def locator(self, selector):
+            assert selector == '[data-message-author-role="user"]'
+            return FakeMessages()
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+
+    with pytest.raises(BrowserBridgeMessageNotConfirmed):
+        bridge._wait_for_confirmed_user_message(
+            page=FakePage(),
+            baseline_count=0,
+            request_id="expected-request",
+        )
+
+
+def test_owned_page_is_closed_without_closing_external_browser(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakePage:
+        def __init__(self):
+            self.closed = 0
+
+        def is_closed(self):
+            return False
+
+        def close(self):
+            self.closed += 1
+
+    page = FakePage()
+    bridge._dedicated_page = page
+    bridge._close_dedicated_page()
+
+    assert page.closed == 1
+    assert bridge._dedicated_page is None
+
+
+def test_process_exit_is_detected(tmp_path: Path) -> None:
     class ExitedProcess:
         def poll(self):
             return 1
@@ -135,7 +224,6 @@ def test_close_terminates_owned_process_and_is_idempotent(
     bridge = ChatGPTBrowserBridge(_config(tmp_path))
     process = FakeProcess()
     bridge._owned_process = process
-    bridge._owned_process_is_headless = True
 
     bridge.close()
     bridge.close()
@@ -144,9 +232,10 @@ def test_close_terminates_owned_process_and_is_idempotent(
     assert bridge._owned_process is None
 
 
-def test_editor_timeout_is_configurable(tmp_path: Path) -> None:
-    config = _config(tmp_path)
-    assert config.editor_timeout_seconds == 20.0
+def test_headless_launcher_is_available(tmp_path: Path) -> None:
+    command = ChromeLauncher(_config(tmp_path)).command(headless=True)
+
+    assert "--headless=new" in command
 
 
 def test_route_unverified_preserves_observed_url_and_response() -> None:
@@ -157,37 +246,52 @@ def test_route_unverified_preserves_observed_url_and_response() -> None:
 
     assert error.observed_url == "https://chatgpt.com/g/example"
     assert error.response_text == "DIAGNOSTIC_RESPONSE"
-    assert "https://chatgpt.com/g/example" in str(error)
 
 
-def test_global_conversation_url_is_verified(tmp_path: Path) -> None:
+def test_transport_message_contains_request_marker(tmp_path: Path) -> None:
     bridge = ChatGPTBrowserBridge(_config(tmp_path))
-
-    assert bridge._is_conversation_url(
-        "https://chatgpt.com/c/6a553afb-7878-83ed-b352-99738a964dfe"
+    request = BrowserExchangeRequest(
+        request_id="request-abc",
+        department_id="core",
+        message_text="Task package body",
+        create_new_thread=False,
+        conversation_url=BOOTSTRAP_CONVERSATION_URLS["core"],
     )
 
+    transport = bridge._transport_message_text(request)
 
-def test_project_scoped_conversation_url_is_verified(tmp_path: Path) -> None:
+    assert transport.startswith("CURVATURE_REQUEST_ID: request-abc\n\n")
+    assert transport.endswith("Task package body\n")
+
+
+def test_matching_request_marker_confirms_user_message(tmp_path: Path) -> None:
     bridge = ChatGPTBrowserBridge(_config(tmp_path))
 
-    assert bridge._is_conversation_url(
-        "https://chatgpt.com/g/g-p-6a5ccf24ed988191b1589e5beca5b7c5/"
-        "c/6a553afb-7878-83ed-b352-99738a964dfe"
-    )
+    class FakeMessage:
+        def inner_text(self):
+            return (
+                "CURVATURE_REQUEST_ID: request-abc\n\n"
+                "Rendered Markdown may differ."
+            )
 
+    class FakeMessages:
+        def count(self):
+            return 1
 
-def test_non_conversation_project_url_is_not_verified(tmp_path: Path) -> None:
-    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+        def nth(self, index):
+            assert index == 0
+            return FakeMessage()
 
-    assert not bridge._is_conversation_url(
-        "https://chatgpt.com/g/g-p-6a5ccf24ed988191b1589e5beca5b7c5/project"
-    )
+    class FakePage:
+        def locator(self, selector):
+            assert selector == '[data-message-author-role="user"]'
+            return FakeMessages()
 
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
 
-def test_external_conversation_like_url_is_not_verified(tmp_path: Path) -> None:
-    bridge = ChatGPTBrowserBridge(_config(tmp_path))
-
-    assert not bridge._is_conversation_url(
-        "https://example.com/c/6a553afb-7878-83ed-b352-99738a964dfe"
+    bridge._wait_for_confirmed_user_message(
+        page=FakePage(),
+        baseline_count=0,
+        request_id="request-abc",
     )

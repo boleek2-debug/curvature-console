@@ -1,4 +1,4 @@
-"""Tests for Task and Thread Handoff package generation."""
+"""Tests for lightweight Task and full Thread Handoff packages."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def _context(long_document: bool = False) -> ContextLoadResult:
     handoff = (
         "BEGIN-" + ("x" * 10_000) + "-END"
         if long_document
-        else "Exact next step: implement B5.1."
+        else "Exact next step: implement B5.2D."
     )
     return ContextLoadResult(
         department_id="core",
@@ -49,16 +49,26 @@ def _request(
     long_document: bool = False,
     conversation: str = "Previous local conversation.",
     policy: TransferPackagePolicy | None = None,
+    department_id: str = "core",
+    department_title: str = "Curvature Core",
 ) -> TransferPackageRequest:
     attachment = tmp_path / "failure.log"
     attachment.write_text("failure details", encoding="utf-8")
 
+    context = _context(long_document)
+    if department_id != "core":
+        context = ContextLoadResult(
+            department_id=department_id,
+            documents=context.documents,
+            errors=context.errors,
+        )
+
     return TransferPackageRequest(
         mode=mode,
-        department_id="core",
-        department_title="Curvature Core",
+        department_id=department_id,
+        department_title=department_title,
         responsibility="Architecture, implementation and tests.",
-        context=_context(long_document),
+        context=context,
         conversation_text=conversation,
         draft_text="Implement the transfer package.",
         attachments=(AttachmentRecord(path=attachment),),
@@ -66,46 +76,66 @@ def _request(
     )
 
 
-def test_task_package_contains_required_content(tmp_path: Path) -> None:
-    package = TransferPackageBuilder().build(_request(tmp_path))
-
-    assert package.mode is TransferPackageMode.TASK
-    assert package.department_id == "core"
-    assert package.included_document_count == 2
-    assert package.attachment_count == 1
-    assert "Package type: Task Package" in package.text
-    assert "You are Curvature Core." in package.text
-    assert "Implement the transfer package." in package.text
-    assert "failure.log" in package.text
-
-
-def test_task_package_compacts_long_non_role_documents(
+@pytest.mark.parametrize(
+    ("department_id", "department_title"),
+    (
+        ("project", "Curvature Project"),
+        ("core", "Curvature Core"),
+        ("research", "Curvature Research"),
+    ),
+)
+def test_task_package_is_lightweight_for_every_department(
     tmp_path: Path,
+    department_id: str,
+    department_title: str,
 ) -> None:
     package = TransferPackageBuilder().build(
-        _request(tmp_path, long_document=True)
+        _request(
+            tmp_path,
+            mode=TransferPackageMode.TASK,
+            long_document=True,
+            conversation="LOCAL-CONVERSATION-MUST-NOT-BE-SENT",
+            department_id=department_id,
+            department_title=department_title,
+        )
     )
 
-    assert package.truncated_document_count == 1
-    assert "BEGIN-" in package.text
-    assert "-END" in package.text
-    assert "middle omitted by compact Task Package" in package.text
-    assert len(package.text) < 7_000
+    assert package.mode is TransferPackageMode.TASK
+    assert package.department_id == department_id
+    assert package.included_document_count == 0
+    assert package.truncated_document_count == 0
+    assert package.conversation_was_truncated is False
+    assert "Package type: Task Package" in package.text
+    assert f"Department: {department_title}" in package.text
+    assert "Implement the transfer package." in package.text
+    assert "failure.log" in package.text
+    assert "You are Curvature Core." not in package.text
+    assert "BEGIN-" not in package.text
+    assert "-END" not in package.text
+    assert "LOCAL-CONVERSATION-MUST-NOT-BE-SENT" not in package.text
+    assert "EXISTING CONVERSATION CONTEXT" in package.text
+    assert len(package.text) < 2_500
 
 
-def test_thread_handoff_keeps_full_documents(tmp_path: Path) -> None:
+def test_thread_handoff_keeps_full_documents_and_conversation(
+    tmp_path: Path,
+) -> None:
     package = TransferPackageBuilder().build(
         _request(
             tmp_path,
             mode=TransferPackageMode.THREAD_HANDOFF,
             long_document=True,
+            conversation="Previous local conversation.",
         )
     )
 
     assert package.mode is TransferPackageMode.THREAD_HANDOFF
+    assert package.included_document_count == 2
     assert package.truncated_document_count == 0
     assert "Package type: Thread Handoff Package" in package.text
+    assert "You are Curvature Core." in package.text
     assert "x" * 10_000 in package.text
+    assert "Previous local conversation." in package.text
     assert "continuity handoff from the previous thread" in package.text
 
 
@@ -116,16 +146,17 @@ def test_builder_is_deterministic(tmp_path: Path) -> None:
     assert builder.build(request).text == builder.build(request).text
 
 
-def test_conversation_keeps_newest_characters_when_bounded(
+def test_handoff_conversation_keeps_newest_characters_when_bounded(
     tmp_path: Path,
 ) -> None:
     package = TransferPackageBuilder().build(
         _request(
             tmp_path,
+            mode=TransferPackageMode.THREAD_HANDOFF,
             conversation="OLDER-" + ("x" * 30) + "-NEWEST",
             policy=TransferPackagePolicy(
                 conversation_character_limit=12,
-                document_character_limit=4_000,
+                document_character_limit=None,
             ),
         )
     )
@@ -152,7 +183,7 @@ def test_context_department_must_match_request(tmp_path: Path) -> None:
         TransferPackageBuilder().build(mismatched)
 
 
-def test_empty_content_is_marked_explicitly() -> None:
+def test_empty_task_content_is_marked_explicitly() -> None:
     request = TransferPackageRequest(
         mode=TransferPackageMode.TASK,
         department_id="core",
@@ -166,9 +197,10 @@ def test_empty_content_is_marked_explicitly() -> None:
 
     package = TransferPackageBuilder().build(request)
 
-    assert "[No local conversation recorded]" in package.text
     assert "[No current task draft]" in package.text
     assert "[No attachments queued]" in package.text
+    assert "[No local conversation recorded]" not in package.text
+
 
 def test_response_instructions_prioritise_exact_user_task(
     tmp_path: Path,
