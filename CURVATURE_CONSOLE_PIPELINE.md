@@ -1,7 +1,7 @@
 # CURVATURE CONSOLE DEVELOPMENT PIPELINE
 
 Status: Active
-Version: 1.1.0
+Version: 1.2.0
 Owner: Curvature Core
 Last Updated: 2026-07-20
 
@@ -336,3 +336,39 @@ After the working tree is clean, begin:
 ```text
 ASSISTANT-001B5.2D — Generated File Download Capture
 ```
+
+
+---
+
+# 12. Unified Operation Trace
+
+Future cross-module operations must be observable from request to verified
+result.
+
+The minimum trace should connect, where applicable:
+
+```text
+operation ID
+→ department
+→ source context
+→ browser exchange
+→ response
+→ generated files
+→ package review
+→ repository changes
+→ tests
+→ Git state
+→ final status
+```
+
+Requirements:
+
+- every transition has an explicit state;
+- failures preserve the last verified state;
+- file writes are not reported before durable completion;
+- UI state must be derived from persisted operation state;
+- cleanup must not destroy the only diagnostic evidence of a failed operation;
+- no module may silently perform a cross-boundary side effect.
+
+This is a future architectural requirement and does not interrupt the active
+B5.2E sprint.

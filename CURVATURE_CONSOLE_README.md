@@ -1,7 +1,7 @@
 # CURVATURE CONSOLE — SOURCE OVERVIEW
 
 Status: Active
-Version: 1.2.0
+Version: 1.3.0
 Owner: Project Curvature
 Repository: `~/curvature-console`
 Last Updated: 2026-07-23
@@ -16,12 +16,13 @@ the separate `~/Curvature` repository.
 
 # Canonical Reading Order
 
-1. `CONSOLE_HANDOFF.md`
-2. `CONSOLE_DECISIONS.md`
-3. `CONSOLE_ROADMAP.md`
-4. `CONSOLE_CHANGELOG.md`
-5. `CONSOLE_PIPELINE.md`
-6. `CONSOLE_README.md`
+1. `00_CURVATURE_CONSOLE_CURRENT_STATE.md`
+2. `CURVATURE_CONSOLE_HANDOFF.md`
+3. `CURVATURE_CONSOLE_DECISIONS.md`
+4. `CURVATURE_CONSOLE_ROADMAP.md`
+5. `CURVATURE_CONSOLE_CHANGELOG.md`
+6. `CURVATURE_CONSOLE_PIPELINE.md`
+7. `CURVATURE_CONSOLE_README.md`
 
 # Repository Boundary
 
@@ -37,20 +38,23 @@ write that repository or execute Git operations in it.
 
 ```text
 Completed: ASSISTANT-001B5.2C5 — Lightweight Task Delivery
-Core verified: ASSISTANT-001B5.2R — Deterministic Browser Bridge Rewrite
-Rollout next: dedicated Project and Research conversations
-Paused: ASSISTANT-001B5.2D — Generated File Download Capture
+Completed: ASSISTANT-001B5.2R — Deterministic Browser Bridge Rewrite
+Completed: Dual-repository workspace context sources
+Completed: all three dedicated department routes and restart verification
+Completed: ASSISTANT-001B5.2D — Generated File Download Capture
+Active next: ASSISTANT-001B5.2E — Package Review and Safe Apply
 ```
 
 Current verification:
 
 ```text
-61 automated tests passed
-live Core responses:
-- CORE_BRIDGE_REWRITE_OK
-- CORE_RESTART_ROUTE_OK
-- CORE_SECOND_REQUEST_OK
-controlled request-page closure: explicit failure, no false response stored
+69 automated tests passed
+commit 817860e pushed
+main == origin/main
+working tree clean
+Project/Core/Research routes verified after restart
+generated ZIP verified with CORE_DOWNLOAD_CAPTURE_OK
+download record persisted after restart
 ```
 
 # Active Architecture
@@ -129,9 +133,8 @@ exchange to an immutable `request_id` and `department_id`.
 Each Console department uses a dedicated Console-only conversation inside the
 shared ChatGPT Project.
 
-Core is the first verified operational department. Project and Research are
-activated only after their own dedicated conversations receive full Thread
-Handoffs and their routes pass live verification.
+Core, Project and Research each have a dedicated Console-only conversation.
+All three routes and their restart persistence have passed live verification.
 
 # Hybrid Browser Ownership Rule
 
@@ -156,3 +159,25 @@ Console roles and operational documentation use the canonical
 world and project-state documents remain authoritative in `~/Curvature`.
 
 Context Preview displays the source identifier for every loaded document.
+
+
+# Generated File Capture
+
+Generated files are stored outside both repositories:
+
+```text
+~/.local/share/curvature-console/download-inbox/
+```
+
+A file is registered only after authenticated retrieval, non-empty validation
+and atomic write complete successfully. Download records remain isolated by
+department and persist across Console restart.
+
+# Strategic Control-Plane Direction
+
+Curvature Console is expected to become the central control plane for the whole
+Curvature project.
+
+It will coordinate and observe specialised modules through structured operation
+state and a future unified execution ledger. This direction does not replace
+domain-specific sources of truth or current milestone boundaries.

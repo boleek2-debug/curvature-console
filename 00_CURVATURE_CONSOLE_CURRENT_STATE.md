@@ -4,144 +4,215 @@ Status: Active
 Last Updated: 2026-07-23
 Repository: `~/curvature-console`
 Branch: `main`
-Current pushed commit: `417f59a Rewrite deterministic ChatGPT browser bridge`
+Current pushed commit: `817860e Add generated file download capture`
 
 ---
 
 # Purpose
 
-This file is the concise current operational state for Curvature Console.
+This document is the concise operational source of truth for Curvature Console.
 
-It is a canonical source used both:
+The same canonical Console documents are used:
 
 - locally by Curvature Console;
-- as a copy in the shared ChatGPT Project `Curvature` Sources.
+- as uploaded copies in the shared ChatGPT Project `Curvature` Sources.
 
 ---
 
 # Verified Baseline
 
 ```text
-61 automated tests passed before the dual-source context change
+69 automated tests passed
 git diff --check passed
-commit 417f59a pushed
-main → origin/main
-```
-
-The dual-source context implementation currently adds two automated tests,
-bringing the local verification target to:
-
-```text
-63 automated tests
+commit 817860e pushed
+main == origin/main
+working tree clean
 ```
 
 ---
 
 # Source Model
 
-Curvature Console uses two distinct authoritative source roots:
+Curvature Console loads two distinct authoritative source roots:
 
 ```text
 console   → ~/curvature-console
 curvature → ~/Curvature
 ```
 
-Console-specific context includes:
+Console-specific state, roles, decisions and implementation planning remain in:
 
-- canonical department roles;
-- Console handoff;
-- Console decisions;
-- Console roadmap;
-- Console changelog;
-- this current-state file.
+```text
+~/curvature-console
+```
 
-Project Curvature context includes:
+Project Curvature vision, architecture, world, language and project state remain
+in:
 
-- Project handoff;
-- architecture;
-- roadmap;
-- world and language documentation;
-- other department-relevant project documents.
+```text
+~/Curvature
+```
 
-Each document remains authoritative in its own repository.
+Every loaded document retains its source label in Context Preview.
+
+Verified context counts:
+
+```text
+Project  — 8 loaded · 0 errors
+Core     — 10 loaded · 0 errors
+Research — 8 loaded · 0 errors
+```
 
 ---
 
-# Browser Bridge State
+# Department Routing State
 
-Implemented and verified for Core:
+All three departments use dedicated Console-only conversations inside the one
+shared ChatGPT Project named `Curvature`.
+
+Verified:
+
+```text
+Core      — route and restart persistence verified
+Project   — PROJECT_ROUTE_OK
+Project   — PROJECT_RESTART_ROUTE_OK
+Research  — RESEARCH_ROUTE_OK
+Research  — RESEARCH_RESTART_ROUTE_OK
+```
+
+Routing remains:
+
+```text
+department_id
+→ persisted active_conversation_url
+```
+
+Conversation titles and sidebar order are never routing keys.
+
+---
+
+# Completed Browser-Bridge State
+
+Implemented and verified:
 
 - immutable request identifiers;
-- URL-only department routing;
-- exact persisted conversation URL;
-- dedicated request page;
-- request/response correlation;
+- request-bound department identifiers;
+- exact persisted conversation URLs;
+- one dedicated request page per exchange;
+- visible request-marker confirmation;
+- exact new-response capture;
+- originating-panel-only response delivery;
 - explicit failure on request-page closure;
 - no false response persistence;
-- draft preservation after failure;
-- preservation of unrelated Chrome sessions.
+- task-draft preservation after failure;
+- preservation of unrelated Chrome sessions;
+- lightweight normal Task payload;
+- full continuity reserved for Thread Handoff.
 
-Live Core verification markers:
+---
+
+# Completed B5.2D — Generated File Download Capture
+
+Delivered and live-verified:
+
+- response-scoped generated-file control detection;
+- support for rendered JavaScript-only file controls without normal `href`;
+- request URL capture before Chrome native Save As handling;
+- authenticated file retrieval through the active browser session;
+- no required manual Save As workflow;
+- Console Download Inbox outside both repositories;
+- original filename preservation;
+- collision-safe filenames;
+- non-empty response validation;
+- atomic file write;
+- SQLite metadata persistence;
+- department, request and conversation association;
+- per-department Downloads list;
+- restart persistence;
+- immediate UI refresh after successful registration;
+- restoration of the dedicated conversation after request interception.
+
+Download Inbox:
 
 ```text
-CORE_BRIDGE_REWRITE_OK
-CORE_RESTART_ROUTE_OK
-CORE_SECOND_REQUEST_OK
+~/.local/share/curvature-console/download-inbox/
+```
+
+Live verification:
+
+```text
+generated file: core-download-test.zip
+saved collision-safe file: core-download-test(7).zip
+ZIP size: 155 bytes
+contained file: verification.txt
+contained text: CORE_DOWNLOAD_CAPTURE_OK
+Downloads counter increased after a second capture
+download record survived Console restart
+no final chrome-error://chromewebdata/ route warning
 ```
 
 ---
 
-# Department Rollout State
+# Current Milestone
 
 ```text
-Core      — dedicated Console-only conversation active and verified
-Project   — dedicated Console-only conversation not created yet
-Research  — dedicated Console-only conversation not created yet
+ASSISTANT-001B5.2E — Package Review and Safe Apply
 ```
+
+B5.2E must preserve the trust boundary established by B5.2D:
+
+```text
+ChatGPT generated file
+→ Console Download Inbox
+→ Package Review
+→ explicit user approval
+→ safe repository application
+→ Git diff
+```
+
+No automatic commit or push is permitted.
 
 ---
 
-# Current Goal
+# Strategic Direction
 
-Implement and verify `ASSISTANT-001B5.2D — Generated File Download Capture`.
+Curvature Console is expected to grow into the central control plane for the
+whole Curvature project.
 
-Required verification:
+That direction does not mean one module performs all work. Console coordinates,
+observes, validates and records the work of specialised modules.
 
-1. all three workspaces load their canonical Console role;
-2. all three workspaces load documents from both named roots;
-3. Context Preview reports zero errors;
-4. tests and `git diff --check` pass;
-5. the change is committed and pushed.
+A future unified operation trace must connect:
+
+```text
+request
+→ department
+→ conversation
+→ source context
+→ response
+→ generated files
+→ package review
+→ repository application
+→ tests
+→ Git state
+→ final result
+```
+
+This is a strategic architecture direction, not permission to bypass current
+milestone boundaries.
 
 ---
 
 # Exact Next Step
 
-1. Verify Core Context Preview.
-2. Confirm both `console:` and `curvature:` document labels.
-3. Confirm zero load errors.
-4. Repeat for Project and Research.
-5. Commit and push the dual-source context change.
-6. Continue the Core handoff workflow.
-7. Create and verify dedicated Project and Research conversations.
-8. Resume `ASSISTANT-001B5.2D — Generated File Download Capture` only after all
-   three department routes pass live verification.
-
-
----
-
-# B5.2D Implementation Candidate
-
-The current package adds:
-
-- generated-file link detection scoped to the new assistant response;
-- Playwright download-event capture;
-- automatic per-user download inbox creation;
-- original filename preservation;
-- collision-safe filenames;
-- request, department and conversation association;
-- SQLite persistence;
-- per-department downloaded-file list;
-- automated bridge, persistence and UI tests.
-
-Live browser verification is still required before B5.2D is accepted.
+1. Start `ASSISTANT-001B5.2E — Package Review and Safe Apply`.
+2. Inspect the current repository before implementation.
+3. Define the machine-readable package manifest contract.
+4. Validate repository identity and repository-relative paths.
+5. reject absolute paths, traversal, unsafe ZIP entries and escaping symlinks.
+6. classify Create, Replace, Conflict and Skip actions.
+7. provide a complete Package Review screen.
+8. require one explicit Apply approval.
+9. back up replaced files.
+10. show the post-apply Git diff.
+11. do not commit or push automatically.

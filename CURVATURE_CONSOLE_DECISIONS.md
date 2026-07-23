@@ -1,7 +1,7 @@
 # CURVATURE CONSOLE ARCHITECTURE DECISIONS
 
 Status: Active
-Version: 1.2.0
+Version: 1.3.0
 Owner: Project Curvature
 Last Updated: 2026-07-23
 
@@ -611,3 +611,79 @@ copies uploaded to shared ChatGPT Project Sources.
 - no `../` traversal is required;
 - source provenance is visible in Context Preview and Thread Handoff;
 - each repository retains its own authoritative files.
+
+
+---
+
+# ADR-014 — Curvature Console as Project Control Plane
+
+Status: Accepted strategic direction
+Date: 2026-07-23
+
+## Context
+
+Generated-file capture demonstrated that a visible result may pass through
+multiple independent layers:
+
+```text
+ChatGPT response
+→ rendered UI control
+→ browser request
+→ local file
+→ SQLite record
+→ department UI
+```
+
+Without one coordinating system, each layer exposes only part of the operation
+and failures become difficult to diagnose.
+
+The same problem will recur across repositories, tests, research intake, remote
+machines, AI runtimes, asset pipelines and later World Core operations.
+
+## Decision
+
+Curvature Console will evolve into the central control plane for Project
+Curvature.
+
+Its role is to:
+
+- coordinate specialised modules;
+- preserve department authority;
+- observe operation state;
+- validate transitions;
+- record provenance;
+- expose failures;
+- provide one trace from request to verified result.
+
+Console does not become the owner of every subsystem's domain truth. It
+coordinates systems whose own sources of truth remain authoritative.
+
+A future unified execution ledger should record, where relevant:
+
+```text
+operation_id
+request_id
+department_id
+conversation_url
+source context
+response
+generated files
+repository target
+review decision
+applied changes
+tests
+Git state
+final status
+failure details
+timestamps
+```
+
+## Consequences
+
+- observability becomes an architectural requirement rather than optional
+  logging;
+- modules must expose structured operation state;
+- cross-module actions must preserve provenance;
+- silent background side effects are rejected;
+- Package Apply and later automation should integrate with one operation trace;
+- the direction is strategic and must not bypass current milestone sequencing.

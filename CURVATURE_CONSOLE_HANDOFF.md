@@ -1,7 +1,7 @@
 # CURVATURE CONSOLE HANDOFF
 
 Status: Active
-Version: 0.9.0
+Version: 1.0.0
 Owner: Project Curvature
 Last Updated: 2026-07-23
 
@@ -9,282 +9,261 @@ Last Updated: 2026-07-23
 
 # 1. Mission
 
-Curvature Console is a standalone internal coordination application for Project Curvature.
+Curvature Console is the internal coordination and control-plane application for
+Project Curvature.
 
 It maintains three permanent and equal workspaces:
 
-- Curvature Project
-- Curvature Core
-- Curvature Research
+- Curvature Project;
+- Curvature Core;
+- Curvature Research.
 
-The Console preserves department context and local state, sends controlled packages through the user's existing ChatGPT Plus session, retrieves responses, and routes them back to the originating department without using the paid OpenAI API.
+It preserves context, authority boundaries, browser routing, local state,
+responses, attachments and generated files without using the paid OpenAI API.
 
 ---
 
-# 2. Repository and Documentation Boundaries
+# 2. Repository Boundaries
 
-Curvature Console repository:
+Curvature Console:
 
 ```text
 ~/curvature-console
 ```
 
-Project Curvature repository:
+Project Curvature:
 
 ```text
 ~/Curvature
 ```
 
-Canonical Console documents:
+Current rule:
 
-```text
-CONSOLE_README.md
-CONSOLE_HANDOFF.md
-CONSOLE_ROADMAP.md
-CONSOLE_CHANGELOG.md
-CONSOLE_DECISIONS.md
-CONSOLE_PIPELINE.md
-```
-
-Console currently reads Project Curvature context but does not automatically edit that repository or perform Git operations.
+- Console may read both repositories;
+- Console-specific files remain authoritative in `~/curvature-console`;
+- Project Curvature files remain authoritative in `~/Curvature`;
+- B5.2E may apply an explicitly reviewed package only after user approval;
+- automatic commit and push remain prohibited.
 
 ---
 
-# 3. Verified Active Architecture
-
-ChatGPT uses one shared Project:
+# 3. Canonical Console Documents
 
 ```text
-ChatGPT Project: Curvature
+00_CURVATURE_CONSOLE_CURRENT_STATE.md
+CURVATURE_CONSOLE_HANDOFF.md
+CURVATURE_CONSOLE_DECISIONS.md
+CURVATURE_CONSOLE_ROADMAP.md
+CURVATURE_CONSOLE_CHANGELOG.md
+CURVATURE_CONSOLE_README.md
+CURVATURE_CONSOLE_PIPELINE.md
+CURVATURE_CONSOLE_REPOSITORY_README.md
+CURVATURE_CONSOLE_ROLE_CORE.md
+CURVATURE_CONSOLE_ROLE_PROJECT.md
+CURVATURE_CONSOLE_ROLE_RESEARCH.md
 ```
 
-The three Console departments use separate conversations inside that shared Project.
-
-Routing never depends on mutable conversation titles, sidebar labels, or visual order.
-
-```text
-department_id
-→ active_conversation_url stored in SQLite
-→ project-scoped ChatGPT conversation
-```
-
-The shared Project URL is used only when creating a new conversation:
-
-```text
-https://chatgpt.com/g/g-p-6a5ccf24ed988191b1589e5beca5b7c5/project
-```
-
-Verified conversation URL forms:
-
-```text
-https://chatgpt.com/c/<conversation-id>
-https://chatgpt.com/g/<project-id>/c/<conversation-id>
-```
-
-Current browser workflow:
-
-```text
-one-click Task
-→ deterministic Task Package
-→ Playwright over localhost CDP
-→ dedicated logged-in Chrome profile
-→ active department conversation URL
-→ automatic send
-→ automatic response retrieval
-→ originating Console panel
-→ SQLite persistence
-```
-
-Thread Handoff remains the only send action requiring confirmation.
+The same canonical filenames are used locally and in shared ChatGPT Project
+Sources.
 
 ---
 
-# 4. Completed and Verified Work
-
-Completed foundations:
-
-- ASSISTANT-001B1 — Repository and Application Foundation
-- ASSISTANT-001B2 — Three-Panel Desktop Shell
-- Per-Department Attachment Queues
-- ASSISTANT-001B3 — Workspace Configuration and Context Loading
-- ASSISTANT-001B4 — Local State and Conversation Persistence
-- ASSISTANT-001B5.1 — Task and Thread Handoff Packages
-- ASSISTANT-001B5.2A — Browser Bridge Foundation
-
-Current implementation closeout:
+# 4. Current Verified Repository State
 
 ```text
-ASSISTANT-001B5.2B — Browser Lifecycle and One-Click UX
-ASSISTANT-001B5.2C — Durable URL-Only Conversation Routing
+branch: main
+commit: 817860e Add generated file download capture
+tests: 69 passed
+git diff --check: passed
+main == origin/main
+working tree: clean
+```
+
+Previous closeout:
+
+```text
+87ec797 Add dual-repository workspace context sources
+```
+
+---
+
+# 5. Dual-Source Context State
+
+Named roots:
+
+```text
+console   → ~/curvature-console
+curvature → ~/Curvature
 ```
 
 Verified:
 
-- normal Task sending requires one click;
-- Thread Handoff retains one confirmation;
-- only the originating department panel is disabled during its exchange;
-- other department panels remain usable;
-- browser lifecycle failures return explicit errors instead of leaving the UI stuck;
-- headless failure can fall back to visible Chrome;
-- response retrieval and local persistence work;
-- routing does not use conversation titles;
-- project-scoped conversation URLs are accepted;
-- a successful live Core exchange returned `PROJECT_SCOPED_ROUTE_OK`;
-- full automated suite passed with `56 passed`.
+```text
+Project  — 8 loaded · 0 errors
+Core     — 10 loaded · 0 errors
+Research — 8 loaded · 0 errors
+```
+
+Each loaded document displays `console:` or `curvature:` provenance.
 
 ---
 
-# 5. Current Working Tree
+# 6. Department Route State
 
-Current repository baseline:
+All three departments use dedicated Console-only conversations inside one shared
+ChatGPT Project named `Curvature`.
 
-```text
-branch: main
-commit before rewrite: b557ce6eb5556277d0b65114b3f5893c302d78b2
-main == origin/main before the uncommitted rewrite
-61 automated tests passed
-git diff --check passed
-```
-
-B5.2C5 lightweight Task delivery is implemented and verified in code:
-
-- normal `Send Task` omits full role documents;
-- normal `Send Task` omits repository documentation;
-- normal `Send Task` omits local conversation history;
-- full continuity remains exclusive to `Send Thread Handoff`.
-
-B5.2R deterministic browser routing is implemented.
-
-Verified Core contract:
+Verified live and after restart:
 
 ```text
-one request_id
-→ one department_id
-→ one persisted Core conversation URL
-→ one dedicated request page
-→ one confirmed user message
-→ one confirmed assistant response
-→ one request-bound Core panel result
+Core      — operational and restart-safe
+Project   — PROJECT_ROUTE_OK
+Project   — PROJECT_RESTART_ROUTE_OK
+Research  — RESEARCH_ROUTE_OK
+Research  — RESEARCH_RESTART_ROUTE_OK
 ```
 
-Live Core verification completed:
-
-- dedicated Core conversation created;
-- Core route updated in SQLite;
-- exact Core route opened;
-- request marker persisted in the web conversation;
-- `CORE_BRIDGE_REWRITE_OK` returned correctly;
-- restart route returned `CORE_RESTART_ROUTE_OK`;
-- second request returned `CORE_SECOND_REQUEST_OK`;
-- dedicated request tab opened and closed;
-- browser pages not owned by Console remained open;
-- Console-owned hybrid browser lifecycle completed cleanly;
-- manually closing the request page produced an explicit error;
-- the interrupted request did not store a false response;
-- the task draft remained available after failure.
-
-Project and Research are intentionally not yet activated on the rewritten bridge.
-They will receive dedicated Console-only conversations after the Core workflow
-handoff is accepted.
-
-B5.2D remains paused until the deterministic bridge is rolled out and verified
-for all three departments.
-
-# 6. Exact Next Step
-
-1. Apply the dual-repository context-source package.
-2. Verify Context Preview for Core:
-   - canonical Core role from `~/curvature-console`;
-   - Console operational documents from `~/curvature-console`;
-   - Project Curvature architecture and state from `~/Curvature`;
-   - no load errors.
-3. Run the complete automated test suite and `git diff --check`.
-4. Commit and push the dual-source configuration.
-5. Generate a full Core Thread Handoff Package.
-6. Confirm that the handoff visibly identifies both `console:` and
-   `curvature:` source documents.
-7. Send the handoff to the dedicated Core conversation and confirm continuity.
-8. Create dedicated Project and Research conversations using the same model.
-9. Resume B5.2D only after all three routes pass live verification.
-
-# 7. Next Sprint Scope
-
-B5.2D must:
-
-- capture files generated by the active ChatGPT response;
-- save them to a Console-controlled Download Inbox outside repositories;
-- bind every file to its department, exchange and conversation URL;
-- preserve safe filenames without silent overwrite;
-- report download success and failure visibly;
-- remain testable without live ChatGPT.
-
-Repository application is not part of B5.2D.
-
-Safe package review and repository Apply belong to B5.2E.
+Routes are persisted in SQLite and keyed only by immutable `department_id`.
 
 ---
 
-# 8. Runtime Paths
+# 7. Completed B5.2D
 
-Chrome executable:
+`ASSISTANT-001B5.2D — Generated File Download Capture` is complete, verified,
+committed and pushed.
 
-```text
-/usr/bin/google-chrome-stable
-```
+Delivered:
 
-Dedicated browser profile:
+- generated-file detection scoped to the new assistant response;
+- support for JavaScript-only download controls;
+- authenticated session download;
+- Download Inbox outside repositories;
+- atomic non-empty file writes;
+- original and collision-safe filenames;
+- SQLite file records;
+- request, department and conversation association;
+- per-department UI records;
+- restart persistence;
+- correct UI refresh;
+- conversation restoration after interception.
 
-```text
-~/curvature-console/data/browser-profile/
-```
-
-CDP endpoint:
-
-```text
-http://127.0.0.1:9222
-```
-
-SQLite state:
-
-```text
-~/curvature-console/data/curvature_console.sqlite3
-```
-
-Attachments:
+Inbox:
 
 ```text
-~/curvature-console/data/attachments/<department>/
+~/.local/share/curvature-console/download-inbox/
 ```
 
-The browser profile contains private session data and must never be committed or included in implementation packages.
+Live proof:
+
+```text
+core-download-test(7).zip
+155 bytes
+verification.txt
+CORE_DOWNLOAD_CAPTURE_OK
+Downloads counter increased
+record survived restart
+```
 
 ---
 
-# 9. Engineering Rules
+# 8. Important Implementation Lessons
+
+The ChatGPT-generated file control may:
+
+- appear as a rendered button rather than a normal anchor;
+- contain no direct `href`;
+- trigger a JavaScript request;
+- delegate to Chrome's native Save As workflow if clicked normally.
+
+The accepted implementation therefore captures the generated-file request URL
+and retrieves the content through the authenticated browser session rather than
+depending on manual Save As.
+
+A successful file must not be registered until:
+
+- HTTP retrieval succeeds;
+- response body is non-empty;
+- atomic write completes;
+- final file size is greater than zero.
+
+---
+
+# 9. Strategic Control-Plane Direction
+
+Curvature Console is expected to become the central project control plane.
+
+Its role is to coordinate and observe specialised systems, not silently absorb
+their authority.
+
+Future operations should be traceable across:
+
+```text
+request_id
+department_id
+conversation_url
+source documents
+assistant response
+generated files
+package review
+repository target
+applied files
+test results
+Git state
+final operation status
+```
+
+A unified execution ledger is an approved strategic direction for later
+architecture work. It must not interrupt the active B5.2E sprint.
+
+---
+
+# 10. Active Milestone
+
+```text
+ASSISTANT-001B5.2E — Package Review and Safe Apply
+```
+
+Required deliverables:
+
+- machine-readable package manifest;
+- target repository identity;
+- ZIP-root contract;
+- repository-relative path validation;
+- absolute-path and traversal rejection;
+- unsafe entry and symlink rejection;
+- Create / Replace / Conflict / Skip classification;
+- complete review before mutation;
+- one explicit Apply approval;
+- backups for replaced files;
+- controlled writes;
+- post-apply Git diff;
+- no automatic commit or push.
+
+---
+
+# 11. Exact Next Step
+
+1. Take a fresh implementation snapshot only when B5.2E work begins.
+2. Inspect current package, state-store and UI boundaries.
+3. define and test the manifest schema before repository writes.
+4. keep B5.2D Download Inbox immutable as the intake boundary.
+5. implement review before apply.
+6. stop on every unsafe or ambiguous package condition.
+7. test → live verify → document → commit → push.
+
+---
+
+# 12. Engineering Rules
 
 1. Never guess.
-2. Inspect current files before modifying uncertain code.
+2. Request current files when uncertain.
 3. Deliver complete replacement files.
-4. Label files as replace, create or leave unchanged.
+4. Label every file action.
 5. One sprint has one goal.
-6. Test → live verification → documentation → commit → push.
-7. Route by stable stored URLs, never mutable titles.
-8. Keep departments operationally isolated.
-9. No hidden paid operations.
-10. Browser failures must be explicit and recoverable.
-11. Generated files enter an inbox before any repository write.
-12. Repository changes require explicit review and approval.
-
-
----
-
-# B5.2D Current Step
-
-1. Apply the B5.2D implementation package.
-2. Run the complete automated test suite and `git diff --check`.
-3. Start Curvature Console and verify all three contexts remain error-free.
-4. In Core, request one small generated ZIP file through `Send Task`.
-5. Confirm that Console captures the file automatically.
-6. Confirm the file appears in the Core download list and survives restart.
-7. Confirm collision-safe naming with a second file using the same name.
-8. Commit and push only after live verification.
+6. Verify displayed state.
+7. Test before commit.
+8. Commit before push.
+9. Keep documentation current.
+10. Use English for code and documentation.
+11. Use Polish for development discussion.
+12. Do not create hidden paid operations.

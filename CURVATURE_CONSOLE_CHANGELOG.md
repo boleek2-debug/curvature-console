@@ -1,9 +1,64 @@
 # CURVATURE CONSOLE CHANGELOG
 
 Status: Active
-Version: 0.8.0
+Version: 0.9.0
 Owner: Project Curvature
 Last Updated: 2026-07-23
+
+---
+
+## 2026-07-23
+
+### ASSISTANT-001B5.2D — Generated File Download Capture
+
+Completed, live-verified, committed and pushed.
+
+Commit:
+
+```text
+817860e Add generated file download capture
+```
+
+Delivered:
+
+- generated-file detection scoped to the new assistant response;
+- support for rendered JavaScript-only file controls;
+- generated-file request URL capture;
+- authenticated browser-session retrieval;
+- Console Download Inbox outside both repositories;
+- original filename preservation;
+- collision-safe filenames;
+- non-empty body validation;
+- atomic writes;
+- SQLite generated-download records;
+- request, department and conversation linkage;
+- per-department Downloads list;
+- immediate UI refresh;
+- restart persistence;
+- conversation restoration after request interception.
+
+Verified:
+
+```text
+69 automated tests passed
+git diff --check passed
+core-download-test(7).zip
+155 bytes
+verification.txt
+CORE_DOWNLOAD_CAPTURE_OK
+Downloads counter increased after a second capture
+download record survived Console restart
+no final chrome-error://chromewebdata/ warning
+main == origin/main
+working tree clean
+```
+
+Result:
+
+Curvature Console can now receive a generated file from the active ChatGPT
+response, store it safely outside the repositories, preserve provenance, and
+show the persistent record in the correct department panel without requiring a
+manual Save As workflow.
 
 ---
 
@@ -316,19 +371,3 @@ Environment decision:
 - Curvature Console is installed in editable mode;
 - Playwright is an explicit Python dependency;
 - the approved browser runtime is system Google Chrome controlled through CDP.
-
-
----
-
-## 2026-07-23 — B5.2D Implementation Candidate
-
-Prepared, not yet accepted:
-
-- response-scoped generated-file detection;
-- Playwright download capture;
-- collision-safe inbox storage;
-- SQLite download metadata;
-- per-department download records in the UI;
-- automated tests for link detection, filename safety, persistence and UI display.
-
-Completion remains pending automated verification in the project environment and live ChatGPT generated-file capture.
