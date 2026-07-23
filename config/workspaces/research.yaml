@@ -1,9 +1,21 @@
 department_id: research
 title: Curvature Research
-role_file: ~/curvature-console/roles/research.md
-repository_path: ~/Curvature
+role_file: ~/curvature-console/CURVATURE_CONSOLE_ROLE_RESEARCH.md
+sources:
+  curvature: ~/Curvature
+  console: ~/curvature-console
 documents:
-  - LANGUAGE.md
-  - CURVATURE.md
-  - ROADMAP.md
-  - HANDOFF.md
+  - source: console
+    path: 00_CURVATURE_CONSOLE_CURRENT_STATE.md
+  - source: console
+    path: CURVATURE_CONSOLE_HANDOFF.md
+  - source: console
+    path: CURVATURE_CONSOLE_ROADMAP.md
+  - source: curvature
+    path: LANGUAGE.md
+  - source: curvature
+    path: CURVATURE.md
+  - source: curvature
+    path: ROADMAP.md
+  - source: curvature
+    path: HANDOFF.md

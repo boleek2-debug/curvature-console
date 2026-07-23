@@ -1,9 +1,21 @@
 department_id: project
 title: Curvature Project
-role_file: ~/curvature-console/roles/project.md
-repository_path: ~/Curvature
+role_file: ~/curvature-console/CURVATURE_CONSOLE_ROLE_PROJECT.md
+sources:
+  curvature: ~/Curvature
+  console: ~/curvature-console
 documents:
-  - CURVATURE.md
-  - BLUEPRINT.md
-  - ROADMAP.md
-  - HANDOFF.md
+  - source: console
+    path: 00_CURVATURE_CONSOLE_CURRENT_STATE.md
+  - source: console
+    path: CURVATURE_CONSOLE_HANDOFF.md
+  - source: console
+    path: CURVATURE_CONSOLE_ROADMAP.md
+  - source: curvature
+    path: CURVATURE.md
+  - source: curvature
+    path: BLUEPRINT.md
+  - source: curvature
+    path: ROADMAP.md
+  - source: curvature
+    path: HANDOFF.md

@@ -192,24 +192,20 @@ for all three departments.
 
 # 6. Exact Next Step
 
-1. Apply this documentation closeout package.
-2. Run:
-   - complete automated tests;
-   - `git diff --check`;
-   - `git status --short`.
-3. Commit and push the B5.2C5 and B5.2R implementation with current documentation.
-4. Generate a full Core Thread Handoff Package.
-5. Send the handoff through Console to the dedicated Core conversation.
-6. Confirm that dedicated Core understands:
-   - the current repository state;
-   - the deterministic bridge architecture;
-   - the completed Core verification;
-   - that Project and Research still require dedicated Console-only conversations;
-   - that B5.2D remains paused.
-7. Continue normal development through Curvature Console.
-8. Create and activate dedicated Project and Research conversations using the
-   same verified model.
-9. Resume B5.2D only after all three department routes pass live verification.
+1. Apply the dual-repository context-source package.
+2. Verify Context Preview for Core:
+   - canonical Core role from `~/curvature-console`;
+   - Console operational documents from `~/curvature-console`;
+   - Project Curvature architecture and state from `~/Curvature`;
+   - no load errors.
+3. Run the complete automated test suite and `git diff --check`.
+4. Commit and push the dual-source configuration.
+5. Generate a full Core Thread Handoff Package.
+6. Confirm that the handoff visibly identifies both `console:` and
+   `curvature:` source documents.
+7. Send the handoff to the dedicated Core conversation and confirm continuity.
+8. Create dedicated Project and Research conversations using the same model.
+9. Resume B5.2D only after all three routes pass live verification.
 
 # 7. Next Sprint Scope
 

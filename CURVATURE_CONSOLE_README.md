@@ -140,3 +140,19 @@ The request page is always temporary.
 Console may close only browser resources it owns. Existing user browser sessions
 remain untouched. Console-owned browser processes may be closed when their
 exchange lifecycle ends.
+
+
+# Dual Repository Context
+
+Every department workspace loads from two named, read-only source roots:
+
+```text
+console   → ~/curvature-console
+curvature → ~/Curvature
+```
+
+Console roles and operational documentation use the canonical
+`CURVATURE_CONSOLE_*` files. Project Curvature vision, architecture, language,
+world and project-state documents remain authoritative in `~/Curvature`.
+
+Context Preview displays the source identifier for every loaded document.

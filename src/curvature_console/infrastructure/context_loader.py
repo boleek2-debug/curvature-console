@@ -55,7 +55,7 @@ class ContextLoadResult:
 
 
 class WorkspaceContextLoader:
-    """Load role and repository documents for a workspace."""
+    """Load role and documents from one or more safe repository roots."""
 
     def load(self, config: WorkspaceConfig) -> ContextLoadResult:
         documents: list[ContextDocument] = []
@@ -76,19 +76,31 @@ class WorkspaceContextLoader:
                 )
             )
 
-        reader = RepositoryReader(config.repository_path)
+        readers = {
+            source.source_id: RepositoryReader(source.root_path)
+            for source in config.sources
+        }
 
-        for relative_path in config.documents:
+        for document_config in config.document_sources:
+            reader = readers[document_config.source_id]
+            source_root = config.source_path(document_config.source_id)
+            relative_path = document_config.relative_path
+
             try:
                 content = reader.read_text(relative_path)
             except RepositoryReadError as exc:
-                errors.append(str(exc))
+                errors.append(
+                    f"[{document_config.source_id}] {exc}"
+                )
                 continue
 
             documents.append(
                 ContextDocument(
-                    label=str(relative_path),
-                    source_path=config.repository_path / relative_path,
+                    label=(
+                        f"{document_config.source_id}:"
+                        f"{relative_path}"
+                    ),
+                    source_path=source_root / relative_path,
                     content=content,
                 )
             )

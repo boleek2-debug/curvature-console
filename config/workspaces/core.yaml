@@ -1,10 +1,25 @@
 department_id: core
 title: Curvature Core
-role_file: ~/curvature-console/roles/core.md
-repository_path: ~/Curvature
+role_file: ~/curvature-console/CURVATURE_CONSOLE_ROLE_CORE.md
+sources:
+  curvature: ~/Curvature
+  console: ~/curvature-console
 documents:
-  - HANDOFF.md
-  - BLUEPRINT.md
-  - ROADMAP.md
-  - PIPELINE.md
-  - ASSISTANT_ARCHITECTURE.md
+  - source: console
+    path: 00_CURVATURE_CONSOLE_CURRENT_STATE.md
+  - source: console
+    path: CURVATURE_CONSOLE_HANDOFF.md
+  - source: console
+    path: CURVATURE_CONSOLE_DECISIONS.md
+  - source: console
+    path: CURVATURE_CONSOLE_ROADMAP.md
+  - source: console
+    path: CURVATURE_CONSOLE_CHANGELOG.md
+  - source: curvature
+    path: HANDOFF.md
+  - source: curvature
+    path: BLUEPRINT.md
+  - source: curvature
+    path: ROADMAP.md
+  - source: curvature
+    path: ASSISTANT_ARCHITECTURE.md

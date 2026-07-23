@@ -565,3 +565,49 @@ Browser ownership rules:
 - Console may run with an existing browser or with its own hybrid fallback;
 - Thread Handoff is the continuity mechanism when activating a new dedicated
   conversation.
+
+
+---
+
+# ADR-013 — Dual Repository Context Sources
+
+Status: Accepted
+Date: 2026-07-23
+
+## Context
+
+Curvature Console requires two distinct authoritative source sets:
+
+- Console roles, operational state, decisions and implementation roadmap from
+  `~/curvature-console`;
+- Project Curvature vision, architecture, world, language and project state from
+  `~/Curvature`.
+
+A workspace with only one repository root cannot load both sets without unsafe
+path traversal or duplicated files.
+
+## Decision
+
+Workspace configuration supports named repository roots.
+
+The canonical source identifiers are:
+
+```text
+console   → ~/curvature-console
+curvature → ~/Curvature
+```
+
+Each configured document explicitly declares its source and repository-relative
+path. `RepositoryReader` continues to enforce containment independently inside
+each named root.
+
+The canonical `CURVATURE_CONSOLE_*` files are used locally by Console and as
+copies uploaded to shared ChatGPT Project Sources.
+
+## Consequences
+
+- Console keeps full awareness of both repositories;
+- Console-specific and Project Curvature documents remain distinct;
+- no `../` traversal is required;
+- source provenance is visible in Context Preview and Thread Handoff;
+- each repository retains its own authoritative files.
