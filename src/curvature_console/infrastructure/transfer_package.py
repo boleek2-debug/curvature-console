@@ -101,10 +101,14 @@ class TransferPackageBuilder:
         repository documents or local conversation transcript.
         """
 
+        authoritative_context, included_documents = (
+            self._task_authoritative_context_section(request.context)
+        )
         sections = [
             self._header(request),
             self._authority_section(request),
             self._task_context_rule_section(),
+            authoritative_context,
             self._draft_section(request.draft_text),
             self._attachment_section(request.attachments),
             self._instructions_section(request),
@@ -118,7 +122,7 @@ class TransferPackageBuilder:
             ).rstrip() + "\n",
             conversation_was_truncated=False,
             truncated_document_count=0,
-            included_document_count=0,
+            included_document_count=included_documents,
             attachment_count=len(request.attachments),
         )
 
@@ -218,15 +222,71 @@ class TransferPackageBuilder:
                 "",
                 "This is a normal task in the department's existing ChatGPT "
                 "conversation.",
-                "Use the conversation history and shared Project Sources already "
-                "available in ChatGPT.",
-                "The Console intentionally does not resend full role documents, "
-                "repository documentation or local conversation history for "
-                "normal tasks.",
+                "Use the existing conversation history for continuity.",
+                "The authoritative local Console state and handoff documents "
+                "included below override stale ChatGPT Project Sources or older "
+                "conversation statements when they conflict.",
+                "The Console intentionally does not resend the full role, full "
+                "repository documentation or local transcript for normal tasks.",
                 "Request a Thread Handoff when full continuity context is needed "
                 "in a new chat.",
             ]
         )
+
+    def _task_authoritative_context_section(
+        self,
+        context: ContextLoadResult,
+    ) -> tuple[str, int]:
+        """Return the current local state required for a reliable task.
+
+        ChatGPT Project Sources are not refreshed by the Console's local
+        ``Refresh All Context`` action. A normal task therefore carries the two
+        concise Console documents that define the verified state and exact next
+        step. This prevents stale Project Sources from silently overriding the
+        repository state that the user has just refreshed.
+        """
+
+        wanted_suffixes = (
+            "00_CURVATURE_CONSOLE_CURRENT_STATE.md",
+            "CURVATURE_CONSOLE_HANDOFF.md",
+        )
+        selected = tuple(
+            document
+            for document in context.documents
+            if any(
+                document.label.endswith(suffix)
+                for suffix in wanted_suffixes
+            )
+        )
+
+        parts = [
+            "## AUTHORITATIVE LOCAL CONSOLE CONTEXT",
+            "",
+            "The following documents were read from the local repositories "
+            "when this task was prepared.",
+        ]
+
+        if not selected:
+            parts.extend(
+                [
+                    "",
+                    "[No authoritative Console state documents were loaded]",
+                ]
+            )
+            return "\n".join(parts), 0
+
+        for document in selected:
+            parts.extend(
+                [
+                    "",
+                    f"### {document.label}",
+                    f"Source: {document.source_path}",
+                    "",
+                    document.content.rstrip(),
+                ]
+            )
+
+        return "\n".join(parts), len(selected)
 
     def _context_section(
         self,

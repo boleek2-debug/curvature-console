@@ -262,7 +262,7 @@ class MainWindow(QMainWindow):
             len(result.errors) for result in self.context_results.values()
         )
         self.statusBar().showMessage(
-            f"Context refreshed: {loaded_total} documents · "
+            f"Local context refreshed: {loaded_total} documents · "
             f"{error_total} errors"
         )
 

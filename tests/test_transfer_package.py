@@ -34,7 +34,19 @@ def _context(long_document: bool = False) -> ContextLoadResult:
                 content="You are Curvature Core.",
             ),
             ContextDocument(
-                label="HANDOFF.md",
+                label="console:00_CURVATURE_CONSOLE_CURRENT_STATE.md",
+                source_path=Path(
+                    "/console/00_CURVATURE_CONSOLE_CURRENT_STATE.md"
+                ),
+                content="Status: Operational. Tests: 121 passed.",
+            ),
+            ContextDocument(
+                label="console:CURVATURE_CONSOLE_HANDOFF.md",
+                source_path=Path("/console/CURVATURE_CONSOLE_HANDOFF.md"),
+                content="Exact next step: normal Curvature work.",
+            ),
+            ContextDocument(
+                label="curvature:HANDOFF.md",
                 source_path=Path("/repo/HANDOFF.md"),
                 content=handoff,
             ),
@@ -102,7 +114,7 @@ def test_task_package_is_lightweight_for_every_department(
 
     assert package.mode is TransferPackageMode.TASK
     assert package.department_id == department_id
-    assert package.included_document_count == 0
+    assert package.included_document_count == 2
     assert package.truncated_document_count == 0
     assert package.conversation_was_truncated is False
     assert "Package type: Task Package" in package.text
@@ -114,7 +126,11 @@ def test_task_package_is_lightweight_for_every_department(
     assert "-END" not in package.text
     assert "LOCAL-CONVERSATION-MUST-NOT-BE-SENT" not in package.text
     assert "EXISTING CONVERSATION CONTEXT" in package.text
-    assert len(package.text) < 2_500
+    assert "AUTHORITATIVE LOCAL CONSOLE CONTEXT" in package.text
+    assert "Status: Operational. Tests: 121 passed." in package.text
+    assert "Exact next step: normal Curvature work." in package.text
+    assert "override stale ChatGPT Project Sources" in package.text
+    assert len(package.text) < 10_000
 
 
 def test_thread_handoff_keeps_full_documents_and_conversation(
@@ -130,7 +146,7 @@ def test_thread_handoff_keeps_full_documents_and_conversation(
     )
 
     assert package.mode is TransferPackageMode.THREAD_HANDOFF
-    assert package.included_document_count == 2
+    assert package.included_document_count == 4
     assert package.truncated_document_count == 0
     assert "Package type: Thread Handoff Package" in package.text
     assert "You are Curvature Core." in package.text
@@ -216,3 +232,49 @@ def test_response_instructions_prioritise_exact_user_task(
         in package.text
     )
     assert "exactly that response and nothing else" in package.text
+
+
+def test_task_omits_stale_main_project_documents_but_includes_console_state(
+    tmp_path: Path,
+) -> None:
+    package = TransferPackageBuilder().build(_request(tmp_path))
+
+    assert "Status: Operational. Tests: 121 passed." in package.text
+    assert "Exact next step: normal Curvature work." in package.text
+    assert "Exact next step: implement B5.2D." not in package.text
+    assert "curvature:HANDOFF.md" not in package.text
+
+
+def test_task_marks_missing_authoritative_context_explicitly(
+    tmp_path: Path,
+) -> None:
+    request = _request(tmp_path)
+    context = ContextLoadResult(
+        department_id="core",
+        documents=(
+            ContextDocument(
+                label="ROLE",
+                source_path=Path("/roles/core.md"),
+                content="You are Curvature Core.",
+            ),
+        ),
+        errors=(),
+    )
+    request = TransferPackageRequest(
+        mode=request.mode,
+        department_id=request.department_id,
+        department_title=request.department_title,
+        responsibility=request.responsibility,
+        context=context,
+        conversation_text=request.conversation_text,
+        draft_text=request.draft_text,
+        attachments=request.attachments,
+    )
+
+    package = TransferPackageBuilder().build(request)
+
+    assert package.included_document_count == 0
+    assert (
+        "[No authoritative Console state documents were loaded]"
+        in package.text
+    )
