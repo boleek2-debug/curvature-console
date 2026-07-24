@@ -372,3 +372,17 @@ def test_rejects_zip_bomb_ratio(tmp_path: Path) -> None:
             repository_id="curvature-console",
             repository_root=repository,
         )
+
+
+def test_manifest_target_repository_is_read_without_repository_access(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "package.zip"
+    _write_package(
+        package,
+        target_repository="Curvature",
+    )
+
+    assert PackageReviewer().manifest_target_repository(package) == (
+        "Curvature"
+    )

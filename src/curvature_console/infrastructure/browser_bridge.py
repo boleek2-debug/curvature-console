@@ -207,6 +207,7 @@ class BrowserExchangeRequest:
     message_text: str
     create_new_thread: bool
     conversation_url: str | None = None
+    attachment_paths: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -387,6 +388,12 @@ class ChatGPTBrowserBridge:
             raise BrowserBridgeAmbiguousTarget(
                 "No active conversation URL is stored for this department."
             )
+        for attachment_path in request.attachment_paths:
+            path = attachment_path.expanduser()
+            if not path.is_file():
+                raise BrowserBridgeError(
+                    f"Attachment file not found: {path}"
+                )
 
     def _send_and_receive_once(
         self,
@@ -431,13 +438,23 @@ class ChatGPTBrowserBridge:
 
         transport_text = self._transport_message_text(request)
 
+        if request.attachment_paths:
+            self._upload_attachments(
+                page=page,
+                attachment_paths=request.attachment_paths,
+            )
+
         self._report_stage(BrowserBridgeStage.ENTERING_MESSAGE)
         editor.fill(
             transport_text,
             timeout=int(self.config.editor_timeout_seconds * 1000),
         )
         self._report_stage(BrowserBridgeStage.SENDING)
-        editor.press("Enter")
+        self._send_composer_message(
+            page=page,
+            editor=editor,
+            baseline_user_count=baseline_user_count,
+        )
 
         self._report_stage(BrowserBridgeStage.VERIFYING_USER_MESSAGE)
         self._wait_for_confirmed_user_message(
@@ -454,9 +471,13 @@ class ChatGPTBrowserBridge:
         self._report_stage(BrowserBridgeStage.RECEIVING)
 
         self._report_stage(BrowserBridgeStage.CAPTURING_DOWNLOADS)
+        current_assistant_count = page.locator(
+            ASSISTANT_MESSAGE_SELECTOR
+        ).count()
         downloads = self._capture_generated_downloads(
             page=page,
-            assistant_message_index=baseline_assistant_count,
+            assistant_message_index=current_assistant_count - 1,
+            response_text=response_text,
         )
 
         conversation_url = page.url
@@ -488,6 +509,7 @@ class ChatGPTBrowserBridge:
         self,
         page: Page,
         assistant_message_index: int,
+        response_text: str = "",
     ) -> tuple[CapturedDownload, ...]:
         """Capture generated files through the authenticated browser session.
 
@@ -498,6 +520,8 @@ class ChatGPTBrowserBridge:
         """
 
         messages = page.locator(ASSISTANT_MESSAGE_SELECTOR)
+        if assistant_message_index < 0:
+            return ()
         if messages.count() <= assistant_message_index:
             return ()
 
@@ -505,20 +529,22 @@ class ChatGPTBrowserBridge:
         article = response.locator("xpath=ancestor-or-self::article[1]")
         container = article if article.count() else response
 
+        expected_download_names = self._download_names_from_text(
+            response_text or (response.inner_text() or "")
+        )
         candidates = self._wait_for_download_candidates(
             page=page,
             container=container,
+            expected_names=expected_download_names,
         )
         if not candidates:
-            response_text = (response.inner_text() or "").strip()
-            if re.search(
-                r"(?im)^\s*download\s+\S+\.\w{1,12}\s*$",
-                response_text,
-            ):
-                diagnostic = self._download_dom_diagnostic(container)
+            diagnostic = self._download_dom_diagnostic(container)
+            if expected_download_names:
                 raise BrowserBridgeError(
                     "ChatGPT displayed a generated-file response, but the "
-                    "download control was not found in the assistant turn. "
+                    "download control did not become available before the "
+                    "download timeout. Expected: "
+                    f"{', '.join(expected_download_names)}. "
                     f"Observed controls: {diagnostic}"
                 )
             return ()
@@ -851,10 +877,11 @@ class ChatGPTBrowserBridge:
         self,
         page: Page,
         container: Locator,
+        expected_names: tuple[str, ...] = (),
     ) -> list[tuple[Locator, str]]:
-        deadline = time.monotonic() + min(
-            10.0,
-            self.config.download_timeout_seconds,
+        deadline = (
+            time.monotonic()
+            + self.config.download_timeout_seconds
         )
 
         while time.monotonic() < deadline:
@@ -862,9 +889,58 @@ class ChatGPTBrowserBridge:
             candidates = self._find_download_candidates(container)
             if candidates:
                 return candidates
+
+            if expected_names:
+                page_candidates = self._find_download_candidates(
+                    page.locator("body")
+                )
+                matching = [
+                    candidate
+                    for candidate in page_candidates
+                    if self._candidate_matches_expected_name(
+                        candidate[0],
+                        expected_names,
+                    )
+                ]
+                if matching:
+                    return matching
+
             time.sleep(0.25)
 
         return []
+
+    def _download_names_from_text(
+        self,
+        text: str,
+    ) -> tuple[str, ...]:
+        """Extract visible generated filenames from assistant response text."""
+
+        names: list[str] = []
+        for match in re.finditer(
+            r"(?im)^\s*download\s+([^\r\n]+?\.[A-Za-z0-9]{1,12})\s*$",
+            text,
+        ):
+            name = Path(match.group(1).strip()).name
+            if name and name not in names:
+                names.append(name)
+        return tuple(names)
+
+    def _candidate_matches_expected_name(
+        self,
+        element: Locator,
+        expected_names: tuple[str, ...],
+    ) -> bool:
+        try:
+            text = " ".join((element.inner_text() or "").split()).lower()
+            href = (element.get_attribute("href") or "").lower()
+        except Exception:
+            return False
+
+        return any(
+            expected.lower() in text
+            or expected.lower() in href
+            for expected in expected_names
+        )
 
     def _find_download_candidates(
         self,
@@ -1100,6 +1176,114 @@ class ChatGPTBrowserBridge:
             process.wait(timeout=5)
         time.sleep(0.5)
 
+    def _send_composer_message(
+        self,
+        page: Page,
+        editor: Locator,
+        baseline_user_count: int,
+    ) -> None:
+        """Wait for upload readiness and submit through ChatGPT's send button.
+
+        Pressing Enter is not reliable while an attachment is still being
+        processed. The bridge therefore waits for an enabled visible send
+        control and clicks it. Keyboard submission is only a fallback when no
+        send control is exposed.
+        """
+
+        timeout_ms = int(self.config.editor_timeout_seconds * 1000)
+        deadline = time.monotonic() + self.config.editor_timeout_seconds
+
+        send_candidates = (
+            page.locator('button[data-testid="send-button"]'),
+            page.get_by_role("button", name="Send prompt"),
+            page.get_by_role("button", name="Send message"),
+            page.get_by_role("button", name="Send"),
+        )
+
+        last_button_state = "[no send button]"
+        while time.monotonic() < deadline:
+            self._assert_runtime_alive(page)
+            for candidates in send_candidates:
+                for index in range(candidates.count()):
+                    button = candidates.nth(index)
+                    try:
+                        visible = button.is_visible()
+                        enabled = button.is_enabled()
+                        last_button_state = (
+                            f"visible={visible}, enabled={enabled}"
+                        )
+                        if visible and enabled:
+                            button.click(timeout=timeout_ms)
+                            return
+                    except Exception:
+                        continue
+            page.wait_for_timeout(100)
+
+        # Some ChatGPT variants expose no stable send-button selector.
+        # Keyboard submission is retained only as a final fallback.
+        try:
+            editor.press("Enter", timeout=timeout_ms)
+        except Exception as exc:
+            raise BrowserBridgeMessageNotConfirmed(
+                "ChatGPT composer could not be submitted after waiting for "
+                f"attachment readiness. Last send-button state: "
+                f"{last_button_state}. Error: {exc}"
+            ) from exc
+
+        # Detect the common failure mode immediately: Enter inserted a newline
+        # while the attachment was still uploading and no user message appeared.
+        page.wait_for_timeout(500)
+        if page.locator(USER_MESSAGE_SELECTOR).count() <= baseline_user_count:
+            raise BrowserBridgeMessageNotConfirmed(
+                "ChatGPT did not submit the composer. The attachment may still "
+                "have been processing, and keyboard Enter did not create a new "
+                "user message."
+            )
+
+    def _upload_attachments(
+        self,
+        page: Page,
+        attachment_paths: tuple[Path, ...],
+    ) -> None:
+        """Upload queued files into the ChatGPT composer before sending."""
+
+        paths = [str(path.expanduser().resolve()) for path in attachment_paths]
+
+        inputs = page.locator('input[type="file"]')
+        for index in range(inputs.count()):
+            candidate = inputs.nth(index)
+            try:
+                candidate.set_input_files(paths)
+                return
+            except Exception:
+                continue
+
+        button_candidates = (
+            page.get_by_role("button", name="Add files and more"),
+            page.get_by_role("button", name="Attach files"),
+            page.get_by_role("button", name="Add files"),
+        )
+        for button in button_candidates:
+            for index in range(button.count()):
+                candidate = button.nth(index)
+                try:
+                    if not candidate.is_visible():
+                        continue
+                    with page.expect_file_chooser(
+                        timeout=int(
+                            self.config.editor_timeout_seconds * 1000
+                        )
+                    ) as chooser_info:
+                        candidate.click()
+                    chooser_info.value.set_files(paths)
+                    return
+                except Exception:
+                    continue
+
+        raise BrowserBridgeError(
+            "ChatGPT did not expose a usable file-upload control."
+        )
+
     def _wait_for_message_editor(self, page: Page) -> Locator:
         deadline = time.monotonic() + self.config.editor_timeout_seconds
         while time.monotonic() < deadline:
@@ -1149,6 +1333,8 @@ class ChatGPTBrowserBridge:
         )
         marker = self._request_marker(request_id)
 
+        observed_unmatched_messages = 0
+
         while time.monotonic() < deadline:
             self._assert_runtime_alive(page)
             self._raise_for_human_verification(page)
@@ -1156,14 +1342,23 @@ class ChatGPTBrowserBridge:
             current_count = messages.count()
 
             if current_count > baseline_count:
-                observed_text = messages.nth(current_count - 1).inner_text()
-                if marker in observed_text:
-                    return
-                raise BrowserBridgeMessageNotConfirmed(
-                    "A new user message appeared, but it did not contain the "
-                    "current request marker."
+                observed_unmatched_messages = (
+                    current_count - baseline_count
                 )
+                for index in range(baseline_count, current_count):
+                    observed_text = messages.nth(index).inner_text()
+                    if marker in observed_text:
+                        return
+
             time.sleep(self.config.response_poll_interval_seconds)
+
+        if observed_unmatched_messages:
+            raise BrowserBridgeMessageNotConfirmed(
+                "New user message content appeared after the send action, "
+                "but none of the new messages contained the current request "
+                "marker. This may indicate an attachment-only transport "
+                "message or a foreign user action."
+            )
 
         raise BrowserBridgeMessageNotConfirmed(
             "ChatGPT did not confirm the current request as a new user message."

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QFrame,
@@ -29,6 +29,7 @@ class DepartmentPanel(QFrame):
     context_refresh_requested = Signal(str)
     context_preview_requested = Signal(str)
     transfer_package_requested = Signal(str, str)
+    package_review_requested = Signal(str, str)
     workspace_state_changed = Signal(str)
 
     def __init__(
@@ -113,6 +114,24 @@ class DepartmentPanel(QFrame):
         self.download_list = QListWidget()
         self.download_list.setObjectName(f"{department_id}DownloadList")
         self.download_list.setMaximumHeight(76)
+        self.download_list.currentItemChanged.connect(
+            self._update_package_review_button
+        )
+
+        self.package_review_button = QPushButton(
+            "Review Selected Package"
+        )
+        self.package_review_button.setObjectName(
+            f"{department_id}PackageReviewButton"
+        )
+        self.package_review_button.setToolTip(
+            "Validate and classify the selected generated ZIP without "
+            "writing to a repository."
+        )
+        self.package_review_button.setEnabled(False)
+        self.package_review_button.clicked.connect(
+            self._request_package_review
+        )
 
         self.attachment_list = AttachmentList(
             department_id=department_id,
@@ -165,6 +184,7 @@ class DepartmentPanel(QFrame):
         layout.addWidget(self.attachment_list)
         layout.addWidget(self.download_label)
         layout.addWidget(self.download_list)
+        layout.addWidget(self.package_review_button)
         layout.addLayout(transfer_button_layout)
 
     def set_context_result(self, result: ContextLoadResult) -> None:
@@ -231,7 +251,41 @@ class DepartmentPanel(QFrame):
             self.download_list.addItem(
                 f"{record.original_filename} → {record.saved_path}"
             )
+            item = self.download_list.item(
+                self.download_list.count() - 1
+            )
+            item.setData(
+                Qt.ItemDataRole.UserRole,
+                str(record.saved_path),
+            )
         self.download_label.setText(f"Downloads: {len(records)}")
+        self._update_package_review_button()
+
+    def selected_generated_download_path(self) -> Path | None:
+        """Return the selected generated file path, if available."""
+
+        item = self.download_list.currentItem()
+        if item is None:
+            return None
+        raw_path = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(raw_path, str) or not raw_path:
+            return None
+        return Path(raw_path)
+
+    def _update_package_review_button(self, *_args) -> None:
+        path = self.selected_generated_download_path()
+        self.package_review_button.setEnabled(
+            path is not None and path.suffix.lower() == ".zip"
+        )
+
+    def _request_package_review(self) -> None:
+        path = self.selected_generated_download_path()
+        if path is None:
+            return
+        self.package_review_requested.emit(
+            self.department_id,
+            str(path),
+        )
 
     def _request_focus(self) -> None:
         self.focus_requested.emit(self.department_id)

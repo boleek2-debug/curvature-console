@@ -34,6 +34,10 @@ from curvature_console.infrastructure.context_loader import (
     ContextLoadResult,
     WorkspaceContextLoader,
 )
+from curvature_console.infrastructure.package_review import (
+    PackageReviewError,
+    PackageReviewer,
+)
 from curvature_console.infrastructure.state_store import SQLiteStateStore
 from curvature_console.infrastructure.transfer_package import (
     TransferPackage,
@@ -48,6 +52,9 @@ from curvature_console.presentation.context_preview_dialog import (
     ContextPreviewDialog,
 )
 from curvature_console.presentation.department_panel import DepartmentPanel
+from curvature_console.presentation.package_review_dialog import (
+    PackageReviewDialog,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +94,7 @@ class MainWindow(QMainWindow):
         state_path: Path | None = None,
         data_directory: Path | None = None,
         browser_config: BrowserBridgeConfig | None = None,
+        repository_roots: dict[str, Path] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -106,6 +114,17 @@ class MainWindow(QMainWindow):
         self.browser_config = browser_config or BrowserBridgeConfig.default(
             Path.cwd()
         )
+        self.repository_roots = {
+            key: value.expanduser().resolve()
+            for key, value in (
+                repository_roots
+                or {
+                    "curvature-console": Path.cwd(),
+                    "Curvature": Path("~/Curvature"),
+                }
+            ).items()
+        }
+        self.package_reviewer = PackageReviewer()
         self.state_store = SQLiteStateStore(state_path)
         self._bootstrap_chat_routes()
         self.context_loader = WorkspaceContextLoader()
@@ -140,6 +159,9 @@ class MainWindow(QMainWindow):
             panel.context_preview_requested.connect(self.preview_context)
             panel.transfer_package_requested.connect(
                 self.prepare_transfer_package
+            )
+            panel.package_review_requested.connect(
+                self.review_generated_package
             )
             panel.workspace_state_changed.connect(self.save_department_state)
             self.department_panels[department_id] = panel
@@ -275,6 +297,53 @@ class MainWindow(QMainWindow):
         )
         dialog.exec()
 
+    def review_generated_package(
+        self,
+        department_id: str,
+        package_path_value: str,
+    ) -> None:
+        """Open a complete read-only review for one generated ZIP."""
+
+        if department_id not in self.department_panels:
+            raise ValueError(f"Unknown department: {department_id}")
+
+        package_path = Path(package_path_value).expanduser()
+        try:
+            repository_id = (
+                self.package_reviewer.manifest_target_repository(
+                    package_path
+                )
+            )
+            repository_root = self.repository_roots.get(repository_id)
+            if repository_root is None:
+                raise PackageReviewError(
+                    "No approved local repository is registered for "
+                    f"package target {repository_id!r}."
+                )
+            review = self.package_reviewer.review(
+                package_path,
+                repository_id=repository_id,
+                repository_root=repository_root,
+            )
+        except PackageReviewError as exc:
+            QMessageBox.critical(
+                self,
+                "Package review failed",
+                str(exc),
+            )
+            return
+
+        dialog = PackageReviewDialog(review=review, parent=self)
+        dialog.exec()
+        state = (
+            "eligible"
+            if review.is_apply_eligible
+            else "blocked by conflicts"
+        )
+        self.statusBar().showMessage(
+            f"Package reviewed for {department_id}: {state}"
+        )
+
     def prepare_transfer_package(
         self,
         department_id: str,
@@ -344,6 +413,10 @@ class MainWindow(QMainWindow):
                     route.active_conversation_url
                     if route is not None
                     else None
+                ),
+                attachment_paths=tuple(
+                    record.path
+                    for record in panel.attachment_list.records
                 ),
             ),
         )

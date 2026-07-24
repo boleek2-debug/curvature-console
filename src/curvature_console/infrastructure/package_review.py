@@ -111,6 +111,30 @@ class PackageReviewer:
         self.max_total_bytes = max_total_bytes
         self.max_compression_ratio = max_compression_ratio
 
+    def manifest_target_repository(
+        self,
+        package_path: Path,
+    ) -> str:
+        """Read and validate the package target without repository access."""
+
+        package_path = package_path.expanduser().resolve()
+        if not package_path.is_file():
+            raise PackageReviewError(
+                f"Package file not found: {package_path}"
+            )
+
+        try:
+            archive = zipfile.ZipFile(package_path, mode="r")
+        except (OSError, zipfile.BadZipFile) as exc:
+            raise PackageReviewError(
+                f"Cannot open ZIP package: {package_path}"
+            ) from exc
+
+        with archive:
+            entries = self._validate_archive_entries(archive)
+            manifest = self._load_manifest(archive, entries)
+            return manifest.target_repository
+
     def review(
         self,
         package_path: Path,

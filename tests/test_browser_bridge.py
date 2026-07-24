@@ -375,3 +375,201 @@ def test_route_unverified_preserves_captured_downloads(
     )
 
     assert error.downloads == (download,)
+
+
+def test_attachment_only_user_message_before_marker_is_ignored(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeMessage:
+        def __init__(self, text: str) -> None:
+            self.text = text
+
+        def inner_text(self):
+            return self.text
+
+    class FakeMessages:
+        def count(self):
+            return 2
+
+        def nth(self, index):
+            return (
+                FakeMessage("CURVATURE_CONSOLE_ROLE_CORE.md")
+                if index == 0
+                else FakeMessage(
+                    "CURVATURE_REQUEST_ID: request-with-attachment\\n\\n"
+                    "Task package body"
+                )
+            )
+
+    class FakePage:
+        def locator(self, selector):
+            assert selector == '[data-message-author-role="user"]'
+            return FakeMessages()
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+
+    bridge._wait_for_confirmed_user_message(
+        page=FakePage(),
+        baseline_count=0,
+        request_id="request-with-attachment",
+    )
+
+
+def test_only_post_baseline_messages_are_scanned_for_marker(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeMessage:
+        def __init__(self, text: str) -> None:
+            self.text = text
+
+        def inner_text(self):
+            return self.text
+
+    class FakeMessages:
+        def count(self):
+            return 3
+
+        def nth(self, index):
+            values = (
+                "CURVATURE_REQUEST_ID: stale-request",
+                "attachment-only-message",
+                "CURVATURE_REQUEST_ID: current-request",
+            )
+            return FakeMessage(values[index])
+
+    class FakePage:
+        def locator(self, selector):
+            assert selector == '[data-message-author-role="user"]'
+            return FakeMessages()
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+
+    bridge._wait_for_confirmed_user_message(
+        page=FakePage(),
+        baseline_count=1,
+        request_id="current-request",
+    )
+
+
+def test_request_accepts_attachment_paths(tmp_path: Path) -> None:
+    attachment = tmp_path / "file.md"
+    attachment.write_text("content", encoding="utf-8")
+
+    request = BrowserExchangeRequest(
+        request_id="request",
+        department_id="core",
+        message_text="Task",
+        create_new_thread=False,
+        conversation_url="https://chatgpt.com/c/example",
+        attachment_paths=(attachment,),
+    )
+
+    assert request.attachment_paths == (attachment,)
+
+
+def test_upload_attachments_uses_file_input(tmp_path: Path) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    attachment = tmp_path / "file.md"
+    attachment.write_text("content", encoding="utf-8")
+    calls = []
+
+    class FakeInput:
+        def set_input_files(self, paths):
+            calls.append(paths)
+
+    class FakeInputs:
+        def count(self):
+            return 1
+
+        def nth(self, index):
+            return FakeInput()
+
+    class FakePage:
+        def locator(self, selector):
+            assert selector == 'input[type="file"]'
+            return FakeInputs()
+
+    bridge._upload_attachments(
+        page=FakePage(),
+        attachment_paths=(attachment,),
+    )
+
+    assert calls == [[str(attachment.resolve())]]
+
+
+def test_send_composer_message_clicks_enabled_send_button(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    clicks = []
+
+    class FakeButton:
+        def is_visible(self):
+            return True
+
+        def is_enabled(self):
+            return True
+
+        def click(self, timeout):
+            clicks.append(timeout)
+
+    class FakeCandidates:
+        def count(self):
+            return 1
+
+        def nth(self, index):
+            return FakeButton()
+
+    class EmptyCandidates:
+        def count(self):
+            return 0
+
+    class FakePage:
+        def locator(self, selector):
+            if selector == 'button[data-testid="send-button"]':
+                return FakeCandidates()
+            if selector == '[data-message-author-role="user"]':
+                return EmptyCandidates()
+            return EmptyCandidates()
+
+        def get_by_role(self, role, name):
+            return EmptyCandidates()
+
+        def wait_for_timeout(self, milliseconds):
+            return None
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._send_composer_message(
+        page=FakePage(),
+        editor=object(),
+        baseline_user_count=0,
+    )
+
+    assert clicks
+
+
+def test_download_names_are_extracted_from_response_text(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    assert bridge._download_names_from_text(
+        "Done.\n\nDownload curvature-console-package.zip"
+    ) == ("curvature-console-package.zip",)
+
+
+def test_capture_uses_latest_assistant_message_index(
+    tmp_path: Path,
+) -> None:
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "src/curvature_console/infrastructure/browser_bridge.py"
+    ).read_text(encoding="utf-8")
+
+    assert "assistant_message_index=current_assistant_count - 1" in source
