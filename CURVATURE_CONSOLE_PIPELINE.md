@@ -322,23 +322,31 @@ Do not use `git add .` when private runtime files may exist.
 
 # 12. Current Exact Next Step
 
-Close and push the verified B5.2B/B5.2C implementation:
+The package review and safe-apply workflow is complete and verified.
+
+Begin:
 
 ```text
-56 tests passed
-live Core routing verified
-documentation aligned
-commit and push pending
+ASSISTANT-001B5.4A — Thread Pressure Foundation
 ```
 
-After the working tree is clean, begin:
+Required sprint sequence:
 
 ```text
-ASSISTANT-001B5.2D — Generated File Download Capture
+inspect persistence boundaries
+→ define local advisory pressure model
+→ persist independent department state
+→ display GREEN / AMBER / RED in all three panels
+→ verify restart continuity
+→ tests
+→ documentation
+→ explicit commit and push
 ```
 
+The operational release is not complete until the pressure and handoff workflow
+passes independently in Project, Core and Research. Core-only verification is
+insufficient.
 
----
 
 # 12. Unified Operation Trace
 
@@ -370,5 +378,5 @@ Requirements:
 - cleanup must not destroy the only diagnostic evidence of a failed operation;
 - no module may silently perform a cross-boundary side effect.
 
-This is a future architectural requirement and does not interrupt the active
-B5.2E sprint.
+This remains a deferred architectural requirement and must not interrupt the
+mandatory B5.4 Thread Pressure and handoff closeout.

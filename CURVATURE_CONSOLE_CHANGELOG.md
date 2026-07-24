@@ -3,7 +3,49 @@
 Status: Active
 Version: 0.9.0
 Owner: Project Curvature
-Last Updated: 2026-07-23
+Last Updated: 2026-07-24
+
+---
+
+## 2026-07-24
+
+### ASSISTANT-001B5.2E — Package Review and Safe Apply
+
+Completed, live-verified, committed and pushed.
+
+Current pushed repository state:
+
+```text
+commit 30cbd3cdef56f4141fe3dbc916592ffe82fefe2d
+106 automated tests passed
+git diff --check passed
+main == origin/main
+working tree clean
+```
+
+Delivered across E1, E2 and E3:
+
+- validated root package manifest;
+- repository identity and path safety;
+- CREATE / REPLACE / SKIP / CONFLICT review;
+- blocked-package UI;
+- one explicit Apply approval;
+- mandatory re-review before mutation;
+- backup and atomic writes;
+- rollback after write failure;
+- `APPLY_RESULT.json`;
+- post-apply Git status and diff;
+- no automatic commit or push.
+
+Live E3 proof applied CREATE, REPLACE and SKIP, verified the backup and metadata,
+restored the controlled test changes, and reran the complete test suite.
+
+### Operational Release Scope Decision
+
+Accepted ADR-015. Console feature expansion is paused after mandatory Thread
+Pressure, functional Thread Handoff and independent Project/Core/Research
+verification. B5.3, the expanded State Bus and the unified execution ledger are
+deferred until Project Curvature work requires them.
 
 ---
 

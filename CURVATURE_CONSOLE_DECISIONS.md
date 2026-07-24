@@ -687,3 +687,47 @@ timestamps
 - silent background side effects are rejected;
 - Package Apply and later automation should integrate with one operation trace;
 - the direction is strategic and must not bypass current milestone sequencing.
+
+---
+
+# ADR-015 — Operational Release Requires Thread Pressure and Three-Department Verification
+
+Status: Accepted
+Date: 2026-07-24
+
+## Context
+
+The package review and safe-apply workflow is complete. Continuing every planned
+Console control-plane feature before returning to Project Curvature would delay
+the project without improving the immediate operational path. Thread exhaustion
+and incomplete handoff continuity remain the material risks.
+
+## Decision
+
+Curvature Console reaches its first operational release when all of the following
+are true:
+
+- B5.2E is documented and closed;
+- Thread Pressure provides an independent persisted GREEN / AMBER / RED estimate
+  for Project, Core and Research;
+- Thread Handoff creates or resolves a replacement conversation, persists its
+  route, confirms continuity and resets pressure only after success;
+- the complete workflow passes independently in Project, Core and Research.
+
+Core-only verification is explicitly insufficient.
+
+The pressure model is advisory and based only on locally observable data. It must
+not claim knowledge of ChatGPT's exact context capacity.
+
+B5.3 structured conversation records, B6 expanded State Bus, the unified
+execution ledger and other control-plane features are deferred until actual
+Project Curvature work requires them.
+
+## Consequences
+
+- Console work now has a narrow completion boundary.
+- Thread Pressure and functional handoff are release requirements, not optional
+  enhancements.
+- every shared operational feature must be verified in all three departments.
+- Project Curvature implementation may resume immediately after the operational
+  verification matrix passes.

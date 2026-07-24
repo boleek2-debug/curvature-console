@@ -178,103 +178,83 @@ tests
 
 Completed, verified, committed and pushed.
 
-Commit:
+## ASSISTANT-001B5.2E — Package Review and Safe Apply
+
+Completed across three units:
 
 ```text
-817860e Add generated file download capture
+B5.2E1 — read-only package review foundation
+B5.2E2 — Package Review UI and live blocked-package verification
+B5.2E3 — explicit safe Apply, backup, rollback and Git report
 ```
 
-Delivered:
-
-- response-scoped generated-file detection;
-- JavaScript-only file-control support;
-- authenticated browser-session retrieval;
-- Console Download Inbox outside repositories;
-- original filename preservation;
-- collision-safe filename handling;
-- non-empty response validation;
-- atomic file writes;
-- request, department and conversation association;
-- SQLite persistence;
-- per-department UI records;
-- restart persistence;
-- route lifecycle restoration after download interception.
-
-Verified:
+Verified baseline:
 
 ```text
-69 automated tests passed
+106 automated tests passed
 git diff --check passed
-core-download-test(7).zip
-155 bytes
-verification.txt
-CORE_DOWNLOAD_CAPTURE_OK
-Downloads counter increased
-download record survived restart
-commit 817860e pushed
+live CREATE / REPLACE / SKIP apply passed
+backup and APPLY_RESULT.json verified
+no automatic commit or push
 working tree clean
 ```
 
-## ASSISTANT-001B5.2E — Package Review and Safe Apply
+## ASSISTANT-001B5.4 — Thread Pressure and Handoff Safety
 
-Active next milestone.
+Mandatory next milestone before Project Curvature implementation resumes.
 
-Deliver:
+Deliver in controlled units:
 
-- standard package manifest;
-- ZIP root equal to repository root;
-- explicit repository identity;
-- repository-relative path validation;
-- rejection of absolute paths, traversal and escaping symlinks;
-- Create / Replace / Conflict / Skip classification;
-- complete Package Review screen;
-- one explicit Apply approval;
-- backup of replaced files;
-- controlled repository application;
-- post-apply Git diff display;
-- no automatic commit or push.
+### B5.4A — Thread Pressure Foundation
 
-## ASSISTANT-001B5.3 — Structured Department Conversation Records
-
-Deliver:
-
-- structured user and assistant entries;
-- timestamps;
-- exchange identifiers;
-- task-to-response linkage;
-- download linkage;
-- restart persistence;
-- migration from plain transcript where necessary.
-
-## ASSISTANT-001B5.4 — Thread Pressure Estimation
-
-Deliver:
-
-- local package-size tracking;
-- local conversation-size tracking;
-- GREEN / AMBER / RED advisory state;
-- Thread Handoff recommendation;
+- local observable-volume model;
+- independent persisted state per department;
+- GREEN / AMBER / RED status;
+- visible indicator in Project, Core and Research;
+- restart continuity;
 - no claim of exact ChatGPT context capacity.
 
-## ASSISTANT-001B5.5 — Workflow Verification and Closeout
+### B5.4B — Pressure Signals and Handoff Readiness
 
-Verify:
+- account for sent tasks, stored responses, local transcript and attachment metadata;
+- AMBER recommendation;
+- RED high-visibility warning;
+- prepare a complete department-specific Thread Handoff package.
 
-- Project workflow;
-- Core workflow;
-- Research workflow;
-- Task Package;
-- Thread Handoff Package;
-- URL-only routing;
-- generated-file capture;
-- Package Review and Apply;
-- persistence;
-- attachment isolation;
-- login-expiry and CAPTCHA recovery;
-- zero paid API usage;
-- documentation and complete tests.
+### B5.4C — Functional Thread Handoff Lifecycle
 
----
+- create or resolve the replacement conversation;
+- persist its exact URL for the correct department;
+- confirm the handoff response;
+- continue normal task delivery on the new route;
+- reset pressure only after successful route transition;
+- preserve prior route history and diagnostics.
+
+### B5.4D — Three-Department Operational Verification
+
+Run the full workflow independently in:
+
+```text
+Curvature Project
+Curvature Core
+Curvature Research
+```
+
+Core-only verification is insufficient. Acceptance requires pressure, handoff,
+new-route persistence, continued response and restart continuity in every
+department.
+
+## Deferred Until Required
+
+### ASSISTANT-001B5.3 — Structured Department Conversation Records
+
+Deferred. Implement only when real Console use proves that the current persisted
+conversation model is insufficient for pressure calculation or traceability.
+
+### ASSISTANT-001B5.5 — Expanded Workflow Closeout
+
+Deferred beyond the operational release except for the three-department tests
+required by B5.4D.
 
 # Planned Milestones
 
@@ -343,5 +323,5 @@ Future architecture should provide a unified execution ledger connecting:
 - repository and Git state;
 - final operation outcomes.
 
-This direction is approved for future architecture planning. It does not
-interrupt the active B5.2E milestone.
+This direction is approved for future architecture planning. It must not interrupt
+the mandatory B5.4 Thread Pressure and operational handoff closeout.
