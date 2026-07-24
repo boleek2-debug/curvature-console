@@ -1,9 +1,9 @@
 # CURVATURE CONSOLE DEVELOPMENT PIPELINE
 
 Status: Active
-Version: 1.2.0
+Version: 1.3.0
 Owner: Curvature Core
-Last Updated: 2026-07-20
+Last Updated: 2026-07-24
 
 ---
 
@@ -322,31 +322,31 @@ Do not use `git add .` when private runtime files may exist.
 
 # 12. Current Exact Next Step
 
-The package review and safe-apply workflow is complete and verified.
-
-Begin:
+Curvature Console reached operational release at commit:
 
 ```text
-ASSISTANT-001B5.4A — Thread Pressure Foundation
+070eecd
 ```
 
-Required sprint sequence:
+Verified baseline:
 
 ```text
-inspect persistence boundaries
-→ define local advisory pressure model
-→ persist independent department state
-→ display GREEN / AMBER / RED in all three panels
-→ verify restart continuity
-→ tests
-→ documentation
-→ explicit commit and push
+118 automated tests passed
 ```
 
-The operational release is not complete until the pressure and handoff workflow
-passes independently in Project, Core and Research. Core-only verification is
-insufficient.
+Broad Console development is paused.
 
+Use Console for normal Project Curvature work. Promote a new Console sprint only
+when a real operational limitation blocks or materially degrades that work.
+
+Validation policy for shared components:
+
+```text
+implement once
+→ automated department-isolation coverage
+→ deep live validation in Core
+→ Project or Research smoke test when department-specific evidence warrants it
+```
 
 # 12. Unified Operation Trace
 

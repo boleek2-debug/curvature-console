@@ -1,9 +1,9 @@
 # CURVATURE CONSOLE ARCHITECTURE DECISIONS
 
 Status: Active
-Version: 1.3.0
+Version: 1.4.0
 Owner: Project Curvature
-Last Updated: 2026-07-23
+Last Updated: 2026-07-24
 
 ---
 
@@ -731,3 +731,55 @@ Project Curvature work requires them.
 - every shared operational feature must be verified in all three departments.
 - Project Curvature implementation may resume immediately after the operational
   verification matrix passes.
+
+
+---
+
+# ADR-011 — Operational Release, Shared Validation and Hybrid Handoff
+
+Status: Accepted
+Date: 2026-07-24
+
+## Context
+
+Curvature Console now has a shared implementation for Project, Core and
+Research, 118 passing automated tests and a live-verified Core Thread
+Handoff. Continuing broad Console development would delay work on Project
+Curvature without a demonstrated operational need.
+
+New ChatGPT conversation creation may be slow. The visible Chrome window is part
+of the approved hybrid model and provides observation or intervention without
+replacing the automated workflow.
+
+## Decision
+
+Curvature Console is operational for normal Project Curvature development.
+
+Shared features are:
+
+- implemented once;
+- covered by automated department-isolation tests;
+- deeply live-validated in Core;
+- smoke-tested in Project or Research when a change is department-specific,
+  configuration-sensitive or evidence indicates a route defect.
+
+A separate three-department live repetition is not mandatory for every shared
+change.
+
+The browser workflow is hybrid:
+
+- automation is the default;
+- ordinary Chrome may become visible;
+- new-chat creation may take longer than an existing-thread task;
+- Console waits while verified progress continues;
+- the previous route and transcript remain authoritative until the new `/c/...`
+  route and first response are verified.
+
+## Consequences
+
+- broad Console feature development stops;
+- real Curvature work resumes through Console;
+- structured records, expanded State Bus, unified tracing and UX refinements are
+  deferred until required;
+- no reduction is made to repository-write approval, department isolation,
+  routing safety, test requirements or the zero-additional-cost rule.

@@ -1,12 +1,13 @@
 # CURVATURE CONSOLE — SOURCE OVERVIEW
 
-Status: Active
+Status: Operational
 Last Updated: 2026-07-24
 
 # Purpose
 
 Curvature Console is the local desktop control plane for Project Curvature. It
-coordinates three equal departments without using the paid OpenAI API:
+coordinates three equal departments through the user's existing ChatGPT Plus
+session:
 
 ```text
 Curvature Project
@@ -14,7 +15,7 @@ Curvature Core
 Curvature Research
 ```
 
-# Repository Boundary
+# Repositories
 
 ```text
 Curvature Console: ~/curvature-console
@@ -25,82 +26,61 @@ Console reads both repositories. Reviewed packages may write only to their
 declared target repository after explicit user approval. Console never commits
 or pushes automatically.
 
-# Current Verified State
+# Verified Release
 
 ```text
-Completed: deterministic browser bridge
-Completed: dedicated and restart-safe Project/Core/Research routes
-Completed: dual-repository context sources
-Completed: generated-file capture and persistent Download Inbox
-Completed: B5.2E Package Review and Safe Apply
-106 automated tests passed
-commit 30cbd3c pushed
+Commit: 070eecd
+Automated tests: 118 passed
+git diff --check: passed
 main == origin/main
-working tree clean
+Working tree: clean
 ```
 
-The verified package workflow is:
+# Implemented Workflow
 
-```text
-ChatGPT generated file
-→ Download Inbox
-→ Package Review
-→ CREATE / REPLACE / SKIP / CONFLICT classification
-→ explicit Apply approval
-→ re-review
-→ backup
-→ atomic writes or rollback
-→ APPLY_RESULT.json
-→ Git status and diff
-```
+- three simultaneous isolated department panels;
+- persisted department drafts, transcripts, attachments and routes;
+- dual-repository context loading;
+- automated ChatGPT browser bridge;
+- hybrid visible Chrome fallback;
+- generated-file capture;
+- persistent Download Inbox;
+- Package Review and Safe Apply;
+- backups, atomic writes and rollback;
+- Git status and diff presentation;
+- advisory GREEN / AMBER / RED Thread Pressure;
+- pressure-aware new-chat Thread Handoff;
+- verified route persistence and pressure reset after handoff;
+- restart continuity.
 
-# Operational Release Boundary
+# Operational Policy
 
-Console is sufficiently complete to stop broad feature development. Before main
-Project Curvature implementation resumes, the following remain mandatory:
+Console is complete enough for normal Curvature work. Broad feature development
+is paused.
 
-```text
-Thread Pressure
-→ functional Thread Handoff
-→ independent Project/Core/Research verification
-→ Console operational release
-```
+Implement shared functionality once, validate deeply in Core and use automated
+department-isolation tests. Run extra Project or Research live tests when a
+change is department-specific or evidence indicates a route problem.
 
-Core-only verification is insufficient. Shared operational functionality must
-work independently in all three department panels.
+# Deferred Until Needed
 
-Full structured conversation records, the expanded Department State Bus, the
-unified execution ledger and additional control-plane features are deferred
-until real Curvature work requires them.
-
-# Active Next Milestone
-
-```text
-ASSISTANT-001B5.4A — Thread Pressure Foundation
-```
-
-Each department requires an independent persisted GREEN / AMBER / RED estimate.
-The estimate must use locally observable data and must not claim exact knowledge
-of ChatGPT's context capacity.
-
-# Routing Rule
-
-```text
-department_id
-→ active_conversation_url
-```
-
-Conversation titles, sidebar labels and visual order are never routing keys.
+- structured conversation records;
+- expanded Department State Bus;
+- unified operation trace;
+- manual ZIP import;
+- refresh notification and other UX refinements.
 
 # Non-Negotiable Rules
 
-- no paid OpenAI API;
+- no mandatory paid OpenAI API;
 - no API key;
-- no manual copy-paste product workflow;
-- explicit user-triggered sends during the MVP;
-- local browser profile and session data;
-- strict department routing;
-- explicit browser failures;
-- explicit package approval before repository mutation;
+- no hidden paid operation;
+- no routing by conversation title;
+- explicit repository-write approval;
 - no automatic commit or push;
+- preserve the last verified route and transcript on failure;
 - test → verify → document → commit → push.
+
+# Exact Next Step
+
+Use Curvature Console for normal Project Curvature development.

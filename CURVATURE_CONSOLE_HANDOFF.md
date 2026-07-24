@@ -1,177 +1,139 @@
 # CURVATURE CONSOLE HANDOFF
 
-Status: Active
-Version: 1.1.0
-Owner: Project Curvature
+Status: Operational
+Version: 2.0.0
+Owner: Curvature Core
 Last Updated: 2026-07-24
-
----
 
 # 1. Mission
 
-Curvature Console is the internal coordination and control-plane application for
-Project Curvature. It maintains three permanent and equal workspaces:
+Curvature Console is the local development control plane for Project Curvature.
+It coordinates three equal departments:
 
 - Curvature Project;
 - Curvature Core;
 - Curvature Research.
 
-It preserves context, authority boundaries, browser routing, local state,
-responses, attachments and generated files without using the paid OpenAI API.
-
----
+It uses the user's existing ChatGPT Plus session and does not require the paid
+OpenAI API.
 
 # 2. Repository Boundaries
 
 ```text
-Curvature Console: ~/curvature-console
-Project Curvature: ~/Curvature
+Console repository: ~/curvature-console
+Project repository: ~/Curvature
 ```
 
-Console may read both repositories. An explicitly reviewed package may write to
-its declared target repository only after one user approval. Automatic commit
-and push remain prohibited.
-
----
+Console may read both repositories. A reviewed package may write only to its
+declared target repository after explicit user approval. Console never commits
+or pushes automatically.
 
 # 3. Current Verified Repository State
 
 ```text
-branch: main
-commit: 30cbd3cdef56f4141fe3dbc916592ffe82fefe2d
-tests: 106 passed
+Branch: main
+Commit: 070eecd
+Automated tests: 118 passed
 git diff --check: passed
 main == origin/main
-working tree: clean
+Working tree: clean
 ```
 
----
-
-# 4. Verified Department State
-
-Named context roots:
+# 4. Completed Operational Workflow
 
 ```text
-console   → ~/curvature-console
-curvature → ~/Curvature
+department task
+→ bounded transfer package
+→ persisted department route
+→ Playwright / Chrome send
+→ completed response capture
+→ originating panel persistence
+→ optional generated-file download
+→ Package Review
+→ explicit Safe Apply
+→ backup and atomic write
+→ Git status and diff
 ```
 
-Context loading:
+Thread continuity:
 
 ```text
-Project  — 8 loaded · 0 errors
-Core     — 10 loaded · 0 errors
-Research — 8 loaded · 0 errors
+local GREEN / AMBER / RED estimate
+→ pressure-aware handoff action
+→ shared ChatGPT Project
+→ new conversation creation
+→ verified /c/... route
+→ completed first response
+→ new route persistence
+→ transcript and pressure reset
 ```
 
-Project, Core and Research each have a dedicated persisted conversation route.
-All three routes and restart continuity have passed live verification.
+# 5. Live Verification Evidence
 
----
+Verified during B5.4:
 
-# 5. Completed Package Workflow
+- independent GREEN values displayed in Project, Core and Research;
+- Core transitioned live through GREEN, AMBER and RED;
+- RED task warning and handoff controls worked;
+- a new Core chat was created inside the shared Curvature Project;
+- the first handoff response was captured;
+- the new Core conversation route was persisted;
+- pressure returned to low GREEN;
+- restart and `Refresh All Context` preserved an operational state;
+- all three context loaders reported zero errors;
+- 118 automated tests passed.
 
-`ASSISTANT-001B5.2E — Package Review and Safe Apply` is complete.
+# 6. Validation Policy
 
-Delivered across E1, E2 and E3:
+Shared functionality is implemented once and deeply validated in Core.
 
-- root `CURVATURE_PACKAGE.json` contract;
-- repository identity validation;
-- ZIP-entry, traversal, absolute-path and symlink protection;
-- CREATE / REPLACE / SKIP / CONFLICT classification;
-- read-only Package Review UI;
-- Apply disabled for blocked packages;
-- one explicit Apply approval;
-- mandatory re-review immediately before writes;
-- stale package and stale repository rejection;
-- backups outside repositories;
-- atomic writes;
-- rollback of created and replaced files on failure;
-- `APPLY_RESULT.json`;
-- post-apply Git status and diff;
-- no automatic commit or push.
+Project and Research receive:
 
-Live E3 proof completed with CREATE, REPLACE and SKIP. Backup and metadata were
-verified, test changes were restored, and the complete suite passed with 106
-tests.
+- the same `DepartmentPanel`;
+- the same browser bridge;
+- the same routing and persistence services;
+- the same pressure estimator;
+- automated department-isolation coverage.
 
----
+Separate live smoke tests are required only when a change is department-specific,
+configuration-sensitive or produces evidence of a route-specific defect.
 
-# 6. Operational Release Decision
+# 7. Known Non-Blocking Limitations
 
-Console development is now restricted to the minimum required for safe daily
-Project Curvature work.
+- new-chat creation may take noticeable time in Chrome/ChatGPT;
+- refresh success is visible mainly in the bottom status bar;
+- downloaded packages cannot yet be manually imported into the Downloads
+  registry from an arbitrary local path;
+- Thread Pressure is advisory rather than an exact ChatGPT token reading.
 
-Mandatory before returning to the main Curvature implementation roadmap:
+# 8. Deferred Capabilities
 
-```text
-B5.2E documentation closeout
-→ B5.4 Thread Pressure
-→ complete Thread Handoff lifecycle
-→ independent Project/Core/Research verification
-→ Console operational release
-```
+- structured conversation records;
+- expanded State Bus and formal cross-department handoff records;
+- unified operation trace;
+- manual package import;
+- optional UX refinements.
 
-Core-only verification is not acceptance evidence for shared functionality.
-Every required workflow must pass independently in all three departments.
+Do not resume these merely to make Console feel more complete. Promote them only
+when actual Curvature work requires them.
 
-Deferred until actual project use requires them:
+# 9. Exact Next Step
 
-- B5.3 full structured department conversation records;
-- B6 expanded Department State Bus and cross-department handoffs;
-- unified execution ledger;
-- optional control-plane features.
+Begin normal Project Curvature work through Curvature Console.
 
----
+The first task should be chosen by Curvature Project. Core implements approved
+technical work. Research establishes evidence and confidence where required.
 
-# 7. Active Milestone
-
-```text
-ASSISTANT-001B5.4A — Thread Pressure Foundation
-```
-
-Required first delivery:
-
-- locally derived pressure estimate;
-- independent state per `department_id`;
-- persisted GREEN / AMBER / RED state;
-- visible indicator in Project, Core and Research;
-- restart continuity;
-- tests proving isolation between departments;
-- no assertion of an exact ChatGPT context-window value.
-
-The later B5.4 units must connect AMBER and RED to a functional Thread Handoff,
-persist the replacement conversation URL, verify continued messaging on the new
-route, and reset pressure only after successful handoff completion.
-
----
-
-# 8. Required Final Verification Matrix
-
-The operational release requires three independent live passes:
-
-```text
-Project  → pressure → handoff → new route → continued response
-Core     → pressure → handoff → new route → continued response
-Research → pressure → handoff → new route → continued response
-```
-
-Each pass must also preserve department-specific attachments, downloads,
-context, local state and restart continuity.
-
----
-
-# 9. Engineering Rules
+# 10. Engineering Rules
 
 1. Never guess.
-2. Request current files when uncertain.
+2. Inspect current files before uncertain changes.
 3. Deliver complete replacement files.
-4. Label every file action.
+4. Label files as replace, create or leave unchanged.
 5. One sprint has one goal.
-6. Verify displayed state.
-7. Test before commit.
-8. Commit before push.
-9. Keep documentation current.
-10. Use English for code and documentation.
-11. Use Polish for development discussion.
-12. Do not create hidden paid operations.
+6. Test and verify before documentation.
+7. Document before commit and push.
+8. Keep repository state clean.
+9. Code and documentation are written in English.
+10. Development discussion is conducted in Polish.
+11. No hidden paid operation.

@@ -1,369 +1,167 @@
 # Curvature Console Repository
 
-Curvature Console is a standalone internal development coordination application for Project Curvature.
+Curvature Console is the operational local development control plane for
+Project Curvature.
 
 It provides three permanent and equal departmental workspaces:
 
-- Curvature Project
-- Curvature Core
-- Curvature Research
+- Curvature Project;
+- Curvature Core;
+- Curvature Research.
 
-The application is separate from Curvature Platform, World Core, Chronicle Client and gameplay.
+The application is separate from Curvature Platform, World Core, Chronicle
+Client and gameplay.
 
----
-
-# Canonical Console Documentation
-
-Console documents use the `CONSOLE_` prefix so they remain unambiguous when
-uploaded together with Project Curvature documents to one ChatGPT Project.
-
-- `CONSOLE_README.md` — source-friendly Console overview
-- `CONSOLE_HANDOFF.md` — current state and exact next step
-- `CONSOLE_ROADMAP.md` — ordered implementation plan
-- `CONSOLE_CHANGELOG.md` — completed and verified work
-- `CONSOLE_DECISIONS.md` — durable architecture decisions
-- `CONSOLE_PIPELINE.md` — development and verification process
-
-`README.md` remains the standard repository landing page.
-
----
-
-# Current State
-
-The following work is complete and verified:
-
-- ASSISTANT-001B1 — Repository and Application Foundation
-- ASSISTANT-001B2 — Three-Panel Desktop Shell
-- Per-Department Attachment Queues
-- ASSISTANT-001B3 — Workspace Configuration and Context Loading
-- ASSISTANT-001B4 — Local State and Conversation Persistence
-- ASSISTANT-001B5.1 — Task and Thread Handoff Packages
-- ASSISTANT-001B5.2A — Browser Bridge Foundation
-- ASSISTANT-001B5.2B — Browser Lifecycle and One-Click UX
-- ASSISTANT-001B5.2C — Durable URL-Only Conversation Routing
-
-Current verification:
+# Current Release
 
 ```text
-56 automated tests passed
-live Core response: PROJECT_SCOPED_ROUTE_OK
+Status: Operational
+Commit: 070eecd
+Automated tests: 118 passed
+Branch: main
+Remote: origin/main
 ```
-
-The next implementation unit is:
-
-```text
-ASSISTANT-001B5.2D — Generated File Download Capture
-```
-
----
 
 # Product Model
 
-Curvature Console is a local coordination, context, persistence, routing and browser-automation tool.
-
-One shared official ChatGPT Project remains the AI conversation environment:
+One shared official ChatGPT Project named `Curvature` contains successive
+department conversations.
 
 ```text
-ChatGPT Project: Curvature
-├── Project department conversation
-├── Core department conversation
-└── Research department conversation
+department_id
+→ persisted active_conversation_url
 ```
 
-Routing uses `department_id` and the persisted active conversation URL. Conversation titles are not routing identifiers.
+Titles and sidebar order are never routing keys.
 
-Curvature Console prepares a controlled Task Package or Thread Handoff Package, sends it automatically through the matching logged-in ChatGPT Project, retrieves the completed assistant response and routes it back to the originating Console department.
-
-Manual copy-and-paste is not an accepted product workflow.
-
----
-
-# Cost Rule
-
-Curvature Console must not create additional mandatory AI costs beyond the user's existing ChatGPT Plus subscription.
-
-Therefore:
-
-- paid OpenAI API usage is not part of the default architecture;
-- no OpenAI API key is required;
-- no paid provider request is performed;
-- no background process may incur API, token, tool or search charges;
-- official ChatGPT remains the AI conversation environment;
-- browser automation uses the user's existing logged-in ChatGPT Plus session;
-- any future paid provider integration requires a separate explicit decision and must be optional and disabled by default.
-
-The authoritative decisions are recorded in `CONSOLE_DECISIONS.md`.
-
----
+Console builds bounded Task or Thread Handoff packages, sends them through the
+user's logged-in ChatGPT Plus browser session, captures completed responses and
+persists them only in the originating department.
 
 # Implemented Capabilities
 
-## Three-department desktop shell
+## Workspace
 
-- simultaneous Project, Core and Research panels;
-- resizable horizontal splitter;
-- single-department Focus mode;
-- restoration of the three-panel layout.
+- simultaneous three-panel layout;
+- Focus mode;
+- isolated roles and context;
+- independent drafts, transcripts and attachments;
+- dual-repository context loading;
+- restart persistence.
 
-## Workspace context
+## Browser Workflow
 
-- YAML workspace definitions;
-- Markdown department roles;
-- read-only access to the Project Curvature repository;
-- automatic loading of configured documents;
-- context preview;
-- manual context refresh.
+- Playwright automation;
+- dedicated local browser profile;
+- deterministic request markers;
+- URL-only department routing;
+- automated send and response capture;
+- visible Chrome fallback and observation;
+- explicit lifecycle failures.
 
-## Attachments
+## Files and Packages
 
-- independent attachment queues per department;
-- file selection;
-- screenshot paste;
-- drag-and-drop;
-- persistent screenshot storage;
-- attachment metadata persistence.
+- generated-file capture;
+- persistent Download Inbox;
+- collision-safe filenames;
+- Package Review;
+- CREATE / REPLACE / SKIP / CONFLICT classification;
+- traversal and unsafe-entry rejection;
+- explicit Apply approval;
+- re-review before write;
+- backup, atomic writes and rollback;
+- `APPLY_RESULT.json`;
+- Git status and diff;
+- no automatic commit or push.
 
-Attachments are never shared automatically between departments.
+## Thread Continuity
 
-## Local persistence
+- advisory per-department Thread Pressure;
+- GREEN / AMBER / RED states;
+- pressure-aware controls;
+- functional new-chat Thread Handoff;
+- wait for a real `/c/...` route;
+- persist the new route only after verified completion;
+- reset transcript and pressure after success;
+- preserve the previous verified state after failure.
 
-- SQLite operational-state database;
-- independent draft and conversation text per department;
-- attachment metadata;
-- splitter widths;
-- Focus state;
-- restart continuity.
+# Hybrid Browser Model
 
-Operational data is stored under:
+Automation remains the default. Ordinary Chrome may be shown when browser work
+is slow, observable or needs user intervention.
 
-```text
-~/curvature-console/data/
-```
+Creating a new ChatGPT conversation can take noticeably longer than sending a
+task to an existing conversation. Console waits while verified progress
+continues instead of treating ordinary slowness as an immediate failure.
 
-## Controlled transfer packages
-
-Task Packages are used for normal work in an existing department chat.
-
-Thread Handoff Packages are used when starting a new chat in the same department's ChatGPT Project.
-
-The package builder provides:
-
-- department identity and authority;
-- full department role;
-- mode-specific repository context;
-- bounded recent local conversation;
-- current task;
-- attachment manifest;
-- response instructions.
-
-B5.1 originally exposed clipboard delivery. That delivery method is superseded by the automated browser bridge. The package builder itself remains the approved payload source.
-
-## Browser bridge foundation
-
-B5.2A provides:
-
-- Playwright as an explicit dependency;
-- ordinary Google Chrome startup with a dedicated local profile;
-- local Chrome DevTools Protocol endpoint;
-- CDP connection lifecycle;
-- explicit department-to-project mapping;
-- read-only login and project probe;
-- browser-profile exclusion from Git;
-- unit tests without live network access.
-
-Verified live automation proof:
+# Environment
 
 ```text
-ordinary Chrome
-→ logged-in ChatGPT Plus session
-→ Curvature Core navigation
-→ automatic message entry
-→ automatic send
-→ response completion detection
-→ exact response extraction
+Python 3.11
+PySide6
+PyYAML
+pytest
+Playwright
+Google Chrome Stable
+SQLite
 ```
 
-Verified response:
-
-```text
-CURVATURE_AUTOMATION_OK
-```
-
----
-
-# Browser Runtime
-
-Chrome executable:
-
-```text
-/usr/bin/google-chrome-stable
-```
-
-Dedicated local profile:
-
-```text
-~/curvature-console/data/browser-profile/
-```
-
-CDP endpoint:
-
-```text
-http://127.0.0.1:9222
-```
-
-The browser profile contains private session data and must never be committed.
-
-Start ordinary Chrome manually during development:
+Create or repair the environment:
 
 ```bash
 cd ~/curvature-console
-
-google-chrome-stable \
-  --remote-debugging-port=9222 \
-  --user-data-dir="$HOME/curvature-console/data/browser-profile" \
-  --no-first-run \
-  --no-default-browser-check \
-  https://chatgpt.com
-```
-
-The user performs login manually inside this dedicated profile. Passwords and authentication tokens are never stored in Console source code.
-
----
-
-# Department Routing
-
-```text
-project  → persisted project conversation URL
-core     → persisted core conversation URL
-research → persisted research conversation URL
-```
-
-A task and its response must remain bound to the same department. Mutable ChatGPT titles and sidebar labels are never used as routing keys.
-
----
-
-# Repository Boundaries
-
-Curvature Console repository:
-
-```text
-~/curvature-console
-```
-
-Project Curvature repository:
-
-```text
-~/Curvature
-```
-
-During the MVP, Curvature Console access to Project Curvature remains read-only.
-
-Curvature Console must not:
-
-- edit Project Curvature documents automatically;
-- execute Git operations automatically;
-- bypass department authority boundaries;
-- share attachments between departments without an explicit handoff.
-
----
-
-# Environment Rule
-
-PySide6 and its Qt runtime must be installed through Conda Forge.
-
-Playwright is installed as a Python package dependency. The browser bridge controls the system Google Chrome installation through CDP; it does not require the bundled Playwright Chromium for the approved runtime.
-
-Verified environment:
-
-```text
-Conda:
-- Python 3.11
-- PySide6
-- PyYAML
-- pytest
-
-pip:
-- Curvature Console editable package
-- Playwright dependency
-```
-
----
-
-# Create the Environment
-
-```bash
-conda env create -f environment.yml
 conda activate curvature-console
 python -m pip install -e .
 ```
 
----
-
-# Repair or Update an Existing Environment
-
-```bash
-conda activate curvature-console
-
-conda install -c conda-forge \
-  pyside6 \
-  pyyaml \
-  pytest \
-  xcb-util-cursor \
-  libxcb \
-  xorg-libxcursor \
-  -y
-
-python -m pip install -e .
-```
-
----
-
-# Run
+Run:
 
 ```bash
 python -m curvature_console.main
 ```
 
-or:
+Test:
 
 ```bash
-curvature-console
+python -m pytest -q
 ```
 
----
+# Cost Rule
 
-# Test
+Normal operation uses the existing ChatGPT Plus subscription.
 
-```bash
-python -m pytest -v
-```
+- no mandatory OpenAI API;
+- no API key;
+- no automatic paid model, tool or search request;
+- any future paid integration requires a separate decision and must be optional.
 
-Live browser verification is separate from the unit suite and must only run when ordinary Chrome is open with the dedicated profile and CDP port.
+# Repository Safety
 
----
-
-# Active Milestone
-
-## ASSISTANT-001B5 — ChatGPT Plus Browser Integration
-
-Completed and verified:
+Console repository:
 
 ```text
-ASSISTANT-001B5.2B — Browser Lifecycle and One-Click UX
-ASSISTANT-001B5.2C — Durable URL-Only Conversation Routing
+~/curvature-console
 ```
 
-Next:
+Project repository:
 
 ```text
-ASSISTANT-001B5.2D — Generated File Download Capture
+~/Curvature
 ```
 
-See `CONSOLE_ROADMAP.md`, `CONSOLE_HANDOFF.md`, `CONSOLE_DECISIONS.md` and `CONSOLE_PIPELINE.md`.
+Repository writes require an eligible reviewed package and explicit approval.
+Console does not commit or push.
 
+# Development Status
 
-# Next Browser Workflow Milestones
+Broad Console feature development is paused. Future features are promoted only
+when actual Curvature work demonstrates an operational need.
 
-- B5.2D — generated-file download capture and Download Inbox;
-- B5.2E — Package Review, path validation, backups, explicit Apply and Git diff;
-- B5.3 — structured department conversation and exchange records.
+The exact current state is recorded in:
+
+- `00_CURVATURE_CONSOLE_CURRENT_STATE.md`;
+- `CURVATURE_CONSOLE_HANDOFF.md`;
+- `CURVATURE_CONSOLE_ROADMAP.md`;
+- `CURVATURE_CONSOLE_CHANGELOG.md`;
+- `CURVATURE_CONSOLE_DECISIONS.md`;
+- `CURVATURE_CONSOLE_PIPELINE.md`.

@@ -9,6 +9,62 @@ Last Updated: 2026-07-24
 
 ## 2026-07-24
 
+### ASSISTANT-001B5.4 — Thread Pressure and Hybrid Thread Handoff
+
+Completed, verified and pushed.
+
+Delivered:
+
+- independent per-department advisory Thread Pressure;
+- GREEN / AMBER / RED states;
+- pressure-aware handoff controls;
+- RED warning before ordinary task submission;
+- contenteditable ChatGPT editor support;
+- hybrid Playwright and visible-Chrome lifecycle;
+- new-chat creation through the shared ChatGPT Project;
+- verified `/c/...` route capture;
+- first-response completion handling;
+- new-route persistence;
+- transcript and pressure reset after verified success;
+- preservation of the previous verified state on failure;
+- restart-safe operation.
+
+Verified:
+
+```text
+118 automated tests passed
+git diff --check passed
+commit 070eecd pushed
+Project context: 8 loaded, 0 errors
+Core context: 10 loaded, 0 errors
+Research context: 8 loaded, 0 errors
+Core live pressure: GREEN → AMBER → RED
+Core live Thread Handoff created a new chat
+new Core route persisted
+Core pressure returned to GREEN
+```
+
+Result:
+
+Curvature Console is operational for normal Project Curvature development.
+Broad Console feature work is paused until real use demonstrates a need.
+
+### Operational Validation Policy
+
+Accepted:
+
+- shared functionality is implemented once;
+- Core receives deep live validation;
+- automated tests prove department isolation;
+- Project and Research smoke tests are run when a change is department-specific
+  or evidence indicates a routing/configuration defect;
+- separate live repetition in all three panels is not mandatory for every
+  shared implementation.
+
+---
+
+## 2026-07-24
+
 ### ASSISTANT-001B5.2E — Package Review and Safe Apply
 
 Completed, live-verified, committed and pushed.
