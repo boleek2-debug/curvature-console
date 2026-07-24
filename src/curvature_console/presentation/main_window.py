@@ -34,6 +34,7 @@ from curvature_console.infrastructure.context_loader import (
     ContextLoadResult,
     WorkspaceContextLoader,
 )
+from curvature_console.infrastructure.package_apply import PackageApplier
 from curvature_console.infrastructure.package_review import (
     PackageReviewError,
     PackageReviewer,
@@ -95,6 +96,7 @@ class MainWindow(QMainWindow):
         data_directory: Path | None = None,
         browser_config: BrowserBridgeConfig | None = None,
         repository_roots: dict[str, Path] | None = None,
+        package_backup_root: Path | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -125,6 +127,10 @@ class MainWindow(QMainWindow):
             ).items()
         }
         self.package_reviewer = PackageReviewer()
+        self.package_applier = PackageApplier(
+            reviewer=self.package_reviewer,
+            backup_root=package_backup_root,
+        )
         self.state_store = SQLiteStateStore(state_path)
         self._bootstrap_chat_routes()
         self.context_loader = WorkspaceContextLoader()
@@ -333,7 +339,11 @@ class MainWindow(QMainWindow):
             )
             return
 
-        dialog = PackageReviewDialog(review=review, parent=self)
+        dialog = PackageReviewDialog(
+            review=review,
+            apply_callback=self.package_applier.apply,
+            parent=self,
+        )
         dialog.exec()
         state = (
             "eligible"
