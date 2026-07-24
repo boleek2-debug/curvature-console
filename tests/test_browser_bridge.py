@@ -723,3 +723,98 @@ def test_capture_skips_download_timeout_when_response_has_no_file(
         assistant_message_index=0,
         response_text="Handoff accepted. Continue in this conversation.",
     ) == ()
+
+
+def test_rendered_package_body_confirms_when_marker_is_omitted(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeMessage:
+        def inner_text(self):
+            return (
+                "CURVATURE CONSOLE — CHATGPT TRANSFER PACKAGE\n"
+                "Package type: Task Package\n"
+                "Department: Curvature Core"
+            )
+
+    class FakeMessages:
+        def count(self):
+            return 1
+
+        def nth(self, index):
+            assert index == 0
+            return FakeMessage()
+
+    class FakePage:
+        def locator(self, selector):
+            assert selector == '[data-message-author-role="user"]'
+            return FakeMessages()
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+
+    bridge._wait_for_confirmed_user_message(
+        page=FakePage(),
+        baseline_count=0,
+        request_id="request-rendered-without-marker",
+        message_text=(
+            "# CURVATURE CONSOLE — CHATGPT TRANSFER PACKAGE\n\n"
+            "Package type: Task Package\n"
+            "Department: Curvature Core\n"
+        ),
+    )
+
+
+def test_attachment_only_message_does_not_match_package_signature(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    config = BrowserBridgeConfig(
+        chrome_executable=config.chrome_executable,
+        profile_directory=config.profile_directory,
+        message_confirmation_timeout_seconds=0.01,
+        response_poll_interval_seconds=0.001,
+    )
+    bridge = ChatGPTBrowserBridge(config)
+
+    class FakeMessage:
+        def inner_text(self):
+            return "CURVATURE_CONSOLE_ROLE_CORE.md"
+
+    class FakeMessages:
+        def count(self):
+            return 1
+
+        def nth(self, index):
+            assert index == 0
+            return FakeMessage()
+
+    class FakePage:
+        def locator(self, selector):
+            assert selector == '[data-message-author-role="user"]'
+            return FakeMessages()
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+
+    with pytest.raises(BrowserBridgeMessageNotConfirmed):
+        bridge._wait_for_confirmed_user_message(
+            page=FakePage(),
+            baseline_count=0,
+            request_id="request-not-present",
+            message_text=(
+                "# CURVATURE CONSOLE — CHATGPT TRANSFER PACKAGE\n\n"
+                "Package type: Task Package\n"
+            ),
+        )
+
+
+def test_confirmation_text_normalization_handles_markdown_rendering(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    assert bridge._normalize_confirmation_text(
+        "## CURRENT USER TASK\n\n- Run the complete test suite."
+    ) == "current user task run the complete test suite."

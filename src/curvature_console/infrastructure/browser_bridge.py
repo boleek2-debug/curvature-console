@@ -467,6 +467,7 @@ class ChatGPTBrowserBridge:
             page=page,
             baseline_count=baseline_user_count,
             request_id=request.request_id,
+            message_text=request.message_text,
         )
 
         if request.create_new_thread:
@@ -1335,13 +1336,16 @@ class ChatGPTBrowserBridge:
         page: Page,
         baseline_count: int,
         request_id: str,
+        message_text: str = "",
     ) -> None:
-        """Confirm the sent request by its unique visible transport marker.
+        """Confirm that ChatGPT accepted the request as a user message.
 
-        ChatGPT renders Markdown and rich text differently from the composer,
-        so comparing the complete editor payload with rendered ``inner_text``
-        is not reliable. The immutable request id is the deterministic
-        correlation key.
+        The immutable request marker remains the primary correlation key.
+        Some ChatGPT renderer variants omit or collapse the first transport
+        line even though the full package was submitted.  In that case the
+        bridge also accepts a newly rendered message that contains a strong
+        normalized signature from the package body. Attachment-only messages
+        remain ignored while the bridge continues waiting for the text body.
         """
 
         deadline = (
@@ -1349,6 +1353,7 @@ class ChatGPTBrowserBridge:
             + self.config.message_confirmation_timeout_seconds
         )
         marker = self._request_marker(request_id)
+        signatures = self._message_confirmation_signatures(message_text)
 
         observed_unmatched_messages = 0
 
@@ -1363,8 +1368,13 @@ class ChatGPTBrowserBridge:
                     current_count - baseline_count
                 )
                 for index in range(baseline_count, current_count):
-                    observed_text = messages.nth(index).inner_text()
+                    observed_text = messages.nth(index).inner_text() or ""
                     if marker in observed_text:
+                        return
+                    if self._message_matches_request_payload(
+                        observed_text=observed_text,
+                        signatures=signatures,
+                    ):
                         return
 
             time.sleep(self.config.response_poll_interval_seconds)
@@ -1372,14 +1382,58 @@ class ChatGPTBrowserBridge:
         if observed_unmatched_messages:
             raise BrowserBridgeMessageNotConfirmed(
                 "New user message content appeared after the send action, "
-                "but none of the new messages contained the current request "
-                "marker. This may indicate an attachment-only transport "
-                "message or a foreign user action."
+                "but none of the new messages matched the current request "
+                "marker or package body. This may indicate an attachment-only "
+                "transport message or a foreign user action."
             )
 
         raise BrowserBridgeMessageNotConfirmed(
             "ChatGPT did not confirm the current request as a new user message."
         )
+
+    def _message_confirmation_signatures(
+        self,
+        message_text: str,
+    ) -> tuple[str, ...]:
+        """Return stable rendered-text signatures for one package body."""
+
+        signatures: list[str] = []
+        for raw_line in message_text.splitlines():
+            normalized = self._normalize_confirmation_text(raw_line)
+            if len(normalized) < 24:
+                continue
+            if normalized in signatures:
+                continue
+            signatures.append(normalized)
+            if len(signatures) >= 8:
+                break
+        return tuple(signatures)
+
+    def _message_matches_request_payload(
+        self,
+        *,
+        observed_text: str,
+        signatures: tuple[str, ...],
+    ) -> bool:
+        """Match a rendered user message to the submitted package body."""
+
+        if not signatures:
+            return False
+        normalized_observed = self._normalize_confirmation_text(observed_text)
+        return any(
+            signature in normalized_observed
+            for signature in signatures
+        )
+
+    def _normalize_confirmation_text(self, value: str) -> str:
+        """Normalize Markdown/rich-text differences for confirmation only."""
+
+        lines = []
+        for raw_line in value.splitlines():
+            line = raw_line.strip().lstrip("#>*- " ).strip()
+            if line:
+                lines.append(line)
+        return " ".join(" ".join(lines).split()).casefold()
 
 
     def _enter_message_text(
