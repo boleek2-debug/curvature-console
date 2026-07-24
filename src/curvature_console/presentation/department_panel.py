@@ -19,6 +19,10 @@ from PySide6.QtWidgets import (
 
 from curvature_console.infrastructure.context_loader import ContextLoadResult
 from curvature_console.infrastructure.state_store import GeneratedDownloadRecord
+from curvature_console.infrastructure.thread_pressure import (
+    ThreadPressureEstimator,
+    ThreadPressureLevel,
+)
 from curvature_console.presentation.attachment_list import AttachmentList
 
 
@@ -52,6 +56,22 @@ class DepartmentPanel(QFrame):
 
         self.status_label = QLabel("STATUS: READY")
         self.status_label.setObjectName(f"{department_id}Status")
+
+        self.thread_pressure_estimator = ThreadPressureEstimator()
+        self.thread_pressure_label = QLabel()
+        self.thread_pressure_label.setObjectName(
+            f"{department_id}ThreadPressure"
+        )
+        self.thread_pressure_label.setToolTip(
+            "Advisory local estimate based on the Console transcript, "
+            "current draft and attached file sizes. It is not ChatGPT's "
+            "exact context usage or capacity."
+        )
+        self.thread_pressure_recommendation = QLabel()
+        self.thread_pressure_recommendation.setObjectName(
+            f"{department_id}ThreadPressureRecommendation"
+        )
+        self.thread_pressure_recommendation.setWordWrap(True)
 
         self.responsibility_label = QLabel(responsibility)
         self.responsibility_label.setObjectName(f"{department_id}Responsibility")
@@ -101,12 +121,16 @@ class DepartmentPanel(QFrame):
             f"{title} workspace is operational.\n\n"
             f"Responsibility: {responsibility}"
         )
+        self.conversation_view.textChanged.connect(
+            self._update_thread_pressure
+        )
 
         self.input_editor = QPlainTextEdit()
         self.input_editor.setObjectName(f"{department_id}Input")
         self.input_editor.setPlaceholderText(f"Message {title}...")
         self.input_editor.setMaximumHeight(110)
         self.input_editor.textChanged.connect(self._notify_state_changed)
+        self.input_editor.textChanged.connect(self._update_thread_pressure)
 
         self.download_label = QLabel("Downloads: 0")
         self.download_label.setObjectName(f"{department_id}DownloadStatus")
@@ -143,6 +167,9 @@ class DepartmentPanel(QFrame):
         self.attachment_list.attachments_changed.connect(
             self._notify_state_changed
         )
+        self.attachment_list.attachments_changed.connect(
+            self._update_thread_pressure
+        )
 
         self.task_package_button = QPushButton("Send Task")
         self.task_package_button.setObjectName(
@@ -175,6 +202,8 @@ class DepartmentPanel(QFrame):
         layout = QVBoxLayout(self)
         layout.addLayout(header_layout)
         layout.addWidget(self.status_label)
+        layout.addWidget(self.thread_pressure_label)
+        layout.addWidget(self.thread_pressure_recommendation)
         layout.addWidget(self.responsibility_label)
         layout.addWidget(self.context_label)
         layout.addWidget(self.context_files)
@@ -186,6 +215,34 @@ class DepartmentPanel(QFrame):
         layout.addWidget(self.download_list)
         layout.addWidget(self.package_review_button)
         layout.addLayout(transfer_button_layout)
+
+        self._update_thread_pressure()
+
+
+    def _update_thread_pressure(self, *_args) -> None:
+        """Refresh this department's independent local pressure estimate."""
+
+        snapshot = self.thread_pressure_estimator.estimate(
+            conversation_text=self.conversation_view.toPlainText(),
+            draft_text=self.input_editor.toPlainText(),
+            attachment_paths=(
+                record.path for record in self.attachment_list.records
+            ),
+        )
+        self.thread_pressure_label.setText(
+            "THREAD PRESSURE: "
+            f"{snapshot.level.value} · ~{snapshot.estimated_tokens:,} tokens"
+        )
+        self.thread_pressure_recommendation.setText(
+            snapshot.handoff_recommendation
+        )
+
+        styles = {
+            ThreadPressureLevel.GREEN: "color: #2e7d32; font-weight: 600;",
+            ThreadPressureLevel.AMBER: "color: #a05a00; font-weight: 700;",
+            ThreadPressureLevel.RED: "color: #b00020; font-weight: 700;",
+        }
+        self.thread_pressure_label.setStyleSheet(styles[snapshot.level])
 
     def set_context_result(self, result: ContextLoadResult) -> None:
         """Display the current context loading result."""

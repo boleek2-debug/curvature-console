@@ -81,3 +81,24 @@ def test_focus_and_restore_preserve_all_panels(window: MainWindow) -> None:
 def test_unknown_department_cannot_be_focused(window: MainWindow) -> None:
     with pytest.raises(ValueError, match="Unknown department"):
         window.focus_department("unknown")
+
+
+def test_each_department_has_independent_thread_pressure_indicator(
+    window: MainWindow,
+) -> None:
+    project = window.department_panels["project"]
+    core = window.department_panels["core"]
+    research = window.department_panels["research"]
+
+    for department_id, panel in window.department_panels.items():
+        assert panel.thread_pressure_label.objectName() == (
+            f"{department_id}ThreadPressure"
+        )
+        assert "THREAD PRESSURE: GREEN" in panel.thread_pressure_label.text()
+        assert "exact context" in panel.thread_pressure_label.toolTip()
+
+    core.input_editor.setPlainText("x" * 200_000)
+
+    assert "THREAD PRESSURE: AMBER" in core.thread_pressure_label.text()
+    assert "THREAD PRESSURE: GREEN" in project.thread_pressure_label.text()
+    assert "THREAD PRESSURE: GREEN" in research.thread_pressure_label.text()
