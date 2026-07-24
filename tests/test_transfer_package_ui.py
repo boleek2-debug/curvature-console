@@ -324,3 +324,82 @@ def test_browser_success_displays_and_persists_generated_download(
     assert window.state_store.load_generated_downloads("core")[0].saved_path == saved_path
 
     window.close()
+
+
+def test_red_pressure_warns_before_regular_task(monkeypatch) -> None:
+    create_application(["curvature-console-red-task-warning-test"])
+    window = MainWindow()
+    panel = window.department_panels["core"]
+    panel.input_editor.setPlainText(
+        "x" * (panel.thread_pressure_estimator.RED_THRESHOLD * 4)
+    )
+    window.context_results["core"] = ContextLoadResult(
+        department_id="core",
+        documents=(),
+        errors=(),
+    )
+
+    captured: list[TransferPackage] = []
+    monkeypatch.setattr(window, "start_browser_exchange", captured.append)
+    monkeypatch.setattr(
+        "curvature_console.presentation.main_window.QMessageBox.warning",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Cancel,
+    )
+
+    window.prepare_transfer_package("core", "task")
+    assert captured == []
+
+    monkeypatch.setattr(
+        "curvature_console.presentation.main_window.QMessageBox.warning",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
+    )
+    window.prepare_transfer_package("core", "task")
+    assert len(captured) == 1
+    assert captured[0].mode is TransferPackageMode.TASK
+    window.close()
+
+
+def test_verified_handoff_starts_fresh_active_transcript(tmp_path) -> None:
+    create_application(["curvature-console-handoff-reset-test"])
+    window = MainWindow(
+        state_path=tmp_path / "state.sqlite3",
+        data_directory=tmp_path / "data",
+    )
+    panel = window.department_panels["core"]
+    panel.conversation_view.setPlainText("old thread " * 30_000)
+    old_estimate = panel.thread_pressure_snapshot.estimated_tokens
+
+    from curvature_console.presentation.main_window import (
+        PendingBrowserExchange,
+    )
+
+    request_id = "request-handoff-success"
+    window._pending_exchanges[request_id] = PendingBrowserExchange(
+        request_id=request_id,
+        department_id="core",
+        user_task="Continue from handoff.",
+        mode=TransferPackageMode.THREAD_HANDOFF,
+    )
+
+    window._handle_browser_success(
+        request_id,
+        "core",
+        "Curvature",
+        "https://chatgpt.com/g/project/project",
+        "https://chatgpt.com/c/new-core-thread",
+        "HANDOFF_ACCEPTED",
+    )
+
+    transcript = panel.conversation_view.toPlainText()
+    assert transcript.startswith("=== NEW THREAD AFTER HANDOFF ===")
+    assert "old thread" not in transcript
+    assert "HANDOFF_ACCEPTED" in transcript
+    assert panel.thread_pressure_snapshot.estimated_tokens < old_estimate
+    assert panel.thread_pressure_snapshot.level.value == "GREEN"
+
+    route = window.state_store.load_chat_route("core")
+    assert route is not None
+    assert route.active_conversation_url == (
+        "https://chatgpt.com/c/new-core-thread"
+    )
+    window.close()

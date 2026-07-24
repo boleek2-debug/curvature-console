@@ -58,6 +58,9 @@ class DepartmentPanel(QFrame):
         self.status_label.setObjectName(f"{department_id}Status")
 
         self.thread_pressure_estimator = ThreadPressureEstimator()
+        self.thread_pressure_snapshot = self.thread_pressure_estimator.estimate(
+            conversation_text=""
+        )
         self.thread_pressure_label = QLabel()
         self.thread_pressure_label.setObjectName(
             f"{department_id}ThreadPressure"
@@ -229,6 +232,7 @@ class DepartmentPanel(QFrame):
                 record.path for record in self.attachment_list.records
             ),
         )
+        self.thread_pressure_snapshot = snapshot
         self.thread_pressure_label.setText(
             "THREAD PRESSURE: "
             f"{snapshot.level.value} · ~{snapshot.estimated_tokens:,} tokens"
@@ -237,12 +241,40 @@ class DepartmentPanel(QFrame):
             snapshot.handoff_recommendation
         )
 
-        styles = {
+        label_styles = {
             ThreadPressureLevel.GREEN: "color: #2e7d32; font-weight: 600;",
             ThreadPressureLevel.AMBER: "color: #a05a00; font-weight: 700;",
             ThreadPressureLevel.RED: "color: #b00020; font-weight: 700;",
         }
-        self.thread_pressure_label.setStyleSheet(styles[snapshot.level])
+        recommendation_styles = {
+            ThreadPressureLevel.GREEN: "",
+            ThreadPressureLevel.AMBER: (
+                "color: #7a4300; background: #fff4d6; padding: 4px; "
+                "border: 1px solid #d69b2d;"
+            ),
+            ThreadPressureLevel.RED: (
+                "color: #8a0018; background: #ffe5ea; padding: 4px; "
+                "border: 1px solid #b00020; font-weight: 700;"
+            ),
+        }
+        self.thread_pressure_label.setStyleSheet(label_styles[snapshot.level])
+        self.thread_pressure_recommendation.setStyleSheet(
+            recommendation_styles[snapshot.level]
+        )
+
+        if snapshot.level is ThreadPressureLevel.RED:
+            self.thread_handoff_button.setText("Send Thread Handoff Now")
+            self.thread_handoff_button.setStyleSheet(
+                "font-weight: 700; border: 2px solid #b00020;"
+            )
+        elif snapshot.level is ThreadPressureLevel.AMBER:
+            self.thread_handoff_button.setText(
+                "Send Thread Handoff (Recommended)"
+            )
+            self.thread_handoff_button.setStyleSheet("font-weight: 700;")
+        else:
+            self.thread_handoff_button.setText("Send Thread Handoff")
+            self.thread_handoff_button.setStyleSheet("")
 
     def set_context_result(self, result: ContextLoadResult) -> None:
         """Display the current context loading result."""
@@ -294,6 +326,23 @@ class DepartmentPanel(QFrame):
         self.conversation_view.setPlainText(
             "\n\n".join(section for section in sections if section != "")
         )
+        self.conversation_view.moveCursor(QTextCursor.MoveOperation.End)
+
+    def start_new_thread_exchange(
+        self,
+        user_task: str,
+        assistant_response: str,
+    ) -> None:
+        """Replace the active transcript after a verified thread handoff."""
+
+        sections = [
+            "=== NEW THREAD AFTER HANDOFF ===",
+            "=== USER TASK ===",
+            user_task.strip() or "[No current task draft]",
+            "=== ASSISTANT RESPONSE ===",
+            assistant_response,
+        ]
+        self.conversation_view.setPlainText("\n\n".join(sections))
         self.conversation_view.moveCursor(QTextCursor.MoveOperation.End)
 
 

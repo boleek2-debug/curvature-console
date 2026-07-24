@@ -67,9 +67,11 @@ class BrowserBridgeStage(StrEnum):
     LOCATING_EDITOR = "Locating editor"
     ENTERING_MESSAGE = "Entering message"
     SENDING = "Sending"
+    CREATING_NEW_THREAD = "Creating new chat"
     VERIFYING_USER_MESSAGE = "Verifying user message"
     WAITING_FOR_RESPONSE = "Waiting for response"
     RECEIVING = "Receiving"
+    SAVING_NEW_ROUTE = "Saving new conversation route"
     HUMAN_ACTION_REQUIRED = "Human action required"
     COMPLETED = "Completed"
     CAPTURING_DOWNLOADS = "Capturing downloads"
@@ -148,7 +150,8 @@ class BrowserBridgeConfig:
     navigation_timeout_seconds: float = 45.0
     editor_timeout_seconds: float = 30.0
     message_confirmation_timeout_seconds: float = 30.0
-    response_timeout_seconds: float = 180.0
+    new_thread_creation_timeout_seconds: float = 180.0
+    response_timeout_seconds: float = 300.0
     response_poll_interval_seconds: float = 0.5
     stable_response_seconds: float = 2.0
     human_action_timeout_seconds: float = 300.0
@@ -187,6 +190,8 @@ class BrowserBridgeConfig:
             "Editor timeout": self.editor_timeout_seconds,
             "Message confirmation timeout":
                 self.message_confirmation_timeout_seconds,
+            "New thread creation timeout":
+                self.new_thread_creation_timeout_seconds,
             "Response timeout": self.response_timeout_seconds,
             "Response poll interval": self.response_poll_interval_seconds,
             "Stable response duration": self.stable_response_seconds,
@@ -445,9 +450,10 @@ class ChatGPTBrowserBridge:
             )
 
         self._report_stage(BrowserBridgeStage.ENTERING_MESSAGE)
-        editor.fill(
-            transport_text,
-            timeout=int(self.config.editor_timeout_seconds * 1000),
+        self._enter_message_text(
+            page=page,
+            editor=editor,
+            message_text=transport_text,
         )
         self._report_stage(BrowserBridgeStage.SENDING)
         self._send_composer_message(
@@ -462,6 +468,10 @@ class ChatGPTBrowserBridge:
             baseline_count=baseline_user_count,
             request_id=request.request_id,
         )
+
+        if request.create_new_thread:
+            self._report_stage(BrowserBridgeStage.CREATING_NEW_THREAD)
+            self._wait_for_new_conversation_route(page)
 
         self._report_stage(BrowserBridgeStage.WAITING_FOR_RESPONSE)
         response_text = self._wait_for_completed_response(
@@ -481,6 +491,8 @@ class ChatGPTBrowserBridge:
         )
 
         conversation_url = page.url
+        if request.create_new_thread:
+            self._report_stage(BrowserBridgeStage.SAVING_NEW_ROUTE)
         if not self._is_conversation_url(conversation_url):
             raise BrowserBridgeRouteUnverified(
                 observed_url=conversation_url,
@@ -532,6 +544,11 @@ class ChatGPTBrowserBridge:
         expected_download_names = self._download_names_from_text(
             response_text or (response.inner_text() or "")
         )
+        if not expected_download_names:
+            immediate_candidates = self._find_download_candidates(container)
+            if not immediate_candidates:
+                return ()
+
         candidates = self._wait_for_download_candidates(
             page=page,
             container=container,
@@ -1364,6 +1381,41 @@ class ChatGPTBrowserBridge:
             "ChatGPT did not confirm the current request as a new user message."
         )
 
+
+    def _enter_message_text(
+        self,
+        *,
+        page: Page,
+        editor: Locator,
+        message_text: str,
+    ) -> None:
+        """Enter text into textarea/input or ChatGPT's rich editor.
+
+        Playwright's ``Locator.fill`` supports form controls and selected
+        contenteditable implementations, but ChatGPT's ProseMirror composer
+        can reject or stall that operation.  For contenteditable composers we
+        focus the locator and use the page keyboard, whose ``insert_text`` API
+        is the supported Playwright path for arbitrary Unicode text.
+        """
+
+        timeout_ms = int(self.config.editor_timeout_seconds * 1000)
+        contenteditable = (
+            editor.get_attribute(
+                "contenteditable",
+                timeout=timeout_ms,
+            )
+            or ""
+        ).lower()
+
+        if contenteditable == "true":
+            editor.click(timeout=timeout_ms)
+            page.keyboard.press("Control+A")
+            page.keyboard.press("Backspace")
+            page.keyboard.insert_text(message_text)
+            return
+
+        editor.fill(message_text, timeout=timeout_ms)
+
     def _transport_message_text(
         self,
         request: BrowserExchangeRequest,
@@ -1377,6 +1429,37 @@ class ChatGPTBrowserBridge:
 
     def _request_marker(self, request_id: str) -> str:
         return f"CURVATURE_REQUEST_ID: {request_id}"
+
+
+    def _wait_for_new_conversation_route(self, page: Page) -> str:
+        """Wait for ChatGPT to assign a real conversation URL.
+
+        A new project chat remains on the project landing URL until the first
+        message has been accepted. ChatGPT may take noticeably longer to
+        create that conversation than it takes to render the composer, so this
+        wait is deliberately separate from editor and message-confirmation
+        timeouts. The visible stage keeps the hybrid browser workflow honest:
+        Console continues waiting while Chrome/ChatGPT is still creating the
+        chat, and it does not reset local continuity until a real ``/c/...``
+        route exists.
+        """
+
+        deadline = (
+            time.monotonic()
+            + self.config.new_thread_creation_timeout_seconds
+        )
+        while time.monotonic() < deadline:
+            self._assert_runtime_alive(page)
+            self._raise_for_human_verification(page)
+            if self._is_conversation_url(page.url):
+                return page.url
+            time.sleep(self.config.response_poll_interval_seconds)
+
+        raise BrowserBridgeTimeout(
+            "ChatGPT accepted the handoff, but did not assign a new "
+            "conversation URL before the new-thread timeout. Leave Chrome "
+            "open and verify whether the new chat finished creating."
+        )
 
     def _wait_for_completed_response(
         self,

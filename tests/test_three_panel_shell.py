@@ -102,3 +102,25 @@ def test_each_department_has_independent_thread_pressure_indicator(
     assert "THREAD PRESSURE: AMBER" in core.thread_pressure_label.text()
     assert "THREAD PRESSURE: GREEN" in project.thread_pressure_label.text()
     assert "THREAD PRESSURE: GREEN" in research.thread_pressure_label.text()
+
+
+def test_thread_pressure_changes_handoff_call_to_action(window: MainWindow) -> None:
+    core = window.department_panels["core"]
+    estimator = core.thread_pressure_estimator
+
+    core.input_editor.setPlainText("x" * (estimator.AMBER_THRESHOLD * 4))
+    assert "AMBER" in core.thread_pressure_label.text()
+    assert core.thread_handoff_button.text() == (
+        "Send Thread Handoff (Recommended)"
+    )
+    assert "Prepare" in core.thread_pressure_recommendation.text()
+
+    core.input_editor.setPlainText("x" * (estimator.RED_THRESHOLD * 4))
+    assert "RED" in core.thread_pressure_label.text()
+    assert core.thread_handoff_button.text() == "Send Thread Handoff Now"
+    assert "strongly recommended" in (
+        core.thread_pressure_recommendation.text()
+    )
+
+    core.input_editor.clear()
+    assert core.thread_handoff_button.text() == "Send Thread Handoff"

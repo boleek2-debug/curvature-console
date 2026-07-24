@@ -573,3 +573,153 @@ def test_capture_uses_latest_assistant_message_index(
     ).read_text(encoding="utf-8")
 
     assert "assistant_message_index=current_assistant_count - 1" in source
+
+
+def test_enter_message_uses_page_keyboard_for_contenteditable(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    calls: list[tuple[str, str | None]] = []
+
+    class FakeEditor:
+        def get_attribute(self, name, timeout=None):
+            assert name == "contenteditable"
+            return "true"
+
+        def click(self, timeout=None):
+            calls.append(("click", None))
+
+        def fill(self, text, timeout=None):
+            raise AssertionError("fill must not be used for contenteditable")
+
+    class FakeKeyboard:
+        def press(self, key):
+            calls.append(("press", key))
+
+        def insert_text(self, text):
+            calls.append(("insert_text", text))
+
+    class FakePage:
+        keyboard = FakeKeyboard()
+
+    bridge._enter_message_text(
+        page=FakePage(),
+        editor=FakeEditor(),
+        message_text="handoff text",
+    )
+
+    assert calls == [
+        ("click", None),
+        ("press", "Control+A"),
+        ("press", "Backspace"),
+        ("insert_text", "handoff text"),
+    ]
+
+
+def test_enter_message_keeps_fill_for_form_controls(tmp_path: Path) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    calls: list[tuple[str, str]] = []
+
+    class FakeEditor:
+        def get_attribute(self, name, timeout=None):
+            assert name == "contenteditable"
+            return None
+
+        def fill(self, text, timeout=None):
+            calls.append(("fill", text))
+
+    class FakePage:
+        class Keyboard:
+            def insert_text(self, text):
+                raise AssertionError("keyboard must not be used")
+
+        keyboard = Keyboard()
+
+    bridge._enter_message_text(
+        page=FakePage(),
+        editor=FakeEditor(),
+        message_text="normal text",
+    )
+
+    assert calls == [("fill", "normal text")]
+
+
+def test_new_thread_waits_for_real_conversation_route(tmp_path: Path) -> None:
+    bridge = ChatGPTBrowserBridge(
+        BrowserBridgeConfig(
+            chrome_executable=_config(tmp_path).chrome_executable,
+            profile_directory=tmp_path / "profile",
+            new_thread_creation_timeout_seconds=0.1,
+            response_poll_interval_seconds=0.001,
+        )
+    )
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.urls = iter(
+                (
+                    SHARED_PROJECT_URL,
+                    SHARED_PROJECT_URL,
+                    "https://chatgpt.com/g/project-id/c/new-core-id",
+                )
+            )
+            self._url = SHARED_PROJECT_URL
+
+        @property
+        def url(self) -> str:
+            try:
+                self._url = next(self.urls)
+            except StopIteration:
+                pass
+            return self._url
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+
+    assert bridge._wait_for_new_conversation_route(FakePage()).endswith(
+        "/c/new-core-id"
+    )
+
+
+def test_capture_skips_download_timeout_when_response_has_no_file(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class EmptyControls:
+        def count(self):
+            return 0
+
+    class FakeContainer:
+        def count(self):
+            return 0
+
+        def locator(self, selector):
+            return EmptyControls()
+
+    class FakeResponse(FakeContainer):
+        def inner_text(self):
+            return "Handoff accepted. Continue in this conversation."
+
+    class FakeMessages:
+        def count(self):
+            return 1
+
+        def nth(self, index):
+            assert index == 0
+            return FakeResponse()
+
+    class FakePage:
+        def locator(self, selector):
+            assert selector == '[data-message-author-role="assistant"]'
+            return FakeMessages()
+
+    bridge._wait_for_download_candidates = lambda **kwargs: (_ for _ in ()).throw(
+        AssertionError("download timeout must not run without a file response")
+    )
+
+    assert bridge._capture_generated_downloads(
+        page=FakePage(),
+        assistant_message_index=0,
+        response_text="Handoff accepted. Continue in this conversation.",
+    ) == ()

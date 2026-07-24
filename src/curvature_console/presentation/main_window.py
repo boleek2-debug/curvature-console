@@ -65,6 +65,7 @@ class PendingBrowserExchange:
     request_id: str
     department_id: str
     user_task: str
+    mode: TransferPackageMode = TransferPackageMode.TASK
 
 
 class MainWindow(QMainWindow):
@@ -374,8 +375,27 @@ class MainWindow(QMainWindow):
         if package is None:
             return
 
+        panel = self.department_panels[department_id]
+        pressure = panel.thread_pressure_snapshot
+
+        if (
+            package.mode is TransferPackageMode.TASK
+            and pressure.should_avoid_regular_task
+        ):
+            answer = QMessageBox.warning(
+                self,
+                "Thread pressure is RED",
+                "The local thread-pressure estimate is RED. A Thread "
+                "Handoff is strongly recommended before more work.\n\n"
+                "Send this regular task anyway?",
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+
         if package.mode is TransferPackageMode.THREAD_HANDOFF:
-            panel = self.department_panels[department_id]
             answer = QMessageBox.warning(
                 self,
                 "Start a new ChatGPT thread?",
@@ -401,6 +421,7 @@ class MainWindow(QMainWindow):
             request_id=request_id,
             department_id=department_id,
             user_task=panel.input_editor.toPlainText(),
+            mode=package.mode,
         )
         self._pending_exchanges[request_id] = pending
         self._set_browser_operation_busy(True, department_id)
@@ -466,7 +487,13 @@ class MainWindow(QMainWindow):
 
         self._pending_exchanges.pop(request_id, None)
         panel = self.department_panels[department_id]
-        panel.append_browser_exchange(pending.user_task, response_text)
+        if pending.mode is TransferPackageMode.THREAD_HANDOFF:
+            panel.start_new_thread_exchange(
+                pending.user_task,
+                response_text,
+            )
+        else:
+            panel.append_browser_exchange(pending.user_task, response_text)
         self.state_store.save_generated_downloads(
             request_id=request_id,
             department_id=department_id,

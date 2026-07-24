@@ -37,6 +37,18 @@ class ThreadPressureSnapshot:
             return "Prepare a Thread Handoff soon."
         return "Current thread has comfortable local headroom."
 
+    @property
+    def should_prepare_handoff(self) -> bool:
+        """Return whether the current local estimate warrants handoff action."""
+
+        return self.level is not ThreadPressureLevel.GREEN
+
+    @property
+    def should_avoid_regular_task(self) -> bool:
+        """Return whether a regular task should require a strong warning."""
+
+        return self.level is ThreadPressureLevel.RED
+
 
 class ThreadPressureEstimator:
     """Estimate pressure without claiming ChatGPT's exact context capacity."""

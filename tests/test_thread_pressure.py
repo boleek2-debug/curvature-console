@@ -41,3 +41,18 @@ def test_attachment_sizes_contribute_to_pressure(tmp_path: Path) -> None:
     assert snapshot.attachment_bytes == 400
     assert snapshot.attachment_tokens == 100
     assert snapshot.estimated_tokens == 100
+
+
+def test_pressure_snapshot_exposes_handoff_actions() -> None:
+    estimator = ThreadPressureEstimator()
+
+    green = estimator.estimate("small")
+    amber = estimator.estimate("x" * (estimator.AMBER_THRESHOLD * 4))
+    red = estimator.estimate("x" * (estimator.RED_THRESHOLD * 4))
+
+    assert not green.should_prepare_handoff
+    assert not green.should_avoid_regular_task
+    assert amber.should_prepare_handoff
+    assert not amber.should_avoid_regular_task
+    assert red.should_prepare_handoff
+    assert red.should_avoid_regular_task
