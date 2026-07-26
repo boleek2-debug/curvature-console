@@ -380,3 +380,44 @@ Requirements:
 
 This remains a deferred architectural requirement and must not interrupt the
 mandatory B5.4 Thread Pressure and handoff closeout.
+
+
+# 13. B5.2R Browser Acceptance
+
+A deterministic browser change is not complete until the runtime log proves:
+
+```text
+exact persisted route
+→ dedicated page
+→ editor found
+→ current request marker confirmed
+→ completed response captured
+→ exchange_success
+→ owned process-group cleanup
+→ CDP port released=true
+```
+
+Normal browser execution uses full Chrome inside Xvfb. Visible Chrome is allowed
+only for confirmed login or human verification.
+
+The active panel must show a continuously updating activity indicator while the
+worker runs.
+
+# 14. Generated-File Acceptance
+
+Generated-file capture must not force ZIP format.
+
+Required live proof:
+
+```text
+assistant generates a non-ZIP file
+→ Console captures the actual download
+→ original filename and extension preserved
+→ collision-safe local path
+→ request/department/conversation provenance persisted
+→ originating panel displays the file
+→ record survives restart
+```
+
+Package Review is invoked only for a valid deployment package. Ordinary
+generated files remain ordinary files.

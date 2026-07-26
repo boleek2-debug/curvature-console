@@ -1,19 +1,15 @@
 # CURVATURE CONSOLE — SOURCE OVERVIEW
 
-Status: Operational
-Last Updated: 2026-07-24
+Status: Active
+Version: 2.1.0
+Owner: Project Curvature
+Last Updated: 2026-07-26
 
 # Purpose
 
 Curvature Console is the local desktop control plane for Project Curvature. It
-coordinates three equal departments through the user's existing ChatGPT Plus
-session:
-
-```text
-Curvature Project
-Curvature Core
-Curvature Research
-```
+coordinates Curvature Project, Curvature Core and Curvature Research through the
+user's existing ChatGPT Plus session.
 
 # Repositories
 
@@ -22,65 +18,82 @@ Curvature Console: ~/curvature-console
 Project Curvature: ~/Curvature
 ```
 
-Console reads both repositories. Reviewed packages may write only to their
-declared target repository after explicit user approval. Console never commits
-or pushes automatically.
-
-# Verified Release
+# Current Verified Browser Workflow
 
 ```text
-Commit: 070eecd
-Automated tests: 118 passed
-git diff --check: passed
-main == origin/main
-Working tree: clean
+department task
+→ lightweight package
+→ immutable request_id
+→ exact persisted conversation URL
+→ normal Chrome inside invisible Xvfb
+→ dedicated request page
+→ confirmed user message marker
+→ completed assistant response
+→ originating panel
+→ process-group cleanup
+→ CDP port release
 ```
 
-# Implemented Workflow
+Verification:
 
-- three simultaneous isolated department panels;
-- persisted department drafts, transcripts, attachments and routes;
-- dual-repository context loading;
-- automated ChatGPT browser bridge;
-- hybrid visible Chrome fallback;
-- generated-file capture;
-- persistent Download Inbox;
-- Package Review and Safe Apply;
-- backups, atomic writes and rollback;
-- Git status and diff presentation;
-- advisory GREEN / AMBER / RED Thread Pressure;
-- pressure-aware new-chat Thread Handoff;
-- verified route persistence and pressure reset after handoff;
-- restart continuity.
+```text
+111 tests passed
+git diff --check passed
+Core live exchange passed
+owned_process_cleanup_complete cdp_port=9222 released=true
+```
 
-# Operational Policy
+# Activity and Diagnostics
 
-Console is complete enough for normal Curvature work. Broad feature development
-is paused.
+While an exchange is active, the originating panel displays an indeterminate
+progress bar, current stage and elapsed time.
 
-Implement shared functionality once, validate deeply in Core and use automated
-department-isolation tests. Run extra Project or Research live tests when a
-change is department-specific or evidence indicates a route problem.
+Each application run writes:
 
-# Deferred Until Needed
+```text
+data/logs/console-YYYYMMDD-HHMMSS.log
+```
 
-- structured conversation records;
-- expanded Department State Bus;
-- unified operation trace;
-- manual ZIP import;
-- refresh notification and other UX refinements.
+Runtime logs are local and must not be committed.
+
+# Browser Policy
+
+Normal automation uses full Chrome inside Xvfb, so no Chrome window appears on
+the physical desktop.
+
+Visible Chrome is reserved for confirmed login or human verification.
+
+Console-owned Chrome and Xvfb run in one owned process group and are terminated
+after each exchange. Port 9222 is verified as released.
+
+# Download and Package Distinction
+
+Generated-file capture is the next active corrective sprint.
+
+Downloads may be any file type. The original extension must be preserved.
+
+Package Review is separate and applies only to valid deployment packages with a
+supported manifest. A normal `.txt`, `.pdf`, image or office document is not a
+deployment package.
+
+# Next
+
+```text
+ASSISTANT-001B5.2D2 — General Generated-File Capture
+```
+
+Then:
+
+```text
+ASSISTANT-001B5.5 — Supervised Interdepartmental Communication
+```
 
 # Non-Negotiable Rules
 
 - no mandatory paid OpenAI API;
-- no API key;
-- no hidden paid operation;
 - no routing by conversation title;
+- no arbitrary existing-tab selection;
+- explicit request and department binding;
 - explicit repository-write approval;
 - no automatic commit or push;
-- preserve the last verified route and transcript on failure;
 - test → verify → document → commit → push.
-
-# Exact Next Step
-
-Use Curvature Console for normal Project Curvature development.

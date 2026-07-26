@@ -1,38 +1,14 @@
 # CURVATURE CONSOLE ROADMAP
 
-Status: Operational Maintenance
-Version: 2.0.0
+Status: Active corrective development
+Version: 2.1.0
 Owner: Project Curvature
-Last Updated: 2026-07-24
+Last Updated: 2026-07-26
 
 # Product Constraint
 
-Normal Console operation must not cost more than the existing ChatGPT Plus
-subscription.
-
-The approved workflow uses:
-
-- one shared ChatGPT Project named `Curvature`;
-- three persisted department conversations;
-- local SQLite state;
-- Playwright browser automation;
-- ordinary Chrome as visible fallback and observation surface;
-- no mandatory paid OpenAI API;
-- no automatic commit or push.
-
-# Operational Release
-
-Curvature Console is operational as of commit:
-
-```text
-070eecd
-```
-
-Verified baseline:
-
-```text
-118 automated tests passed
-```
+Normal Console operation must not require additional AI spending beyond the
+user's ChatGPT Plus subscription.
 
 # Completed Milestones
 
@@ -43,90 +19,82 @@ Verified baseline:
 - ASSISTANT-001B4 — Local State and Restart Persistence
 - ASSISTANT-001B5.1 — Task and Thread Handoff Packages
 - ASSISTANT-001B5.2A — Browser Bridge Foundation
-- ASSISTANT-001B5.2B — Visible Send and Receive Workflow
-- ASSISTANT-001B5.2C / B5.2R — Deterministic URL-Only Routing
-- ASSISTANT-001B5.2D — Generated File Download Capture
+- ASSISTANT-001B5.2B — Browser Lifecycle and One-Click UX
+- ASSISTANT-001B5.2C — Durable URL-Only Routing
+- ASSISTANT-001B5.2C5 — Lightweight Task Delivery
+- ASSISTANT-001B5.2R — Deterministic Browser Bridge Rewrite
 - ASSISTANT-001B5.2E — Package Review and Safe Apply
-- ASSISTANT-001B5.4A — Thread Pressure Foundation
-- ASSISTANT-001B5.4B — Pressure Warnings and Handoff Integration
-- Hybrid Contenteditable and New-Chat Handoff Lifecycle
-- Console Operational Closeout
+- ASSISTANT-001B5.4 — Thread Pressure and Thread Handoff
 
-# Current Development Policy
-
-Broad Console feature development is paused.
+# B5.2R Verified Result
 
 ```text
-Use Console
-→ identify a real operational limitation
-→ decide whether it blocks Curvature
-→ promote the minimum corrective sprint
-→ implement once
-→ deep live validation in Core
-→ department-specific smoke tests only when warranted
+111 automated tests passed
+git diff --check passed
+Core live exchange succeeded
+background Chrome ran inside Xvfb
+physical Chrome window remained hidden
+request marker was confirmed
+response returned to Core
+owned Chrome/Xvfb process group terminated
+CDP port 9222 released=true
 ```
 
-# Deferred Until Required
+B5.2R is complete after documentation, commit and push.
 
-## Structured Department Conversation Records
+# Active Next Sprint
 
-Potential scope:
+## ASSISTANT-001B5.2D2 — General Generated-File Capture
 
-- separate user and assistant entries;
-- timestamps;
-- request and route markers;
-- restart migration;
-- better operation history.
+Purpose:
 
-## Expanded Department State Bus
+Restore generated-file capture on top of the rewritten deterministic bridge and
+remove any assumption that a generated file must be a ZIP archive.
 
-Potential scope:
+Deliver:
 
-- structured summaries;
-- explicit blockers;
-- accepted outputs;
-- formal department handoff records.
+- generated-file detection scoped to the active assistant response;
+- arbitrary file types and extensions;
+- actual filename preservation;
+- safe filename sanitisation without forced `.zip`;
+- collision-safe storage in the Console Download Inbox;
+- request, department and conversation provenance;
+- persistent metadata and per-panel visibility;
+- explicit download success and failure;
+- runtime log coverage;
+- automated tests;
+- live Core proof using at least one non-ZIP file such as `.txt`.
 
-## Unified Operation Trace
+Package Review remains a separate workflow and accepts only valid deployment
+packages. A downloaded `.txt` must remain a `.txt` and must not be treated as a
+package.
 
-Potential scope:
+# Following Sprint
 
-```text
-request
-→ context
-→ browser exchange
-→ response
-→ downloads
-→ package review
-→ repository mutation
-→ tests
-→ Git state
-```
+## ASSISTANT-001B5.5 — Supervised Interdepartmental Communication
 
-## UX Improvements
+Deliver:
 
-Potential scope:
+- structured handoff records;
+- source and target department;
+- full visible correspondence timeline;
+- draft, pending approval, sent, received, answered and closed states;
+- user controls to approve, edit, reject, hold, redirect or stop;
+- request and handoff identifiers;
+- safe loop limits;
+- optional controlled automation only after the supervised path is verified.
 
-- manual ZIP import into Downloads;
-- prominent context-refresh success message;
-- richer progress reporting for slow new-chat creation;
-- download and package history management.
+# Maintenance Gate
 
-# Release Maintenance Gate
+Every change must preserve:
 
-Any future Console change must preserve:
-
-- all three department panels;
 - strict department isolation;
-- URL-only routing;
-- explicit user approval for repository writes;
-- hybrid browser behavior;
-- zero mandatory paid API usage;
+- exact URL routing;
+- immutable request identity;
+- invisible normal browser operation;
+- visible activity heartbeat;
+- runtime diagnostics;
+- explicit repository-write approval;
 - no automatic commit or push;
 - complete automated tests;
 - clean Git state.
-
-# Exact Next Step
-
-Return to the main Project Curvature roadmap and use Console as the normal
-coordination and implementation interface.

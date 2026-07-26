@@ -1,21 +1,15 @@
 # CURVATURE CONSOLE HANDOFF
 
-Status: Operational
-Version: 2.0.0
+Status: B5.2R verified; closeout pending
+Version: 2.1.0
 Owner: Curvature Core
-Last Updated: 2026-07-24
+Last Updated: 2026-07-26
 
 # 1. Mission
 
 Curvature Console is the local development control plane for Project Curvature.
-It coordinates three equal departments:
-
-- Curvature Project;
-- Curvature Core;
-- Curvature Research.
-
-It uses the user's existing ChatGPT Plus session and does not require the paid
-OpenAI API.
+It coordinates Curvature Project, Curvature Core and Curvature Research through
+the user's existing ChatGPT Plus session without a mandatory paid API.
 
 # 2. Repository Boundaries
 
@@ -24,116 +18,110 @@ Console repository: ~/curvature-console
 Project repository: ~/Curvature
 ```
 
-Console may read both repositories. A reviewed package may write only to its
-declared target repository after explicit user approval. Console never commits
-or pushes automatically.
+Console may read both repositories. Repository writes require Package Review
+and explicit user approval. Console never commits or pushes automatically.
 
-# 3. Current Verified Repository State
+# 3. Current Repository State
 
 ```text
 Branch: main
-Commit: 070eecd
-Automated tests: 118 passed
+Base commit: ec2067eb064f4f2bf3c879b361f8e75c0a39df3b
+B5.2R changes: verified and pending commit
+Automated tests: 111 passed
 git diff --check: passed
-main == origin/main
-Working tree: clean
 ```
 
-# 4. Completed Operational Workflow
+# 4. Completed B5.2R Workflow
 
 ```text
-department task
-→ bounded transfer package
-→ persisted department route
-→ Playwright / Chrome send
-→ completed response capture
-→ originating panel persistence
-→ optional generated-file download
-→ Package Review
-→ explicit Safe Apply
-→ backup and atomic write
-→ Git status and diff
+user-triggered department task
+→ lightweight transfer package
+→ immutable request_id
+→ exact persisted department conversation URL
+→ Console-owned Chrome inside invisible Xvfb
+→ dedicated Playwright page
+→ request-marker confirmation
+→ completed assistant response capture
+→ request-bound panel persistence
+→ dedicated page cleanup
+→ Chrome/Xvfb process-group termination
+→ CDP port 9222 release verification
 ```
 
-Thread continuity:
+# 5. Live Evidence
+
+Final Core live proof on 2026-07-26:
 
 ```text
-local GREEN / AMBER / RED estimate
-→ pressure-aware handoff action
-→ shared ChatGPT Project
-→ new conversation creation
-→ verified /c/... route
-→ completed first response
-→ new route persistence
-→ transcript and pressure reset
+Launching normal Chrome on invisible Xvfb display
+editor_found selector=#prompt-textarea
+user_message_confirmed
+exchange_success
+owned_process_cleanup_start
+owned_process_cleanup_complete cdp_port=9222 released=true
 ```
 
-# 5. Live Verification Evidence
+The physical desktop remained free of Chrome windows. The Core panel displayed
+a continuously updating heartbeat, stage and elapsed time.
 
-Verified during B5.4:
+# 6. Runtime Diagnostics
 
-- independent GREEN values displayed in Project, Core and Research;
-- Core transitioned live through GREEN, AMBER and RED;
-- RED task warning and handoff controls worked;
-- a new Core chat was created inside the shared Curvature Project;
-- the first handoff response was captured;
-- the new Core conversation route was persisted;
-- pressure returned to low GREEN;
-- restart and `Refresh All Context` preserved an operational state;
-- all three context loaders reported zero errors;
-- 118 automated tests passed.
+Every application run creates:
 
-# 6. Validation Policy
+```text
+data/logs/console-YYYYMMDD-HHMMSS.log
+```
 
-Shared functionality is implemented once and deeply validated in Core.
+The log records request identity, department, route, browser ownership mode,
+stages, composer diagnostics, message counts, confirmation marker, failures,
+tracebacks and cleanup results.
 
-Project and Research receive:
+Runtime logs are local artifacts and are not committed.
 
-- the same `DepartmentPanel`;
-- the same browser bridge;
-- the same routing and persistence services;
-- the same pressure estimator;
-- automated department-isolation coverage.
+# 7. Validation Policy
 
-Separate live smoke tests are required only when a change is department-specific,
-configuration-sensitive or produces evidence of a route-specific defect.
+Shared functionality is implemented once and deeply live-validated in Core.
 
-# 7. Known Non-Blocking Limitations
+Project and Research use the same bridge, request model, panel implementation
+and route persistence. Additional live smoke tests are required only for
+department-specific evidence or configuration differences.
 
-- new-chat creation may take noticeable time in Chrome/ChatGPT;
-- refresh success is visible mainly in the bottom status bar;
-- downloaded packages cannot yet be manually imported into the Downloads
-  registry from an arbitrary local path;
-- Thread Pressure is advisory rather than an exact ChatGPT token reading.
+# 8. Immediate Closeout
 
-# 8. Deferred Capabilities
+1. Apply the B5.2R closeout documentation.
+2. Remove accidental untracked duplicate `CONSOLE_*.md` documents.
+3. Keep `data/logs/` untracked.
+4. Run `scripts/validate_current.sh`.
+5. Stage only the intended implementation, tests, canonical documentation and
+   validation script.
+6. Commit and push.
+7. Confirm `main == origin/main` and a clean working tree except ignored local
+   runtime artifacts.
 
-- structured conversation records;
-- expanded State Bus and formal cross-department handoff records;
-- unified operation trace;
-- manual package import;
-- optional UX refinements.
+# 9. Next Sprint
 
-Do not resume these merely to make Console feel more complete. Promote them only
-when actual Curvature work requires them.
+```text
+ASSISTANT-001B5.2D2 — General Generated-File Capture
+```
 
-# 9. Exact Next Step
+Required scope:
 
-Begin normal Project Curvature work through Curvature Console.
+- capture generated files from the active assistant response;
+- support arbitrary file types rather than ZIP-only assumptions;
+- preserve the actual original filename and extension;
+- use collision-safe storage;
+- bind files to request, department and conversation URL;
+- expose the download in the originating panel;
+- persist metadata across restart;
+- keep Package Review restricted to valid deployment packages.
 
-The first task should be chosen by Curvature Project. Core implements approved
-technical work. Research establishes evidence and confidence where required.
+# 10. Following Sprint
 
-# 10. Engineering Rules
+After download capture is stable:
 
-1. Never guess.
-2. Inspect current files before uncertain changes.
-3. Deliver complete replacement files.
-4. Label files as replace, create or leave unchanged.
-5. One sprint has one goal.
-6. Test and verify before documentation.
-7. Document before commit and push.
-8. Keep repository state clean.
-9. Code and documentation are written in English.
-10. Development discussion is conducted in Polish.
-11. No hidden paid operation.
+```text
+ASSISTANT-001B5.5 — Supervised Interdepartmental Communication
+```
+
+Panels may prepare and route structured handoffs, while the user can inspect,
+edit, approve, reject, hold or stop every cross-department message.

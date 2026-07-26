@@ -1,134 +1,92 @@
 # CURVATURE CONSOLE — CURRENT STATE
 
-Status: Operational
-Version: 1.0.0
+Status: B5.2R verified; closeout pending
+Version: 1.1.0
 Owner: Curvature Core
-Last Updated: 2026-07-24
+Last Updated: 2026-07-26
 
 # Purpose
 
 This document is the concise source of truth for the current operational state
 of Curvature Console.
 
-# Verified Baseline
+# Repository Baseline
 
 ```text
 Repository: ~/curvature-console
 Branch: main
-Commit: 070eecd
-Push: main -> origin/main
-Automated tests: 118 passed
-git diff --check: passed
-Working tree: clean
+Base commit: ec2067eb064f4f2bf3c879b361f8e75c0a39df3b
+Push state before closeout: main == origin/main
+Working tree: B5.2R implementation and documentation changes pending commit
 ```
 
-# Operational Status
+# B5.2R Verification
 
-Curvature Console is operational for normal Project Curvature development.
-
-Completed and verified capabilities:
-
-- simultaneous Project, Core and Research workspaces;
-- isolated department roles, drafts, transcripts and attachments;
-- dual-repository context loading from `~/curvature-console` and `~/Curvature`;
-- durable URL-only ChatGPT conversation routing;
-- automated browser send and response capture;
-- hybrid browser operation with visible Chrome fallback;
-- generated-file capture and persistent Download Inbox;
-- Package Review with CREATE / REPLACE / SKIP / CONFLICT classification;
-- explicit user-approved Safe Apply;
-- path validation, backups, atomic writes and rollback;
-- post-apply Git status and diff;
-- advisory GREEN / AMBER / RED Thread Pressure;
-- pressure-aware handoff controls;
-- functional new-chat Thread Handoff;
-- persisted new conversation route;
-- transcript and pressure reset only after verified handoff completion;
-- restart continuity.
-
-# Department Model
-
-The implementation is shared by:
+Automated verification:
 
 ```text
-project
-core
-research
+111 tests passed
+git diff --check passed
 ```
 
-Each department remains isolated by immutable `department_id`, persisted route,
-context configuration and local state.
-
-Validation policy:
+Live Core verification:
 
 ```text
-Implement once in shared components.
-Perform deep live validation in Core.
-Use automated isolation tests for all departments.
-Run Project or Research smoke tests when a change is department-specific,
-configuration-sensitive or evidence indicates a routing problem.
+request_id: 930f45e9ba1a41f6a75842fd1e788f32
+department_id: core
+route: exact persisted Core conversation URL
+message marker: confirmed
+assistant response: captured
+exchange status: success
+background browser: normal Chrome inside Xvfb
+physical Chrome window: not shown
+owned process cleanup: complete
+CDP port 9222 released: true
 ```
 
-The final B5.4 live validation was completed in Core. Project and Research use
-the same implementation and are covered by automated department-isolation
-tests. Separate live smoke tests were intentionally waived for this closeout.
+# Implemented B5.2R Capabilities
 
-# Thread Pressure
+- lightweight normal Task payloads;
+- full context reserved for Thread Handoff;
+- immutable `request_id`;
+- exact `department_id` and persisted conversation URL binding;
+- one dedicated Playwright page per exchange;
+- confirmation of the current user message through a unique request marker;
+- response acceptance only for the matching request and department;
+- stale or foreign result rejection;
+- normal Chrome on an invisible Xvfb display;
+- visible Chrome only for confirmed login or human verification;
+- per-panel activity heartbeat, stage and elapsed time;
+- timestamped runtime logs under `data/logs/`;
+- request, stage, selector, route and traceback diagnostics;
+- owned Chrome/Xvfb process-group cleanup;
+- verified release of CDP port 9222.
 
-Thread Pressure is advisory. Console does not claim access to ChatGPT's exact
-remaining context capacity.
+# Department Validation Policy
 
-Current states:
+The implementation is shared by Project, Core and Research.
 
-```text
-GREEN — comfortable local headroom
-AMBER — prepare a Thread Handoff
-RED — start a new chat through Thread Handoff
-```
+B5.2R received deep live validation in Core. Automated tests cover shared
+department routing and isolation. Separate Project and Research repetition is
+not required unless a department-specific defect appears.
 
-The estimate is independent per department and uses locally observable state.
+# Known Follow-Up
 
-# Hybrid Browser Model
-
-Normal operation is automated through Playwright and the user's logged-in
-ChatGPT Plus browser session.
-
-When browser work is slow or requires observation, ordinary Chrome may become
-visible. A long new-chat creation time is not treated as failure while verified
-progress continues.
-
-The handoff lifecycle is:
-
-```text
-open shared ChatGPT Project
-→ enter handoff package
-→ submit first message
-→ wait for ChatGPT to create a /c/... conversation
-→ wait for the completed response
-→ persist the new route
-→ replace the active transcript
-→ recalculate pressure
-```
-
-The old route and transcript remain authoritative until the new conversation is
-verified.
-
-# Deferred Work
-
-The following are not required before normal Curvature work resumes:
-
-- full structured conversation records;
-- expanded Department State Bus;
-- unified operation ledger;
-- manual ZIP import into Downloads;
-- stronger refresh-success notification;
-- additional control-plane features.
-
-These items may be promoted when real Curvature work demonstrates a need.
+Generated-file capture exists in earlier repository history and persistence
+models, but the current rewritten exchange result does not yet return captured
+files. The next corrective sprint must restore and generalise download capture
+without assuming ZIP format.
 
 # Exact Next Step
 
-Stop broad Console feature development.
+Close, commit and push B5.2R.
 
-Use Curvature Console for normal work on Project Curvature. Improve Console only
-when an operational limitation materially blocks or degrades that work.
+Then start:
+
+```text
+ASSISTANT-001B5.2D2 — General Generated-File Capture
+```
+
+The sprint must support arbitrary generated files such as `.txt`, `.md`,
+`.json`, `.csv`, `.pdf`, images, office documents and `.zip`, preserving the
+actual filename and extension.

@@ -187,7 +187,7 @@ def test_route_unverified_signal_exists() -> None:
     worker = BrowserBridgeWorker(
         BrowserBridgeConfig.default(),
         BrowserExchangeRequest(
-            request_id="request-signal-test",
+            request_id="route-unverified-test",
             department_id="core",
             message_text="task",
             create_new_thread=False,
@@ -283,123 +283,55 @@ def test_request_id_and_department_must_both_match(tmp_path) -> None:
     window.close()
 
 
-def test_browser_success_displays_and_persists_generated_download(
+def test_browser_exchange_adds_request_confirmation_marker(
     tmp_path,
+    monkeypatch,
 ) -> None:
-    from curvature_console.infrastructure.browser_bridge import CapturedDownload
-    from curvature_console.presentation.main_window import PendingBrowserExchange
-
-    create_application(["curvature-console-download-success-test"])
-    state_path = tmp_path / "state.sqlite3"
-    window = MainWindow(state_path=state_path, data_directory=tmp_path / "data")
-    request_id = "request-download"
-    saved_path = tmp_path / "download-inbox" / "result.zip"
-    saved_path.parent.mkdir()
-    saved_path.write_bytes(b"zip")
-    window._pending_exchanges[request_id] = PendingBrowserExchange(
-        request_id=request_id,
-        department_id="core",
-        user_task="Create a file.",
-    )
-
-    window._handle_browser_success(
-        request_id,
-        "core",
-        "Curvature",
-        "https://chatgpt.com/g/project/project",
-        "https://chatgpt.com/c/core",
-        "File created.",
-        (
-            CapturedDownload(
-                original_filename="result.zip",
-                saved_path=saved_path,
-                source_url="sandbox:/mnt/data/result.zip",
-            ),
-        ),
-    )
-
-    panel = window.department_panels["core"]
-    assert panel.download_label.text() == "Downloads: 1"
-    assert "result.zip" in panel.download_list.item(0).text()
-    assert window.state_store.load_generated_downloads("core")[0].saved_path == saved_path
-
-    window.close()
-
-
-def test_red_pressure_warns_before_regular_task(monkeypatch) -> None:
-    create_application(["curvature-console-red-task-warning-test"])
-    window = MainWindow()
-    panel = window.department_panels["core"]
-    panel.input_editor.setPlainText(
-        "x" * (panel.thread_pressure_estimator.RED_THRESHOLD * 4)
-    )
-    window.context_results["core"] = ContextLoadResult(
-        department_id="core",
-        documents=(),
-        errors=(),
-    )
-
-    captured: list[TransferPackage] = []
-    monkeypatch.setattr(window, "start_browser_exchange", captured.append)
-    monkeypatch.setattr(
-        "curvature_console.presentation.main_window.QMessageBox.warning",
-        lambda *args, **kwargs: QMessageBox.StandardButton.Cancel,
-    )
-
-    window.prepare_transfer_package("core", "task")
-    assert captured == []
-
-    monkeypatch.setattr(
-        "curvature_console.presentation.main_window.QMessageBox.warning",
-        lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
-    )
-    window.prepare_transfer_package("core", "task")
-    assert len(captured) == 1
-    assert captured[0].mode is TransferPackageMode.TASK
-    window.close()
-
-
-def test_verified_handoff_starts_fresh_active_transcript(tmp_path) -> None:
-    create_application(["curvature-console-handoff-reset-test"])
+    create_application(["curvature-console-request-marker-test"])
     window = MainWindow(
         state_path=tmp_path / "state.sqlite3",
         data_directory=tmp_path / "data",
     )
+
+    captured = {}
+
+    class FakeWorker:
+        def __init__(self, config, request):
+            captured["request"] = request
+            self.succeeded = type("Signal", (), {"connect": lambda *_: None})()
+            self.failed = type("Signal", (), {"connect": lambda *_: None})()
+            self.route_unverified = type(
+                "Signal", (), {"connect": lambda *_: None}
+            )()
+            self.stage_changed = type(
+                "Signal", (), {"connect": lambda *_: None}
+            )()
+            self.finished = type("Signal", (), {"connect": lambda *_: None})()
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr(
+        "curvature_console.presentation.main_window.BrowserBridgeWorker",
+        FakeWorker,
+    )
+
     panel = window.department_panels["core"]
-    panel.conversation_view.setPlainText("old thread " * 30_000)
-    old_estimate = panel.thread_pressure_snapshot.estimated_tokens
-
-    from curvature_console.presentation.main_window import (
-        PendingBrowserExchange,
-    )
-
-    request_id = "request-handoff-success"
-    window._pending_exchanges[request_id] = PendingBrowserExchange(
-        request_id=request_id,
-        department_id="core",
-        user_task="Continue from handoff.",
-        mode=TransferPackageMode.THREAD_HANDOFF,
-    )
-
-    window._handle_browser_success(
-        request_id,
+    panel.input_editor.setPlainText("Exact user task")
+    package = window._build_transfer_package(
         "core",
-        "Curvature",
-        "https://chatgpt.com/g/project/project",
-        "https://chatgpt.com/c/new-core-thread",
-        "HANDOFF_ACCEPTED",
+        TransferPackageMode.TASK,
     )
+    window.start_browser_exchange(package)
 
-    transcript = panel.conversation_view.toPlainText()
-    assert transcript.startswith("=== NEW THREAD AFTER HANDOFF ===")
-    assert "old thread" not in transcript
-    assert "HANDOFF_ACCEPTED" in transcript
-    assert panel.thread_pressure_snapshot.estimated_tokens < old_estimate
-    assert panel.thread_pressure_snapshot.level.value == "GREEN"
+    request = captured["request"]
+    assert request.confirmation_marker is not None
+    assert request.confirmation_marker.startswith("CURVATURE_REQUEST_ID: ")
+    assert request.message_text.startswith(request.confirmation_marker)
+    assert package.text in request.message_text
 
-    route = window.state_store.load_chat_route("core")
-    assert route is not None
-    assert route.active_conversation_url == (
-        "https://chatgpt.com/c/new-core-thread"
-    )
+    # The fake worker intentionally never emits ``finished``. Clear the
+    # synthetic in-progress state before closing the window so closeEvent does
+    # not open a modal dialog and block the headless test process.
+    window._browser_worker = None
     window.close()

@@ -57,3 +57,46 @@ def test_main_window_accepts_explicit_directories(tmp_path: Path) -> None:
     assert window.config_directory == config_directory
     assert window.data_directory == data_directory
     window.close()
+
+
+def test_main_configures_runtime_logging_before_window_creation(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    import curvature_console.main as main_module
+
+    captured = {}
+
+    monkeypatch.setattr(main_module, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        main_module,
+        "configure_runtime_logging",
+        lambda data_directory: captured.setdefault(
+            "log_path", data_directory / "logs" / "console-test.log"
+        ),
+    )
+
+    class FakeApplication:
+        def exec(self):
+            return 0
+
+    class FakeWindow:
+        def show(self):
+            captured["shown"] = True
+
+    monkeypatch.setattr(
+        main_module,
+        "create_application",
+        lambda: FakeApplication(),
+    )
+    monkeypatch.setattr(
+        main_module,
+        "create_main_window",
+        lambda **kwargs: FakeWindow(),
+    )
+
+    assert main_module.main() == 0
+    assert captured["log_path"] == (
+        tmp_path / "data" / "logs" / "console-test.log"
+    )
+    assert captured["shown"] is True

@@ -8,6 +8,10 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
+from curvature_console.infrastructure.runtime_logging import (
+    configure_runtime_logging,
+    get_runtime_logger,
+)
 from curvature_console.presentation.main_window import MainWindow
 
 
@@ -48,13 +52,26 @@ def main() -> int:
 
     application = create_application()
     data_directory = PROJECT_ROOT / "data"
+    log_path = configure_runtime_logging(data_directory)
+    logger = get_runtime_logger("main")
+    logger.info("Application start")
+    logger.info("Project root: %s", PROJECT_ROOT)
+    logger.info("Data directory: %s", data_directory)
+    logger.info("Runtime log: %s", log_path)
+
     window = create_main_window(
         state_path=data_directory / "curvature_console.sqlite3",
         data_directory=data_directory,
         config_directory=PROJECT_ROOT / "config" / "workspaces",
     )
     window.show()
-    return application.exec()
+    try:
+        return application.exec()
+    except Exception:
+        logger.exception("Unhandled application exception")
+        raise
+    finally:
+        logger.info("Application stopped")
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QElapsedTimer, QTimer, Qt, Signal
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QFrame,
@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -56,6 +57,31 @@ class DepartmentPanel(QFrame):
 
         self.status_label = QLabel("STATUS: READY")
         self.status_label.setObjectName(f"{department_id}Status")
+
+        self.activity_progress = QProgressBar()
+        self.activity_progress.setObjectName(
+            f"{department_id}ActivityProgress"
+        )
+        self.activity_progress.setRange(0, 0)
+        self.activity_progress.setTextVisible(False)
+        self.activity_progress.setMaximumHeight(8)
+        self.activity_progress.hide()
+
+        self.activity_label = QLabel("IDLE")
+        self.activity_label.setObjectName(
+            f"{department_id}ActivityIndicator"
+        )
+        self.activity_label.setStyleSheet(
+            "color: #666; font-size: 11px;"
+        )
+
+        self._activity_stage = "Ready"
+        self._activity_elapsed = QElapsedTimer()
+        self._activity_timer = QTimer(self)
+        self._activity_timer.setInterval(1000)
+        self._activity_timer.timeout.connect(
+            self._refresh_activity_indicator
+        )
 
         self.thread_pressure_estimator = ThreadPressureEstimator()
         self.thread_pressure_snapshot = self.thread_pressure_estimator.estimate(
@@ -205,6 +231,8 @@ class DepartmentPanel(QFrame):
         layout = QVBoxLayout(self)
         layout.addLayout(header_layout)
         layout.addWidget(self.status_label)
+        layout.addWidget(self.activity_progress)
+        layout.addWidget(self.activity_label)
         layout.addWidget(self.thread_pressure_label)
         layout.addWidget(self.thread_pressure_recommendation)
         layout.addWidget(self.responsibility_label)
@@ -295,7 +323,9 @@ class DepartmentPanel(QFrame):
     def set_browser_stage(self, stage: str) -> None:
         """Display the current browser lifecycle stage."""
 
+        self._activity_stage = stage
         self.status_label.setText(f"STATUS: {stage.upper()}")
+        self._refresh_activity_indicator()
 
     def set_browser_busy(self, busy: bool) -> None:
         """Reflect one active browser operation in this panel."""
@@ -303,10 +333,43 @@ class DepartmentPanel(QFrame):
         self.task_package_button.setEnabled(not busy)
         self.thread_handoff_button.setEnabled(not busy)
         self.input_editor.setEnabled(not busy)
+
         if busy:
+            self._activity_stage = "Connecting"
+            self._activity_elapsed.start()
+            self._activity_timer.start()
+            self.activity_progress.show()
+            self.activity_label.show()
             self.status_label.setText("STATUS: CONNECTING")
+            self._refresh_activity_indicator()
         else:
+            self._activity_timer.stop()
+            self.activity_progress.hide()
+            self.activity_label.setText("IDLE")
+            self.activity_label.setStyleSheet(
+                "color: #666; font-size: 11px;"
+            )
             self._update_attachment_status(len(self.attachment_list.records))
+
+    def _refresh_activity_indicator(self) -> None:
+        """Show continuously changing proof that the UI event loop is alive."""
+
+        if not self._activity_timer.isActive():
+            return
+
+        elapsed_seconds = max(
+            0,
+            self._activity_elapsed.elapsed() // 1000,
+        )
+        minutes, seconds = divmod(elapsed_seconds, 60)
+        dots = "." * ((elapsed_seconds % 3) + 1)
+        self.activity_label.setText(
+            f"WORKING{dots} {self._activity_stage} · "
+            f"{minutes:02d}:{seconds:02d}"
+        )
+        self.activity_label.setStyleSheet(
+            "color: #1565c0; font-size: 11px; font-weight: 700;"
+        )
 
     def append_browser_exchange(
         self,

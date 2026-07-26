@@ -783,3 +783,72 @@ The browser workflow is hybrid:
   deferred until required;
 - no reduction is made to repository-write approval, department isolation,
   routing safety, test requirements or the zero-additional-cost rule.
+
+
+---
+
+# ADR-016 — Invisible Full Chrome, Runtime Heartbeat and Owned Cleanup
+
+Status: Accepted
+Date: 2026-07-26
+
+## Context
+
+Chromium headless mode received a Cloudflare `Just a moment...` page and could
+not expose the ChatGPT composer. Visible Chrome interrupted the desktop. The
+user also required clear visual proof that Console remained responsive during
+long browser work.
+
+## Decision
+
+Normal browser automation uses a full Google Chrome process inside Xvfb.
+
+Every exchange:
+
+- owns an immutable request identifier;
+- uses one dedicated page;
+- binds to an exact persisted conversation URL;
+- confirms the current user message through a unique marker;
+- displays an indeterminate progress bar, current stage and elapsed time;
+- writes a timestamped runtime log;
+- terminates the complete Console-owned Chrome/Xvfb process group;
+- verifies release of CDP port 9222.
+
+Visible Chrome is reserved for confirmed login or human verification.
+
+## Consequences
+
+- normal automation remains invisible on the physical desktop;
+- Cloudflare sees a normal headed browser environment;
+- the user can distinguish active work from a frozen UI;
+- failures have durable diagnostic evidence;
+- orphan browser processes are detected and cleaned up.
+
+---
+
+# ADR-017 — Generated Downloads Are Format-Agnostic
+
+Status: Accepted
+Date: 2026-07-26
+
+## Context
+
+ChatGPT may generate text, Markdown, JSON, CSV, PDF, image, office-document,
+archive and other file types. Treating every generated file as ZIP corrupts
+meaning and incorrectly couples download capture to deployment-package review.
+
+## Decision
+
+Generated-file capture preserves the actual safe filename and extension supplied
+by the download.
+
+No fixed extension is imposed.
+
+Package Review remains a separate workflow for supported deployment packages.
+
+## Consequences
+
+- `.txt` remains `.txt`;
+- ZIP is one supported download type, not the universal type;
+- arbitrary generated files can be stored and traced;
+- package validation is not applied to ordinary downloads.

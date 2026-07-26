@@ -7,6 +7,52 @@ Last Updated: 2026-07-24
 
 ---
 
+## 2026-07-26
+
+### ASSISTANT-001B5.2R — Deterministic Invisible Browser Bridge Repair
+
+Implemented and live-verified. Commit and push pending this closeout.
+
+Delivered:
+
+- lightweight normal Task delivery;
+- immutable request identifiers;
+- dedicated request page per exchange;
+- exact persisted URL routing;
+- unique user-message confirmation markers;
+- request- and department-bound response delivery;
+- stale-result rejection;
+- normal Chrome on an invisible Xvfb display;
+- per-panel activity heartbeat, stage and elapsed timer;
+- timestamped runtime logs;
+- selector, route, request and traceback diagnostics;
+- process-group cleanup for Console-owned Chrome and Xvfb;
+- CDP port release verification.
+
+Verified:
+
+```text
+111 automated tests passed
+git diff --check passed
+Core live request succeeded
+user message marker confirmed
+assistant response captured
+physical Chrome window remained hidden
+owned_process_cleanup_complete cdp_port=9222 released=true
+```
+
+Next:
+
+```text
+ASSISTANT-001B5.2D2 — General Generated-File Capture
+```
+
+The next sprint restores generated-file capture on the rewritten bridge and
+supports arbitrary file types without forcing ZIP format.
+
+---
+
+
 ## 2026-07-24
 
 ### ASSISTANT-001B5.4 — Thread Pressure and Hybrid Thread Handoff

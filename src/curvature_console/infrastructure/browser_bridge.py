@@ -2,20 +2,26 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
+import signal
+import socket
 import subprocess
-import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Final
-from urllib.parse import unquote, urljoin, urlparse
+from urllib.parse import urlparse
 
 from playwright.sync_api import Browser, BrowserContext, Locator, Page, Playwright
 from playwright.sync_api import sync_playwright
+
+from curvature_console.infrastructure.runtime_logging import (
+    get_runtime_logger,
+)
 
 
 SHARED_PROJECT_NAME: Final[str] = "Curvature"
@@ -67,14 +73,11 @@ class BrowserBridgeStage(StrEnum):
     LOCATING_EDITOR = "Locating editor"
     ENTERING_MESSAGE = "Entering message"
     SENDING = "Sending"
-    CREATING_NEW_THREAD = "Creating new chat"
     VERIFYING_USER_MESSAGE = "Verifying user message"
     WAITING_FOR_RESPONSE = "Waiting for response"
     RECEIVING = "Receiving"
-    SAVING_NEW_ROUTE = "Saving new conversation route"
     HUMAN_ACTION_REQUIRED = "Human action required"
     COMPLETED = "Completed"
-    CAPTURING_DOWNLOADS = "Capturing downloads"
     CLEANING_UP = "Cleaning up"
 
 
@@ -121,15 +124,9 @@ class BrowserBridgeMessageNotConfirmed(BrowserBridgeError):
 class BrowserBridgeRouteUnverified(BrowserBridgeError):
     """A response was received, but the resulting URL was not verified."""
 
-    def __init__(
-        self,
-        observed_url: str,
-        response_text: str,
-        downloads: tuple[CapturedDownload, ...] = (),
-    ) -> None:
+    def __init__(self, observed_url: str, response_text: str) -> None:
         self.observed_url = observed_url
         self.response_text = response_text
-        self.downloads = downloads
         super().__init__(
             "ChatGPT returned a response, but Curvature Console could not "
             "verify the conversation route. Observed page URL: "
@@ -143,6 +140,7 @@ class BrowserBridgeConfig:
 
     chrome_executable: Path
     profile_directory: Path
+    xvfb_run_executable: Path = Path("/usr/bin/xvfb-run")
     debugging_host: str = "127.0.0.1"
     debugging_port: int = 9222
     chatgpt_url: str = "https://chatgpt.com"
@@ -150,19 +148,12 @@ class BrowserBridgeConfig:
     navigation_timeout_seconds: float = 45.0
     editor_timeout_seconds: float = 30.0
     message_confirmation_timeout_seconds: float = 30.0
-    new_thread_creation_timeout_seconds: float = 180.0
-    response_timeout_seconds: float = 300.0
+    response_timeout_seconds: float = 180.0
     response_poll_interval_seconds: float = 0.5
     stable_response_seconds: float = 2.0
     human_action_timeout_seconds: float = 300.0
-    download_timeout_seconds: float = 30.0
-    download_directory: Path = (
-        Path.home()
-        / ".local"
-        / "share"
-        / "curvature-console"
-        / "download-inbox"
-    )
+    process_shutdown_timeout_seconds: float = 5.0
+    cdp_release_timeout_seconds: float = 5.0
 
     @property
     def cdp_url(self) -> str:
@@ -190,17 +181,28 @@ class BrowserBridgeConfig:
             "Editor timeout": self.editor_timeout_seconds,
             "Message confirmation timeout":
                 self.message_confirmation_timeout_seconds,
-            "New thread creation timeout":
-                self.new_thread_creation_timeout_seconds,
             "Response timeout": self.response_timeout_seconds,
             "Response poll interval": self.response_poll_interval_seconds,
             "Stable response duration": self.stable_response_seconds,
             "Human action timeout": self.human_action_timeout_seconds,
-            "Download timeout": self.download_timeout_seconds,
+            "Process shutdown timeout":
+                self.process_shutdown_timeout_seconds,
+            "CDP release timeout": self.cdp_release_timeout_seconds,
         }
         for label, value in positive_values.items():
             if value <= 0:
                 raise ValueError(f"{label} must be positive.")
+
+
+
+
+@dataclass(frozen=True, slots=True)
+class CapturedDownload:
+    """One generated file captured from a completed ChatGPT response."""
+
+    original_filename: str
+    saved_path: Path
+    source_url: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,16 +214,7 @@ class BrowserExchangeRequest:
     message_text: str
     create_new_thread: bool
     conversation_url: str | None = None
-    attachment_paths: tuple[Path, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class CapturedDownload:
-    """One generated file captured from the current assistant response."""
-
-    original_filename: str
-    saved_path: Path
-    source_url: str
+    confirmation_marker: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,31 +227,52 @@ class BrowserExchangeResult:
     project_url: str
     conversation_url: str
     response_text: str
-    downloads: tuple[CapturedDownload, ...] = ()
 
 
 class ChromeLauncher:
-    """Start Chrome in visible or headless mode."""
+    """Start Chrome visibly or on an invisible Xvfb display."""
 
     def __init__(self, config: BrowserBridgeConfig) -> None:
         self.config = config
 
     def command(self, *, headless: bool = False) -> tuple[str, ...]:
+        """Return the Chrome command.
+
+        ``headless=True`` means background operation for Console. It uses a
+        normal headed Chrome inside Xvfb rather than Chromium headless mode,
+        because ChatGPT/Cloudflare can serve a challenge page to headless
+        Chromium.
+        """
+
         self.config.validate()
         self.config.profile_directory.mkdir(parents=True, exist_ok=True)
 
-        arguments = [
+        chrome_arguments = [
             str(self.config.chrome_executable),
             f"--remote-debugging-address={self.config.debugging_host}",
             f"--remote-debugging-port={self.config.debugging_port}",
             f"--user-data-dir={self.config.profile_directory}",
             "--no-first-run",
             "--no-default-browser-check",
+            "--window-size=1440,1000",
+            self.config.chatgpt_url,
         ]
-        if headless:
-            arguments.extend(["--headless=new", "--window-size=1440,1000"])
-        arguments.append(self.config.chatgpt_url)
-        return tuple(arguments)
+
+        if not headless:
+            return tuple(chrome_arguments)
+
+        if not self.config.xvfb_run_executable.is_file():
+            raise FileNotFoundError(
+                "Invisible browser mode requires xvfb-run. "
+                f"Expected executable: {self.config.xvfb_run_executable}"
+            )
+
+        return (
+            str(self.config.xvfb_run_executable),
+            "--auto-servernum",
+            "--server-args=-screen 0 1440x1000x24",
+            *chrome_arguments,
+        )
 
     def launch(self, *, headless: bool = False) -> subprocess.Popen[bytes]:
         return subprocess.Popen(
@@ -282,10 +296,21 @@ class ChatGPTBrowserBridge:
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
         self._owned_process: subprocess.Popen[bytes] | None = None
+        self._owned_process_group_id: int | None = None
         self._owned_process_is_headless = False
         self._dedicated_page: Page | None = None
+        self._logger = get_runtime_logger("browser_bridge")
+        self._active_request: BrowserExchangeRequest | None = None
 
     def _report_stage(self, stage: BrowserBridgeStage) -> None:
+        request = self._active_request
+        self._logger.info(
+            "stage=%s request_id=%s department_id=%s headless=%s",
+            stage.value,
+            request.request_id if request is not None else "-",
+            request.department_id if request is not None else "-",
+            self._owned_process_is_headless,
+        )
         if self._stage_callback is not None:
             self._stage_callback(stage)
 
@@ -294,6 +319,7 @@ class ChatGPTBrowserBridge:
             return
 
         self._report_stage(BrowserBridgeStage.CONNECTING)
+        self._logger.info("Connecting to CDP endpoint %s", self.config.cdp_url)
         self._playwright = sync_playwright().start()
         try:
             self._browser = self._playwright.chromium.connect_over_cdp(
@@ -314,7 +340,12 @@ class ChatGPTBrowserBridge:
             pass
 
         self._report_stage(BrowserBridgeStage.LAUNCHING_BROWSER)
+        self._logger.info(
+            "Launching normal Chrome on invisible Xvfb display profile=%s",
+            self.config.profile_directory,
+        )
         self._owned_process = ChromeLauncher(self.config).launch(headless=True)
+        self._owned_process_group_id = self._owned_process.pid
         self._owned_process_is_headless = True
         try:
             self._wait_for_cdp()
@@ -369,18 +400,56 @@ class ChatGPTBrowserBridge:
         self._validate_request(request)
         self.connect_or_launch_hybrid()
 
+        self._active_request = request
+        self._logger.info(
+            "exchange_start request_id=%s department_id=%s "
+            "create_new_thread=%s target_url=%s",
+            request.request_id,
+            request.department_id,
+            request.create_new_thread,
+            request.conversation_url or SHARED_PROJECT_URL,
+        )
         try:
-            return self._send_and_receive_once(request)
-        except (
-            BrowserBridgeLoginRequired,
-            BrowserBridgeHumanVerificationRequired,
-            BrowserBridgeEditorUnavailable,
-        ):
-            if not self._owned_process_is_headless:
-                raise
-            self._switch_to_visible_browser()
-            self._wait_for_visible_user_recovery()
-            return self._send_and_receive_once(request)
+            try:
+                result = self._send_and_receive_once(request)
+            except (
+                BrowserBridgeLoginRequired,
+                BrowserBridgeHumanVerificationRequired,
+            ) as exc:
+                self._logger.warning(
+                    "Visible recovery required request_id=%s reason=%s",
+                    request.request_id,
+                    type(exc).__name__,
+                )
+                if not self._owned_process_is_headless:
+                    raise
+                self._switch_to_visible_browser()
+                self._wait_for_visible_user_recovery()
+                result = self._send_and_receive_once(request)
+
+            downloaded_files = getattr(
+                result,
+                "downloaded_files",
+                (),
+            )
+            self._logger.info(
+                "exchange_success request_id=%s department_id=%s "
+                "conversation_url=%s downloads=%d",
+                result.request_id,
+                result.department_id,
+                result.conversation_url,
+                len(downloaded_files),
+            )
+            return result
+        except Exception:
+            self._logger.exception(
+                "exchange_failure request_id=%s department_id=%s",
+                request.request_id,
+                request.department_id,
+            )
+            raise
+        finally:
+            self._active_request = None
 
     def _validate_request(self, request: BrowserExchangeRequest) -> None:
         if not request.request_id.strip():
@@ -393,12 +462,6 @@ class ChatGPTBrowserBridge:
             raise BrowserBridgeAmbiguousTarget(
                 "No active conversation URL is stored for this department."
             )
-        for attachment_path in request.attachment_paths:
-            path = attachment_path.expanduser()
-            if not path.is_file():
-                raise BrowserBridgeError(
-                    f"Attachment file not found: {path}"
-                )
 
     def _send_and_receive_once(
         self,
@@ -416,6 +479,11 @@ class ChatGPTBrowserBridge:
             )
 
         self._report_stage(BrowserBridgeStage.NAVIGATING)
+        self._logger.info(
+            "Navigating dedicated page request_id=%s target_url=%s",
+            request.request_id,
+            target_url,
+        )
         page.goto(
             target_url,
             wait_until="domcontentloaded",
@@ -440,39 +508,28 @@ class ChatGPTBrowserBridge:
         assistant_messages = page.locator(ASSISTANT_MESSAGE_SELECTOR)
         baseline_user_count = user_messages.count()
         baseline_assistant_count = assistant_messages.count()
-
-        transport_text = self._transport_message_text(request)
-
-        if request.attachment_paths:
-            self._upload_attachments(
-                page=page,
-                attachment_paths=request.attachment_paths,
-            )
+        self._logger.info(
+            "message_baseline request_id=%s user_count=%d assistant_count=%d",
+            request.request_id,
+            baseline_user_count,
+            baseline_assistant_count,
+        )
 
         self._report_stage(BrowserBridgeStage.ENTERING_MESSAGE)
-        self._enter_message_text(
-            page=page,
-            editor=editor,
-            message_text=transport_text,
+        editor.fill(
+            request.message_text,
+            timeout=int(self.config.editor_timeout_seconds * 1000),
         )
         self._report_stage(BrowserBridgeStage.SENDING)
-        self._send_composer_message(
-            page=page,
-            editor=editor,
-            baseline_user_count=baseline_user_count,
-        )
+        editor.press("Enter")
 
         self._report_stage(BrowserBridgeStage.VERIFYING_USER_MESSAGE)
         self._wait_for_confirmed_user_message(
             page=page,
             baseline_count=baseline_user_count,
-            request_id=request.request_id,
-            message_text=request.message_text,
+            expected_text=request.message_text,
+            confirmation_marker=request.confirmation_marker,
         )
-
-        if request.create_new_thread:
-            self._report_stage(BrowserBridgeStage.CREATING_NEW_THREAD)
-            self._wait_for_new_conversation_route(page)
 
         self._report_stage(BrowserBridgeStage.WAITING_FOR_RESPONSE)
         response_text = self._wait_for_completed_response(
@@ -481,24 +538,11 @@ class ChatGPTBrowserBridge:
         )
         self._report_stage(BrowserBridgeStage.RECEIVING)
 
-        self._report_stage(BrowserBridgeStage.CAPTURING_DOWNLOADS)
-        current_assistant_count = page.locator(
-            ASSISTANT_MESSAGE_SELECTOR
-        ).count()
-        downloads = self._capture_generated_downloads(
-            page=page,
-            assistant_message_index=current_assistant_count - 1,
-            response_text=response_text,
-        )
-
         conversation_url = page.url
-        if request.create_new_thread:
-            self._report_stage(BrowserBridgeStage.SAVING_NEW_ROUTE)
         if not self._is_conversation_url(conversation_url):
             raise BrowserBridgeRouteUnverified(
                 observed_url=conversation_url,
                 response_text=response_text,
-                downloads=downloads,
             )
 
         if not request.create_new_thread:
@@ -515,557 +559,7 @@ class ChatGPTBrowserBridge:
             project_url=SHARED_PROJECT_URL,
             conversation_url=conversation_url,
             response_text=response_text,
-            downloads=downloads,
         )
-
-    def _capture_generated_downloads(
-        self,
-        page: Page,
-        assistant_message_index: int,
-        response_text: str = "",
-    ) -> tuple[CapturedDownload, ...]:
-        """Capture generated files through the authenticated browser session.
-
-        The rendered ChatGPT link is read from the new assistant article, but
-        it is not clicked. Clicking delegates to Chrome's native download
-        manager and may open a Save As dialog. Instead, BrowserContext.request
-        fetches the URL with the same authenticated cookie jar as the page.
-        """
-
-        messages = page.locator(ASSISTANT_MESSAGE_SELECTOR)
-        if assistant_message_index < 0:
-            return ()
-        if messages.count() <= assistant_message_index:
-            return ()
-
-        response = messages.nth(assistant_message_index)
-        article = response.locator("xpath=ancestor-or-self::article[1]")
-        container = article if article.count() else response
-
-        expected_download_names = self._download_names_from_text(
-            response_text or (response.inner_text() or "")
-        )
-        if not expected_download_names:
-            immediate_candidates = self._find_download_candidates(container)
-            if not immediate_candidates:
-                return ()
-
-        candidates = self._wait_for_download_candidates(
-            page=page,
-            container=container,
-            expected_names=expected_download_names,
-        )
-        if not candidates:
-            diagnostic = self._download_dom_diagnostic(container)
-            if expected_download_names:
-                raise BrowserBridgeError(
-                    "ChatGPT displayed a generated-file response, but the "
-                    "download control did not become available before the "
-                    "download timeout. Expected: "
-                    f"{', '.join(expected_download_names)}. "
-                    f"Observed controls: {diagnostic}"
-                )
-            return ()
-
-        directory = self.config.download_directory.expanduser()
-        directory.mkdir(parents=True, exist_ok=True)
-        captured: list[CapturedDownload] = []
-
-        for element, href in candidates:
-            self._assert_runtime_alive(page)
-            link_text = (element.inner_text() or "").strip()
-            download_attribute = element.get_attribute("download")
-            resolved_href = href or self._resolve_download_href(element)
-            if not resolved_href:
-                resolved_href = self._discover_download_url_by_click(
-                    page=page,
-                    element=element,
-                )
-
-            captured.append(
-                self._download_generated_file_via_session(
-                    page=page,
-                    href=resolved_href,
-                    link_text=link_text,
-                    download_attribute=download_attribute,
-                    directory=directory,
-                )
-            )
-
-        return tuple(captured)
-
-    def _resolve_download_href(self, element: Locator) -> str:
-        """Resolve a URL from the control, its ancestors or descendants."""
-
-        script = """
-        (node) => {
-            const attributeNames = [
-                "href",
-                "data-href",
-                "data-url",
-                "data-download-url",
-                "data-file-url"
-            ];
-
-            const read = (candidate) => {
-                if (!candidate) {
-                    return "";
-                }
-                for (const name of attributeNames) {
-                    const value = candidate.getAttribute?.(name);
-                    if (value) {
-                        return value;
-                    }
-                }
-                if (typeof candidate.href === "string" && candidate.href) {
-                    return candidate.href;
-                }
-                return "";
-            };
-
-            let current = node;
-            while (current) {
-                const direct = read(current);
-                if (direct) {
-                    return direct;
-                }
-                current = current.parentElement;
-            }
-
-            const nested = node.querySelector?.(
-                "a[href], [data-href], [data-url], " +
-                "[data-download-url], [data-file-url]"
-            );
-            return read(nested);
-        }
-        """
-        try:
-            return str(element.evaluate(script) or "").strip()
-        except Exception:
-            return ""
-
-    def _discover_download_url_by_click(
-        self,
-        page: Page,
-        element: Locator,
-    ) -> str:
-        """Capture the request URL from a JS-only file control.
-
-        The request is aborted before Chrome's native download manager can
-        complete it. If that abort temporarily sends the dedicated page to
-        ``chrome-error://chromewebdata/``, the bridge restores the original
-        conversation before returning.
-        """
-
-        captured_url = ""
-        original_url = page.url
-        context = page.context
-
-        def intercept(route, request) -> None:
-            nonlocal captured_url
-            if (
-                not captured_url
-                and self._is_generated_download_request_url(request.url)
-            ):
-                captured_url = request.url
-                route.abort()
-                return
-            route.continue_()
-
-        try:
-            context.route("**/*", intercept)
-            element.click()
-            deadline = time.monotonic() + min(
-                10.0,
-                self.config.download_timeout_seconds,
-            )
-            while time.monotonic() < deadline:
-                self._assert_runtime_alive(page)
-                if captured_url:
-                    break
-                page.wait_for_timeout(100)
-        except Exception as exc:
-            raise BrowserBridgeError(
-                "Could not capture the generated-file request URL from the "
-                f"rendered control: {exc}"
-            ) from exc
-        finally:
-            try:
-                context.unroute("**/*", intercept)
-            except Exception:
-                pass
-
-        if not captured_url:
-            raise BrowserBridgeError(
-                "The generated-file control had no href and its click did not "
-                "produce a recognised file request."
-            )
-
-        self._restore_conversation_after_download_intercept(
-            page=page,
-            original_url=original_url,
-        )
-        return captured_url
-
-    def _restore_conversation_after_download_intercept(
-        self,
-        page: Page,
-        original_url: str,
-    ) -> None:
-        """Restore the dedicated conversation after an aborted download."""
-
-        if self._is_conversation_url(page.url):
-            return
-        if not self._is_conversation_url(original_url):
-            return
-
-        try:
-            page.goto(
-                original_url,
-                wait_until="domcontentloaded",
-                timeout=int(
-                    self.config.navigation_timeout_seconds * 1000
-                ),
-            )
-            self._assert_runtime_alive(page)
-            self._verify_requested_route(original_url, page.url)
-        except Exception as exc:
-            raise BrowserBridgeError(
-                "The generated file was captured, but the dedicated ChatGPT "
-                "conversation could not be restored after intercepting the "
-                f"download request: {exc}"
-            ) from exc
-
-    def _is_generated_download_request_url(self, url: str) -> bool:
-        parsed = urlparse(url.strip())
-        host = parsed.netloc.lower()
-        path = parsed.path.lower()
-
-        if host == "chatgpt.com" and (
-            path.startswith("/backend-api/files/")
-            or path.startswith("/backend-api/estuary/content")
-            or path.startswith("/backend-api/files/download/")
-        ):
-            return True
-
-        return host.endswith(".oaiusercontent.com")
-
-    def _download_generated_file_via_session(
-        self,
-        page: Page,
-        href: str,
-        link_text: str,
-        download_attribute: str | None,
-        directory: Path,
-    ) -> CapturedDownload:
-        """Fetch one generated file atomically through the page cookie jar."""
-
-        if not href:
-            raise BrowserBridgeError(
-                "The generated-file control exposed no URL, and no download "
-                "request URL could be captured from its click."
-            )
-
-        source_url = urljoin(page.url, href)
-        try:
-            response = page.context.request.get(
-                source_url,
-                timeout=int(
-                    self.config.download_timeout_seconds * 1000
-                ),
-                fail_on_status_code=False,
-            )
-        except Exception as exc:
-            raise BrowserBridgeError(
-                "Could not fetch the generated file through the authenticated "
-                f"browser session: {source_url}: {exc}"
-            ) from exc
-
-        if not response.ok:
-            raise BrowserBridgeError(
-                "Generated-file request failed: "
-                f"HTTP {response.status} for {source_url}"
-            )
-
-        try:
-            content = response.body()
-        except Exception as exc:
-            raise BrowserBridgeError(
-                f"Could not read generated-file response body: {exc}"
-            ) from exc
-
-        if not content:
-            raise BrowserBridgeError(
-                "Generated-file response was empty. No record was stored."
-            )
-
-        original_name = self._generated_filename(
-            source_url=source_url,
-            headers=response.headers,
-            download_attribute=download_attribute,
-            link_text=link_text,
-        )
-        destination = self._collision_safe_path(
-            directory,
-            original_name,
-        )
-
-        temporary_path: Path | None = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="wb",
-                prefix=".download-",
-                suffix=".part",
-                dir=directory,
-                delete=False,
-            ) as temporary_file:
-                temporary_file.write(content)
-                temporary_file.flush()
-                os.fsync(temporary_file.fileno())
-                temporary_path = Path(temporary_file.name)
-
-            os.replace(temporary_path, destination)
-            temporary_path = None
-        except Exception as exc:
-            raise BrowserBridgeError(
-                f"Could not save generated file to {destination}: {exc}"
-            ) from exc
-        finally:
-            if temporary_path is not None:
-                temporary_path.unlink(missing_ok=True)
-
-        if destination.stat().st_size <= 0:
-            destination.unlink(missing_ok=True)
-            raise BrowserBridgeError(
-                "Generated file was written with zero bytes. "
-                "No record was stored."
-            )
-
-        return CapturedDownload(
-            original_filename=original_name,
-            saved_path=destination,
-            source_url=source_url,
-        )
-
-    def _generated_filename(
-        self,
-        source_url: str,
-        headers: dict[str, str],
-        download_attribute: str | None,
-        link_text: str,
-    ) -> str:
-        """Resolve a safe original filename from response and DOM metadata."""
-
-        content_disposition = headers.get("content-disposition", "")
-        encoded_match = re.search(
-            r"filename\*=UTF-8''([^;]+)",
-            content_disposition,
-            flags=re.IGNORECASE,
-        )
-        if encoded_match:
-            name = unquote(encoded_match.group(1).strip())
-            if Path(name).name:
-                return Path(name).name
-
-        quoted_match = re.search(
-            r'filename="?([^";]+)"?',
-            content_disposition,
-            flags=re.IGNORECASE,
-        )
-        if quoted_match:
-            name = quoted_match.group(1).strip()
-            if Path(name).name:
-                return Path(name).name
-
-        if download_attribute:
-            name = Path(download_attribute).name
-            if name:
-                return name
-
-        normalized_text = " ".join(link_text.strip().split())
-        if normalized_text.lower().startswith("download "):
-            name = Path(normalized_text[9:].strip()).name
-            if name:
-                return name
-
-        url_name = Path(unquote(urlparse(source_url).path)).name
-        return url_name or "generated-file"
-
-    def _wait_for_download_candidates(
-        self,
-        page: Page,
-        container: Locator,
-        expected_names: tuple[str, ...] = (),
-    ) -> list[tuple[Locator, str]]:
-        deadline = (
-            time.monotonic()
-            + self.config.download_timeout_seconds
-        )
-
-        while time.monotonic() < deadline:
-            self._assert_runtime_alive(page)
-            candidates = self._find_download_candidates(container)
-            if candidates:
-                return candidates
-
-            if expected_names:
-                page_candidates = self._find_download_candidates(
-                    page.locator("body")
-                )
-                matching = [
-                    candidate
-                    for candidate in page_candidates
-                    if self._candidate_matches_expected_name(
-                        candidate[0],
-                        expected_names,
-                    )
-                ]
-                if matching:
-                    return matching
-
-            time.sleep(0.25)
-
-        return []
-
-    def _download_names_from_text(
-        self,
-        text: str,
-    ) -> tuple[str, ...]:
-        """Extract visible generated filenames from assistant response text."""
-
-        names: list[str] = []
-        for match in re.finditer(
-            r"(?im)^\s*download\s+([^\r\n]+?\.[A-Za-z0-9]{1,12})\s*$",
-            text,
-        ):
-            name = Path(match.group(1).strip()).name
-            if name and name not in names:
-                names.append(name)
-        return tuple(names)
-
-    def _candidate_matches_expected_name(
-        self,
-        element: Locator,
-        expected_names: tuple[str, ...],
-    ) -> bool:
-        try:
-            text = " ".join((element.inner_text() or "").split()).lower()
-            href = (element.get_attribute("href") or "").lower()
-        except Exception:
-            return False
-
-        return any(
-            expected.lower() in text
-            or expected.lower() in href
-            for expected in expected_names
-        )
-
-    def _find_download_candidates(
-        self,
-        container: Locator,
-    ) -> list[tuple[Locator, str]]:
-        controls = container.locator(
-            'a, button, [role="link"], [role="button"]'
-        )
-        candidates: list[tuple[Locator, str]] = []
-
-        for index in range(controls.count()):
-            control = controls.nth(index)
-            try:
-                if not control.is_visible():
-                    continue
-                href = (control.get_attribute("href") or "").strip()
-                download_attribute = control.get_attribute("download")
-                link_text = (control.inner_text() or "").strip()
-            except Exception:
-                continue
-
-            if self._is_generated_file_link(
-                href=href,
-                download_attribute=download_attribute,
-                link_text=link_text,
-            ):
-                candidates.append((control, href))
-
-        return candidates
-
-    def _download_dom_diagnostic(self, container: Locator) -> str:
-        controls = container.locator(
-            'a, button, [role="link"], [role="button"]'
-        )
-        details: list[str] = []
-
-        for index in range(min(controls.count(), 12)):
-            control = controls.nth(index)
-            try:
-                details.append(
-                    "{"
-                    f"tag={control.evaluate('(node) => node.tagName')}, "
-                    f"role={control.get_attribute('role')!r}, "
-                    f"href={control.get_attribute('href')!r}, "
-                    f"download={control.get_attribute('download')!r}, "
-                    f"text={(control.inner_text() or '').strip()!r}"
-                    "}"
-                )
-            except Exception as exc:
-                details.append(f"{{unreadable={exc}}}")
-
-        return "; ".join(details) if details else "[no controls]"
-
-    def _is_generated_file_link(
-        self,
-        href: str,
-        download_attribute: str | None,
-        link_text: str = "",
-    ) -> bool:
-        """Return whether a rendered control represents a generated file."""
-
-        if download_attribute is not None:
-            return True
-
-        normalized_href = href.strip().lower()
-        if normalized_href.startswith("sandbox:/mnt/data/"):
-            return True
-
-        parsed = urlparse(normalized_href)
-        host = parsed.netloc
-        path = parsed.path
-
-        if host == "chatgpt.com" and (
-            path.startswith("/backend-api/files/")
-            or path.startswith("/backend-api/estuary/content")
-            or path.startswith("/backend-api/files/download/")
-        ):
-            return True
-
-        if host.endswith(".oaiusercontent.com"):
-            return True
-
-        normalized_text = " ".join(link_text.strip().lower().split())
-        if normalized_text.startswith("download "):
-            filename = normalized_text.removeprefix("download ").strip()
-            return bool(Path(filename).suffix)
-
-        return False
-
-    def _collision_safe_path(
-        self,
-        directory: Path,
-        original_filename: str,
-    ) -> Path:
-        safe_name = Path(original_filename).name or "download"
-        candidate = directory / safe_name
-        if not candidate.exists():
-            return candidate
-
-        stem = candidate.stem
-        suffix = candidate.suffix
-        counter = 2
-        while True:
-            candidate = directory / f"{stem} ({counter}){suffix}"
-            if not candidate.exists():
-                return candidate
-            counter += 1
 
     def _verify_requested_route(
         self,
@@ -1087,6 +581,10 @@ class ChatGPTBrowserBridge:
             )
 
     def _switch_to_visible_browser(self) -> None:
+        self._logger.warning(
+            "Switching to visible Chrome only for confirmed login or "
+            "human-verification recovery"
+        )
         self._report_stage(BrowserBridgeStage.HUMAN_ACTION_REQUIRED)
         self._close_dedicated_page()
         self.disconnect()
@@ -1094,6 +592,7 @@ class ChatGPTBrowserBridge:
 
         self._report_stage(BrowserBridgeStage.LAUNCHING_BROWSER)
         self._owned_process = ChromeLauncher(self.config).launch(headless=False)
+        self._owned_process_group_id = self._owned_process.pid
         self._owned_process_is_headless = False
         self._wait_for_cdp()
 
@@ -1179,131 +678,125 @@ class ChatGPTBrowserBridge:
             pass
 
     def _terminate_owned_process(self) -> None:
-        process = self._owned_process
-        self._owned_process = None
-        self._owned_process_is_headless = False
+        """Terminate the complete Chrome/Xvfb process group owned by Console.
 
-        if process is None or process.poll() is not None:
-            return
-
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=5)
-        time.sleep(0.5)
-
-    def _send_composer_message(
-        self,
-        page: Page,
-        editor: Locator,
-        baseline_user_count: int,
-    ) -> None:
-        """Wait for upload readiness and submit through ChatGPT's send button.
-
-        Pressing Enter is not reliable while an attachment is still being
-        processed. The bridge therefore waits for an enabled visible send
-        control and clicks it. Keyboard submission is only a fallback when no
-        send control is exposed.
+        ``xvfb-run`` may exit while its Chrome child remains alive. Waiting on
+        only the wrapper process is therefore insufficient. Every owned launch
+        starts a new session, so the original wrapper PID is also the process
+        group ID used to terminate all descendants.
         """
 
-        timeout_ms = int(self.config.editor_timeout_seconds * 1000)
-        deadline = time.monotonic() + self.config.editor_timeout_seconds
+        process = self._owned_process
+        process_group_id = self._owned_process_group_id
+        self._owned_process = None
+        self._owned_process_group_id = None
+        self._owned_process_is_headless = False
 
-        send_candidates = (
-            page.locator('button[data-testid="send-button"]'),
-            page.get_by_role("button", name="Send prompt"),
-            page.get_by_role("button", name="Send message"),
-            page.get_by_role("button", name="Send"),
+        if process is None and process_group_id is None:
+            return
+
+        self._logger.info(
+            "owned_process_cleanup_start pid=%s pgid=%s cdp_port=%d",
+            getattr(process, "pid", None),
+            process_group_id,
+            self.config.debugging_port,
         )
 
-        last_button_state = "[no send button]"
-        while time.monotonic() < deadline:
-            self._assert_runtime_alive(page)
-            for candidates in send_candidates:
-                for index in range(candidates.count()):
-                    button = candidates.nth(index)
-                    try:
-                        visible = button.is_visible()
-                        enabled = button.is_enabled()
-                        last_button_state = (
-                            f"visible={visible}, enabled={enabled}"
-                        )
-                        if visible and enabled:
-                            button.click(timeout=timeout_ms)
-                            return
-                    except Exception:
-                        continue
-            page.wait_for_timeout(100)
-
-        # Some ChatGPT variants expose no stable send-button selector.
-        # Keyboard submission is retained only as a final fallback.
-        try:
-            editor.press("Enter", timeout=timeout_ms)
-        except Exception as exc:
-            raise BrowserBridgeMessageNotConfirmed(
-                "ChatGPT composer could not be submitted after waiting for "
-                f"attachment readiness. Last send-button state: "
-                f"{last_button_state}. Error: {exc}"
-            ) from exc
-
-        # Detect the common failure mode immediately: Enter inserted a newline
-        # while the attachment was still uploading and no user message appeared.
-        page.wait_for_timeout(500)
-        if page.locator(USER_MESSAGE_SELECTOR).count() <= baseline_user_count:
-            raise BrowserBridgeMessageNotConfirmed(
-                "ChatGPT did not submit the composer. The attachment may still "
-                "have been processing, and keyboard Enter did not create a new "
-                "user message."
+        if process_group_id is not None:
+            self._signal_owned_process_group(
+                process_group_id,
+                signal.SIGTERM,
             )
 
-    def _upload_attachments(
-        self,
-        page: Page,
-        attachment_paths: tuple[Path, ...],
-    ) -> None:
-        """Upload queued files into the ChatGPT composer before sending."""
-
-        paths = [str(path.expanduser().resolve()) for path in attachment_paths]
-
-        inputs = page.locator('input[type="file"]')
-        for index in range(inputs.count()):
-            candidate = inputs.nth(index)
+        if process is not None and process.poll() is None:
             try:
-                candidate.set_input_files(paths)
-                return
-            except Exception:
-                continue
+                process.wait(
+                    timeout=self.config.process_shutdown_timeout_seconds
+                )
+            except subprocess.TimeoutExpired:
+                pass
 
-        button_candidates = (
-            page.get_by_role("button", name="Add files and more"),
-            page.get_by_role("button", name="Attach files"),
-            page.get_by_role("button", name="Add files"),
-        )
-        for button in button_candidates:
-            for index in range(button.count()):
-                candidate = button.nth(index)
+        if not self._wait_for_cdp_release(
+            self.config.cdp_release_timeout_seconds
+        ):
+            self._logger.warning(
+                "Owned browser did not release CDP port after SIGTERM; "
+                "sending SIGKILL to process group %s",
+                process_group_id,
+            )
+            if process_group_id is not None:
+                self._signal_owned_process_group(
+                    process_group_id,
+                    signal.SIGKILL,
+                )
+            if process is not None and process.poll() is None:
                 try:
-                    if not candidate.is_visible():
-                        continue
-                    with page.expect_file_chooser(
-                        timeout=int(
-                            self.config.editor_timeout_seconds * 1000
-                        )
-                    ) as chooser_info:
-                        candidate.click()
-                    chooser_info.value.set_files(paths)
-                    return
-                except Exception:
-                    continue
+                    process.wait(
+                        timeout=self.config.process_shutdown_timeout_seconds
+                    )
+                except subprocess.TimeoutExpired:
+                    self._logger.error(
+                        "Owned browser wrapper did not exit after SIGKILL "
+                        "pid=%s pgid=%s",
+                        getattr(process, "pid", None),
+                        process_group_id,
+                    )
 
-        raise BrowserBridgeError(
-            "ChatGPT did not expose a usable file-upload control."
+        released = self._wait_for_cdp_release(
+            self.config.cdp_release_timeout_seconds
         )
+        if released:
+            self._logger.info(
+                "owned_process_cleanup_complete cdp_port=%d released=true",
+                self.config.debugging_port,
+            )
+        else:
+            self._logger.error(
+                "owned_process_cleanup_complete cdp_port=%d released=false",
+                self.config.debugging_port,
+            )
+
+    def _signal_owned_process_group(
+        self,
+        process_group_id: int,
+        signal_number: int,
+    ) -> None:
+        try:
+            os.killpg(process_group_id, signal_number)
+        except ProcessLookupError:
+            return
+        except PermissionError:
+            self._logger.exception(
+                "Cannot signal owned process group pgid=%s signal=%s",
+                process_group_id,
+                signal_number,
+            )
+
+    def _wait_for_cdp_release(self, timeout_seconds: float) -> bool:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            if not self._cdp_port_is_open():
+                return True
+            time.sleep(0.1)
+        return not self._cdp_port_is_open()
+
+    def _cdp_port_is_open(self) -> bool:
+        try:
+            with socket.create_connection(
+                (
+                    self.config.debugging_host,
+                    self.config.debugging_port,
+                ),
+                timeout=0.2,
+            ):
+                return True
+        except OSError:
+            return False
 
     def _wait_for_message_editor(self, page: Page) -> Locator:
         deadline = time.monotonic() + self.config.editor_timeout_seconds
+        last_diagnostics: list[str] = []
+
         while time.monotonic() < deadline:
             self._assert_runtime_alive(page)
             self._raise_for_human_verification(page)
@@ -1312,50 +805,81 @@ class ChatGPTBrowserBridge:
                     "The dedicated Chrome profile is not logged in to ChatGPT."
                 )
 
+            diagnostics: list[str] = []
             for selector in MESSAGE_EDITOR_SELECTORS:
                 locator = page.locator(selector)
-                for index in range(locator.count()):
+                count = locator.count()
+                diagnostics.append(f"{selector}:count={count}")
+                for index in range(count):
                     candidate = locator.nth(index)
                     try:
-                        if (
-                            candidate.is_visible()
-                            and candidate.is_enabled()
-                            and candidate.is_editable()
-                        ):
+                        visible = candidate.is_visible()
+                        enabled = candidate.is_enabled()
+                        editable = candidate.is_editable()
+                        diagnostics.append(
+                            f"{selector}[{index}]:visible={visible},"
+                            f"enabled={enabled},editable={editable}"
+                        )
+                        if visible and enabled and editable:
+                            self._logger.info(
+                                "editor_found request_id=%s selector=%s "
+                                "index=%d",
+                                self._active_request.request_id
+                                if self._active_request is not None
+                                else "-",
+                                selector,
+                                index,
+                            )
                             return candidate
-                    except Exception:
-                        continue
+                    except Exception as exc:
+                        diagnostics.append(
+                            f"{selector}[{index}]:error={type(exc).__name__}"
+                        )
+            last_diagnostics = diagnostics
             time.sleep(0.25)
 
-        raise BrowserBridgeEditorUnavailable(
-            "ChatGPT did not expose one editable message composer."
+        self._logger.error(
+            "editor_unavailable request_id=%s page_url=%s title=%r "
+            "diagnostics=%s",
+            self._active_request.request_id
+            if self._active_request is not None
+            else "-",
+            page.url,
+            self._safe_page_title(page),
+            " | ".join(last_diagnostics),
         )
+        raise BrowserBridgeEditorUnavailable(
+            "ChatGPT did not expose one editable message composer. "
+            "Visible Chrome was not opened because no login or human "
+            "verification requirement was detected. Check the runtime log."
+        )
+
+    def _safe_page_title(self, page: Page) -> str:
+        try:
+            return page.title()
+        except Exception:
+            return "[unavailable]"
 
     def _wait_for_confirmed_user_message(
         self,
         page: Page,
         baseline_count: int,
-        request_id: str,
-        message_text: str = "",
+        expected_text: str,
+        confirmation_marker: str | None = None,
     ) -> None:
-        """Confirm that ChatGPT accepted the request as a user message.
+        """Confirm the exact request without comparing rendered Markdown.
 
-        The immutable request marker remains the primary correlation key.
-        Some ChatGPT renderer variants omit or collapse the first transport
-        line even though the full package was submitted.  In that case the
-        bridge also accepts a newly rendered message that contains a strong
-        normalized signature from the package body. Attachment-only messages
-        remain ignored while the bridge continues waiting for the text body.
+        ChatGPT renders a sent message before exposing it through ``inner_text``.
+        Markdown headings, lists and spacing can therefore differ from the raw
+        composer payload even when the correct message was delivered. A unique
+        request marker is the authoritative confirmation when available.
         """
 
         deadline = (
             time.monotonic()
             + self.config.message_confirmation_timeout_seconds
         )
-        marker = self._request_marker(request_id)
-        signatures = self._message_confirmation_signatures(message_text)
-
-        observed_unmatched_messages = 0
+        expected_normalized = self._normalize_message_text(expected_text)
 
         while time.monotonic() < deadline:
             self._assert_runtime_alive(page)
@@ -1364,155 +888,36 @@ class ChatGPTBrowserBridge:
             current_count = messages.count()
 
             if current_count > baseline_count:
-                observed_unmatched_messages = (
-                    current_count - baseline_count
+                observed_text = messages.nth(current_count - 1).inner_text()
+                observed_normalized = self._normalize_message_text(
+                    observed_text
                 )
-                for index in range(baseline_count, current_count):
-                    observed_text = messages.nth(index).inner_text() or ""
-                    if marker in observed_text:
-                        return
-                    if self._message_matches_request_payload(
-                        observed_text=observed_text,
-                        signatures=signatures,
-                    ):
-                        return
 
+                if confirmation_marker:
+                    if confirmation_marker in observed_text:
+                        self._logger.info(
+                            "user_message_confirmed request_id=%s "
+                            "user_count=%d marker=%s",
+                            self._active_request.request_id
+                            if self._active_request is not None
+                            else "-",
+                            current_count,
+                            confirmation_marker,
+                        )
+                        return
+                elif observed_normalized == expected_normalized:
+                    return
+
+                observed_excerpt = observed_normalized[:240]
+                raise BrowserBridgeMessageNotConfirmed(
+                    "A new user message appeared, but it did not contain the "
+                    "current request marker. Observed message begins with: "
+                    f"{observed_excerpt!r}"
+                )
             time.sleep(self.config.response_poll_interval_seconds)
-
-        if observed_unmatched_messages:
-            raise BrowserBridgeMessageNotConfirmed(
-                "New user message content appeared after the send action, "
-                "but none of the new messages matched the current request "
-                "marker or package body. This may indicate an attachment-only "
-                "transport message or a foreign user action."
-            )
 
         raise BrowserBridgeMessageNotConfirmed(
             "ChatGPT did not confirm the current request as a new user message."
-        )
-
-    def _message_confirmation_signatures(
-        self,
-        message_text: str,
-    ) -> tuple[str, ...]:
-        """Return stable rendered-text signatures for one package body."""
-
-        signatures: list[str] = []
-        for raw_line in message_text.splitlines():
-            normalized = self._normalize_confirmation_text(raw_line)
-            if len(normalized) < 24:
-                continue
-            if normalized in signatures:
-                continue
-            signatures.append(normalized)
-            if len(signatures) >= 8:
-                break
-        return tuple(signatures)
-
-    def _message_matches_request_payload(
-        self,
-        *,
-        observed_text: str,
-        signatures: tuple[str, ...],
-    ) -> bool:
-        """Match a rendered user message to the submitted package body."""
-
-        if not signatures:
-            return False
-        normalized_observed = self._normalize_confirmation_text(observed_text)
-        return any(
-            signature in normalized_observed
-            for signature in signatures
-        )
-
-    def _normalize_confirmation_text(self, value: str) -> str:
-        """Normalize Markdown/rich-text differences for confirmation only."""
-
-        lines = []
-        for raw_line in value.splitlines():
-            line = raw_line.strip().lstrip("#>*- " ).strip()
-            if line:
-                lines.append(line)
-        return " ".join(" ".join(lines).split()).casefold()
-
-
-    def _enter_message_text(
-        self,
-        *,
-        page: Page,
-        editor: Locator,
-        message_text: str,
-    ) -> None:
-        """Enter text into textarea/input or ChatGPT's rich editor.
-
-        Playwright's ``Locator.fill`` supports form controls and selected
-        contenteditable implementations, but ChatGPT's ProseMirror composer
-        can reject or stall that operation.  For contenteditable composers we
-        focus the locator and use the page keyboard, whose ``insert_text`` API
-        is the supported Playwright path for arbitrary Unicode text.
-        """
-
-        timeout_ms = int(self.config.editor_timeout_seconds * 1000)
-        contenteditable = (
-            editor.get_attribute(
-                "contenteditable",
-                timeout=timeout_ms,
-            )
-            or ""
-        ).lower()
-
-        if contenteditable == "true":
-            editor.click(timeout=timeout_ms)
-            page.keyboard.press("Control+A")
-            page.keyboard.press("Backspace")
-            page.keyboard.insert_text(message_text)
-            return
-
-        editor.fill(message_text, timeout=timeout_ms)
-
-    def _transport_message_text(
-        self,
-        request: BrowserExchangeRequest,
-    ) -> str:
-        """Add a visible correlation marker without changing package content."""
-
-        return (
-            f"{self._request_marker(request.request_id)}\n\n"
-            f"{request.message_text.strip()}\n"
-        )
-
-    def _request_marker(self, request_id: str) -> str:
-        return f"CURVATURE_REQUEST_ID: {request_id}"
-
-
-    def _wait_for_new_conversation_route(self, page: Page) -> str:
-        """Wait for ChatGPT to assign a real conversation URL.
-
-        A new project chat remains on the project landing URL until the first
-        message has been accepted. ChatGPT may take noticeably longer to
-        create that conversation than it takes to render the composer, so this
-        wait is deliberately separate from editor and message-confirmation
-        timeouts. The visible stage keeps the hybrid browser workflow honest:
-        Console continues waiting while Chrome/ChatGPT is still creating the
-        chat, and it does not reset local continuity until a real ``/c/...``
-        route exists.
-        """
-
-        deadline = (
-            time.monotonic()
-            + self.config.new_thread_creation_timeout_seconds
-        )
-        while time.monotonic() < deadline:
-            self._assert_runtime_alive(page)
-            self._raise_for_human_verification(page)
-            if self._is_conversation_url(page.url):
-                return page.url
-            time.sleep(self.config.response_poll_interval_seconds)
-
-        raise BrowserBridgeTimeout(
-            "ChatGPT accepted the handoff, but did not assign a new "
-            "conversation URL before the new-thread timeout. Leave Chrome "
-            "open and verify whether the new chat finished creating."
         )
 
     def _wait_for_completed_response(
@@ -1574,7 +979,17 @@ class ChatGPTBrowserBridge:
             "Checking your browser",
             "Security check",
             "Cloudflare",
+            "Just a moment",
         )
+
+        try:
+            title = page.title()
+        except Exception:
+            title = ""
+
+        if any(phrase.lower() in title.lower() for phrase in phrases):
+            return True
+
         body = page.locator("body")
         if body.count() == 0:
             return False

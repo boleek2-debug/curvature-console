@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from PySide6.QtCore import QThread, Signal
 
+from curvature_console.infrastructure.runtime_logging import (
+    get_runtime_logger,
+)
 from curvature_console.infrastructure.browser_bridge import (
     BrowserBridgeConfig,
     BrowserBridgeRouteUnverified,
@@ -16,9 +19,9 @@ from curvature_console.infrastructure.browser_bridge import (
 class BrowserBridgeWorker(QThread):
     """Run one immutable request outside the Qt UI thread."""
 
-    succeeded = Signal(str, str, str, str, str, str, object)
+    succeeded = Signal(str, str, str, str, str, str)
     failed = Signal(str, str, str)
-    route_unverified = Signal(str, str, str, str, object)
+    route_unverified = Signal(str, str, str, str)
     stage_changed = Signal(str, str, str)
 
     def __init__(
@@ -31,6 +34,12 @@ class BrowserBridgeWorker(QThread):
         self.request = request
 
     def run(self) -> None:
+        logger = get_runtime_logger("browser_bridge_worker")
+        logger.info(
+            "worker_start request_id=%s department_id=%s",
+            self.request.request_id,
+            self.request.department_id,
+        )
         bridge = ChatGPTBrowserBridge(
             self.config,
             stage_callback=lambda stage: self.stage_changed.emit(
@@ -49,6 +58,11 @@ class BrowserBridgeWorker(QThread):
             route_failure = exc
         except Exception as exc:
             failure = exc
+            logger.exception(
+                "worker_failure request_id=%s department_id=%s",
+                self.request.request_id,
+                self.request.department_id,
+            )
         finally:
             bridge.close()
 
@@ -58,7 +72,6 @@ class BrowserBridgeWorker(QThread):
                 self.request.department_id,
                 route_failure.observed_url,
                 route_failure.response_text,
-                route_failure.downloads,
             )
             return
 
@@ -69,6 +82,12 @@ class BrowserBridgeWorker(QThread):
                 str(failure),
             )
             return
+
+        logger.info(
+            "worker_finished request_id=%s department_id=%s",
+            self.request.request_id,
+            self.request.department_id,
+        )
 
         if result is None:
             self.failed.emit(
@@ -85,5 +104,4 @@ class BrowserBridgeWorker(QThread):
             result.project_url,
             result.conversation_url,
             result.response_text,
-            result.downloads,
         )

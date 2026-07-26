@@ -30,14 +30,14 @@ from curvature_console.infrastructure.browser_bridge import (
     BrowserBridgeConfig,
     BrowserExchangeRequest,
 )
-from curvature_console.infrastructure.context_loader import (
-    ContextLoadResult,
-    WorkspaceContextLoader,
-)
 from curvature_console.infrastructure.package_apply import PackageApplier
 from curvature_console.infrastructure.package_review import (
     PackageReviewError,
     PackageReviewer,
+)
+from curvature_console.infrastructure.context_loader import (
+    ContextLoadResult,
+    WorkspaceContextLoader,
 )
 from curvature_console.infrastructure.state_store import SQLiteStateStore
 from curvature_console.infrastructure.transfer_package import (
@@ -65,7 +65,6 @@ class PendingBrowserExchange:
     request_id: str
     department_id: str
     user_task: str
-    mode: TransferPackageMode = TransferPackageMode.TASK
 
 
 class MainWindow(QMainWindow):
@@ -97,7 +96,6 @@ class MainWindow(QMainWindow):
         data_directory: Path | None = None,
         browser_config: BrowserBridgeConfig | None = None,
         repository_roots: dict[str, Path] | None = None,
-        package_backup_root: Path | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -118,19 +116,17 @@ class MainWindow(QMainWindow):
             Path.cwd()
         )
         self.repository_roots = {
-            key: value.expanduser().resolve()
-            for key, value in (
+            repository_id: root.expanduser().resolve()
+            for repository_id, root in (
                 repository_roots
-                or {
-                    "curvature-console": Path.cwd(),
-                    "Curvature": Path("~/Curvature"),
-                }
+                if repository_roots is not None
+                else {"curvature-console": Path.cwd()}
             ).items()
         }
         self.package_reviewer = PackageReviewer()
         self.package_applier = PackageApplier(
             reviewer=self.package_reviewer,
-            backup_root=package_backup_root,
+            backup_root=self.data_directory / "package-backups",
         )
         self.state_store = SQLiteStateStore(state_path)
         self._bootstrap_chat_routes()
@@ -167,10 +163,10 @@ class MainWindow(QMainWindow):
             panel.transfer_package_requested.connect(
                 self.prepare_transfer_package
             )
+            panel.workspace_state_changed.connect(self.save_department_state)
             panel.package_review_requested.connect(
                 self.review_generated_package
             )
-            panel.workspace_state_changed.connect(self.save_department_state)
             self.department_panels[department_id] = panel
             self.splitter.addWidget(panel)
 
@@ -262,7 +258,7 @@ class MainWindow(QMainWindow):
             len(result.errors) for result in self.context_results.values()
         )
         self.statusBar().showMessage(
-            f"Local context refreshed: {loaded_total} documents · "
+            f"Context refreshed: {loaded_total} documents · "
             f"{error_total} errors"
         )
 
@@ -304,57 +300,6 @@ class MainWindow(QMainWindow):
         )
         dialog.exec()
 
-    def review_generated_package(
-        self,
-        department_id: str,
-        package_path_value: str,
-    ) -> None:
-        """Open a complete read-only review for one generated ZIP."""
-
-        if department_id not in self.department_panels:
-            raise ValueError(f"Unknown department: {department_id}")
-
-        package_path = Path(package_path_value).expanduser()
-        try:
-            repository_id = (
-                self.package_reviewer.manifest_target_repository(
-                    package_path
-                )
-            )
-            repository_root = self.repository_roots.get(repository_id)
-            if repository_root is None:
-                raise PackageReviewError(
-                    "No approved local repository is registered for "
-                    f"package target {repository_id!r}."
-                )
-            review = self.package_reviewer.review(
-                package_path,
-                repository_id=repository_id,
-                repository_root=repository_root,
-            )
-        except PackageReviewError as exc:
-            QMessageBox.critical(
-                self,
-                "Package review failed",
-                str(exc),
-            )
-            return
-
-        dialog = PackageReviewDialog(
-            review=review,
-            apply_callback=self.package_applier.apply,
-            parent=self,
-        )
-        dialog.exec()
-        state = (
-            "eligible"
-            if review.is_apply_eligible
-            else "blocked by conflicts"
-        )
-        self.statusBar().showMessage(
-            f"Package reviewed for {department_id}: {state}"
-        )
-
     def prepare_transfer_package(
         self,
         department_id: str,
@@ -375,27 +320,8 @@ class MainWindow(QMainWindow):
         if package is None:
             return
 
-        panel = self.department_panels[department_id]
-        pressure = panel.thread_pressure_snapshot
-
-        if (
-            package.mode is TransferPackageMode.TASK
-            and pressure.should_avoid_regular_task
-        ):
-            answer = QMessageBox.warning(
-                self,
-                "Thread pressure is RED",
-                "The local thread-pressure estimate is RED. A Thread "
-                "Handoff is strongly recommended before more work.\n\n"
-                "Send this regular task anyway?",
-                QMessageBox.StandardButton.Yes
-                | QMessageBox.StandardButton.Cancel,
-                QMessageBox.StandardButton.Cancel,
-            )
-            if answer != QMessageBox.StandardButton.Yes:
-                return
-
         if package.mode is TransferPackageMode.THREAD_HANDOFF:
+            panel = self.department_panels[department_id]
             answer = QMessageBox.warning(
                 self,
                 "Start a new ChatGPT thread?",
@@ -421,7 +347,6 @@ class MainWindow(QMainWindow):
             request_id=request_id,
             department_id=department_id,
             user_task=panel.input_editor.toPlainText(),
-            mode=package.mode,
         )
         self._pending_exchanges[request_id] = pending
         self._set_browser_operation_busy(True, department_id)
@@ -431,12 +356,19 @@ class MainWindow(QMainWindow):
         )
 
         route = self.state_store.load_chat_route(department_id)
+        confirmation_marker = (
+            f"CURVATURE_REQUEST_ID: {request_id}"
+        )
+        message_text = (
+            f"{confirmation_marker}\n\n{package.text}"
+        )
+
         worker = BrowserBridgeWorker(
             config=self.browser_config,
             request=BrowserExchangeRequest(
                 request_id=request_id,
                 department_id=department_id,
-                message_text=package.text,
+                message_text=message_text,
                 create_new_thread=(
                     package.mode is TransferPackageMode.THREAD_HANDOFF
                 ),
@@ -445,10 +377,7 @@ class MainWindow(QMainWindow):
                     if route is not None
                     else None
                 ),
-                attachment_paths=tuple(
-                    record.path
-                    for record in panel.attachment_list.records
-                ),
+                confirmation_marker=confirmation_marker,
             ),
         )
         worker.succeeded.connect(self._handle_browser_success)
@@ -479,7 +408,6 @@ class MainWindow(QMainWindow):
         project_url: str,
         conversation_url: str,
         response_text: str,
-        downloads: object = (),
     ) -> None:
         pending = self._pending_exchange(request_id, department_id)
         if pending is None:
@@ -487,22 +415,7 @@ class MainWindow(QMainWindow):
 
         self._pending_exchanges.pop(request_id, None)
         panel = self.department_panels[department_id]
-        if pending.mode is TransferPackageMode.THREAD_HANDOFF:
-            panel.start_new_thread_exchange(
-                pending.user_task,
-                response_text,
-            )
-        else:
-            panel.append_browser_exchange(pending.user_task, response_text)
-        self.state_store.save_generated_downloads(
-            request_id=request_id,
-            department_id=department_id,
-            conversation_url=conversation_url,
-            downloads=tuple(downloads),
-        )
-        panel.set_generated_downloads(
-            self.state_store.load_generated_downloads(department_id)
-        )
+        panel.append_browser_exchange(pending.user_task, response_text)
         self.state_store.save_chat_route(
             department_id=department_id,
             project_name=project_name,
@@ -523,7 +436,6 @@ class MainWindow(QMainWindow):
         department_id: str,
         observed_url: str,
         response_text: str,
-        downloads: object = (),
     ) -> None:
         """Preserve only the response belonging to the current request."""
 
@@ -534,21 +446,6 @@ class MainWindow(QMainWindow):
         self._pending_exchanges.pop(request_id, None)
         panel = self.department_panels[department_id]
         panel.append_browser_exchange(pending.user_task, response_text)
-        route = self.state_store.load_chat_route(department_id)
-        conversation_url = (
-            route.active_conversation_url
-            if route is not None
-            else observed_url
-        )
-        self.state_store.save_generated_downloads(
-            request_id=request_id,
-            department_id=department_id,
-            conversation_url=conversation_url,
-            downloads=tuple(downloads),
-        )
-        panel.set_generated_downloads(
-            self.state_store.load_generated_downloads(department_id)
-        )
         panel.input_editor.clear()
         self._set_browser_operation_busy(False, department_id)
         self.save_department_state(department_id)
@@ -658,6 +555,48 @@ class MainWindow(QMainWindow):
                 attachments=panel.attachment_list.records,
             )
         )
+
+    def review_generated_package(
+        self,
+        department_id: str,
+        package_path_value: str,
+    ) -> None:
+        """Review a selected generated ZIP against its declared repository."""
+
+        if department_id not in self.department_panels:
+            raise ValueError(f"Unknown department: {department_id}")
+
+        package_path = Path(package_path_value).expanduser().resolve()
+        try:
+            repository_id = self.package_reviewer.manifest_target_repository(
+                package_path
+            )
+            repository_root = self.repository_roots.get(repository_id)
+            if repository_root is None:
+                raise PackageReviewError(
+                    "No approved local repository is registered for package "
+                    f"target: {repository_id}"
+                )
+
+            review = self.package_reviewer.review(
+                package_path,
+                repository_id=repository_id,
+                repository_root=repository_root,
+            )
+        except (PackageReviewError, OSError) as exc:
+            QMessageBox.critical(
+                self,
+                "Package review failed",
+                str(exc),
+            )
+            return
+
+        dialog = PackageReviewDialog(
+            review,
+            apply_callback=self.package_applier.apply,
+            parent=self,
+        )
+        dialog.exec()
 
     def restore_persisted_state(self) -> None:
         """Restore department content, attachments and layout."""

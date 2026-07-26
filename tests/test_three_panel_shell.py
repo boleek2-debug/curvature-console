@@ -124,3 +124,23 @@ def test_thread_pressure_changes_handoff_call_to_action(window: MainWindow) -> N
 
     core.input_editor.clear()
     assert core.thread_handoff_button.text() == "Send Thread Handoff"
+
+
+def test_busy_panel_shows_live_activity_indicator(window: MainWindow) -> None:
+    panel = window.department_panels["core"]
+
+    panel.set_browser_busy(True)
+    panel.set_browser_stage("Waiting for response")
+
+    assert panel.activity_progress.isVisible()
+    assert panel.activity_progress.minimum() == 0
+    assert panel.activity_progress.maximum() == 0
+    assert panel._activity_timer.isActive()
+    assert "WORKING" in panel.activity_label.text()
+    assert "Waiting for response" in panel.activity_label.text()
+
+    panel.set_browser_busy(False)
+
+    assert not panel.activity_progress.isVisible()
+    assert not panel._activity_timer.isActive()
+    assert panel.activity_label.text() == "IDLE"

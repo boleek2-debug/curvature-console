@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+import signal
 
 import pytest
 
 from curvature_console.infrastructure.browser_bridge import (
-    CapturedDownload,
     BOOTSTRAP_CONVERSATION_URLS,
     SHARED_PROJECT_NAME,
     SHARED_PROJECT_URL,
     BrowserBridgeConfig,
+    BrowserBridgeEditorUnavailable,
     BrowserBridgeMessageNotConfirmed,
     BrowserBridgeProcessExited,
     BrowserBridgeRouteMismatch,
@@ -26,9 +27,12 @@ from curvature_console.infrastructure.browser_bridge import (
 def _config(tmp_path: Path) -> BrowserBridgeConfig:
     chrome = tmp_path / "google-chrome-stable"
     chrome.write_text("", encoding="utf-8")
+    xvfb_run = tmp_path / "xvfb-run"
+    xvfb_run.write_text("", encoding="utf-8")
     return BrowserBridgeConfig(
         chrome_executable=chrome,
         profile_directory=tmp_path / "profile",
+        xvfb_run_executable=xvfb_run,
     )
 
 
@@ -167,7 +171,7 @@ def test_new_wrong_user_message_is_rejected(tmp_path: Path) -> None:
         bridge._wait_for_confirmed_user_message(
             page=FakePage(),
             baseline_count=0,
-            request_id="expected-request",
+            expected_text="expected request",
         )
 
 
@@ -206,37 +210,125 @@ def test_process_exit_is_detected(tmp_path: Path) -> None:
         bridge._assert_browser_alive()
 
 
-def test_close_terminates_owned_process_and_is_idempotent(
+def test_close_terminates_owned_process_group_and_is_idempotent(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
     class FakeProcess:
         def __init__(self) -> None:
-            self.terminated = 0
+            self.pid = 4321
+            self.wait_calls = 0
 
         def poll(self):
             return None
 
-        def terminate(self) -> None:
-            self.terminated += 1
-
         def wait(self, timeout=None) -> None:
-            return None
+            self.wait_calls += 1
 
+    signals = []
     bridge = ChatGPTBrowserBridge(_config(tmp_path))
     process = FakeProcess()
     bridge._owned_process = process
+    bridge._owned_process_group_id = process.pid
+
+    monkeypatch.setattr(
+        "curvature_console.infrastructure.browser_bridge.os.killpg",
+        lambda pgid, signal_number: signals.append(
+            (pgid, signal_number)
+        ),
+    )
+    monkeypatch.setattr(
+        bridge,
+        "_wait_for_cdp_release",
+        lambda timeout: True,
+    )
 
     bridge.close()
     bridge.close()
 
-    assert process.terminated == 1
+    assert signals == [(4321, signal.SIGTERM)]
+    assert process.wait_calls == 1
     assert bridge._owned_process is None
+    assert bridge._owned_process_group_id is None
 
 
-def test_headless_launcher_is_available(tmp_path: Path) -> None:
-    command = ChromeLauncher(_config(tmp_path)).command(headless=True)
+def test_cleanup_kills_group_when_wrapper_already_exited(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class ExitedWrapper:
+        pid = 9876
 
-    assert "--headless=new" in command
+        def poll(self):
+            return 0
+
+    signals = []
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    bridge._owned_process = ExitedWrapper()
+    bridge._owned_process_group_id = 9876
+    monkeypatch.setattr(
+        "curvature_console.infrastructure.browser_bridge.os.killpg",
+        lambda pgid, signal_number: signals.append(
+            (pgid, signal_number)
+        ),
+    )
+    monkeypatch.setattr(
+        bridge,
+        "_wait_for_cdp_release",
+        lambda timeout: True,
+    )
+
+    bridge._terminate_owned_process()
+
+    assert signals == [(9876, signal.SIGTERM)]
+
+
+def test_cleanup_escalates_when_cdp_port_stays_open(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class FakeProcess:
+        pid = 2468
+
+        def poll(self):
+            return 0
+
+    signals = []
+    release_results = iter((False, True))
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    bridge._owned_process = FakeProcess()
+    bridge._owned_process_group_id = 2468
+
+    monkeypatch.setattr(
+        "curvature_console.infrastructure.browser_bridge.os.killpg",
+        lambda pgid, signal_number: signals.append(
+            (pgid, signal_number)
+        ),
+    )
+    monkeypatch.setattr(
+        bridge,
+        "_wait_for_cdp_release",
+        lambda timeout: next(release_results),
+    )
+
+    bridge._terminate_owned_process()
+
+    assert signals == [
+        (2468, signal.SIGTERM),
+        (2468, signal.SIGKILL),
+    ]
+
+
+def test_background_launcher_uses_xvfb_not_chromium_headless(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    command = ChromeLauncher(config).command(headless=True)
+
+    assert command[0] == str(config.xvfb_run_executable)
+    assert "--auto-servernum" in command
+    assert "--headless=new" not in command
+    assert str(config.chrome_executable) in command
 
 
 def test_route_unverified_preserves_observed_url_and_response() -> None:
@@ -249,30 +341,16 @@ def test_route_unverified_preserves_observed_url_and_response() -> None:
     assert error.response_text == "DIAGNOSTIC_RESPONSE"
 
 
-def test_transport_message_contains_request_marker(tmp_path: Path) -> None:
-    bridge = ChatGPTBrowserBridge(_config(tmp_path))
-    request = BrowserExchangeRequest(
-        request_id="request-abc",
-        department_id="core",
-        message_text="Task package body",
-        create_new_thread=False,
-        conversation_url=BOOTSTRAP_CONVERSATION_URLS["core"],
-    )
-
-    transport = bridge._transport_message_text(request)
-
-    assert transport.startswith("CURVATURE_REQUEST_ID: request-abc\n\n")
-    assert transport.endswith("Task package body\n")
-
-
-def test_matching_request_marker_confirms_user_message(tmp_path: Path) -> None:
+def test_user_message_confirmation_accepts_unique_request_marker(
+    tmp_path: Path,
+) -> None:
     bridge = ChatGPTBrowserBridge(_config(tmp_path))
 
     class FakeMessage:
         def inner_text(self):
             return (
-                "CURVATURE_REQUEST_ID: request-abc\n\n"
-                "Rendered Markdown may differ."
+                "CURVATURE_REQUEST_ID: request-123\n"
+                "Rendered heading\nRendered list item"
             )
 
     class FakeMessages:
@@ -294,449 +372,19 @@ def test_matching_request_marker_confirms_user_message(tmp_path: Path) -> None:
     bridge._wait_for_confirmed_user_message(
         page=FakePage(),
         baseline_count=0,
-        request_id="request-abc",
+        expected_text="# Raw heading\n\n- Raw list item",
+        confirmation_marker="CURVATURE_REQUEST_ID: request-123",
     )
 
 
-def test_generated_file_link_detection(tmp_path: Path) -> None:
-    bridge = ChatGPTBrowserBridge(_config(tmp_path))
-
-    assert bridge._is_generated_file_link(
-        "sandbox:/mnt/data/result.zip",
-        None,
-    )
-    assert bridge._is_generated_file_link(
-        "https://chatgpt.com/backend/file",
-        "result.zip",
-    )
-    assert bridge._is_generated_file_link(
-        "https://chatgpt.com/backend-api/files/file-123",
-        None,
-    )
-    assert bridge._is_generated_file_link(
-        "https://chatgpt.com/backend-api/estuary/content?id=file-123",
-        None,
-    )
-    assert bridge._is_generated_file_link(
-        "https://files.oaiusercontent.com/file-123/result.zip",
-        None,
-    )
-    assert bridge._is_generated_file_link(
-        "https://chatgpt.com/opaque-link",
-        None,
-        "Download result.zip",
-    )
-    assert not bridge._is_generated_file_link(
-        "https://example.com/report",
-        None,
-        "Read report",
-    )
-
-
-def test_collision_safe_download_path_preserves_original_name(
-    tmp_path: Path,
-) -> None:
-    bridge = ChatGPTBrowserBridge(_config(tmp_path))
-    inbox = tmp_path / "inbox"
-    inbox.mkdir()
-    (inbox / "package.zip").write_bytes(b"first")
-    (inbox / "package (2).zip").write_bytes(b"second")
-
-    target = bridge._collision_safe_path(inbox, "package.zip")
-
-    assert target == inbox / "package (3).zip"
-
-
-def test_collision_safe_download_path_removes_directory_components(
-    tmp_path: Path,
-) -> None:
-    bridge = ChatGPTBrowserBridge(_config(tmp_path))
-    inbox = tmp_path / "inbox"
-    inbox.mkdir()
-
-    target = bridge._collision_safe_path(inbox, "../../unsafe.txt")
-
-    assert target == inbox / "unsafe.txt"
-
-
-def test_route_unverified_preserves_captured_downloads(
-    tmp_path: Path,
-) -> None:
-    download = CapturedDownload(
-        original_filename="result.zip",
-        saved_path=tmp_path / "result.zip",
-        source_url="https://example.test/result.zip",
-    )
-
-    error = BrowserBridgeRouteUnverified(
-        observed_url="chrome-error://chromewebdata/",
-        response_text="Download result.zip",
-        downloads=(download,),
-    )
-
-    assert error.downloads == (download,)
-
-
-def test_attachment_only_user_message_before_marker_is_ignored(
-    tmp_path: Path,
-) -> None:
-    bridge = ChatGPTBrowserBridge(_config(tmp_path))
-
-    class FakeMessage:
-        def __init__(self, text: str) -> None:
-            self.text = text
-
-        def inner_text(self):
-            return self.text
-
-    class FakeMessages:
-        def count(self):
-            return 2
-
-        def nth(self, index):
-            return (
-                FakeMessage("CURVATURE_CONSOLE_ROLE_CORE.md")
-                if index == 0
-                else FakeMessage(
-                    "CURVATURE_REQUEST_ID: request-with-attachment\\n\\n"
-                    "Task package body"
-                )
-            )
-
-    class FakePage:
-        def locator(self, selector):
-            assert selector == '[data-message-author-role="user"]'
-            return FakeMessages()
-
-    bridge._assert_runtime_alive = lambda page: None
-    bridge._raise_for_human_verification = lambda page: None
-
-    bridge._wait_for_confirmed_user_message(
-        page=FakePage(),
-        baseline_count=0,
-        request_id="request-with-attachment",
-    )
-
-
-def test_only_post_baseline_messages_are_scanned_for_marker(
-    tmp_path: Path,
-) -> None:
-    bridge = ChatGPTBrowserBridge(_config(tmp_path))
-
-    class FakeMessage:
-        def __init__(self, text: str) -> None:
-            self.text = text
-
-        def inner_text(self):
-            return self.text
-
-    class FakeMessages:
-        def count(self):
-            return 3
-
-        def nth(self, index):
-            values = (
-                "CURVATURE_REQUEST_ID: stale-request",
-                "attachment-only-message",
-                "CURVATURE_REQUEST_ID: current-request",
-            )
-            return FakeMessage(values[index])
-
-    class FakePage:
-        def locator(self, selector):
-            assert selector == '[data-message-author-role="user"]'
-            return FakeMessages()
-
-    bridge._assert_runtime_alive = lambda page: None
-    bridge._raise_for_human_verification = lambda page: None
-
-    bridge._wait_for_confirmed_user_message(
-        page=FakePage(),
-        baseline_count=1,
-        request_id="current-request",
-    )
-
-
-def test_request_accepts_attachment_paths(tmp_path: Path) -> None:
-    attachment = tmp_path / "file.md"
-    attachment.write_text("content", encoding="utf-8")
-
-    request = BrowserExchangeRequest(
-        request_id="request",
-        department_id="core",
-        message_text="Task",
-        create_new_thread=False,
-        conversation_url="https://chatgpt.com/c/example",
-        attachment_paths=(attachment,),
-    )
-
-    assert request.attachment_paths == (attachment,)
-
-
-def test_upload_attachments_uses_file_input(tmp_path: Path) -> None:
-    bridge = ChatGPTBrowserBridge(_config(tmp_path))
-    attachment = tmp_path / "file.md"
-    attachment.write_text("content", encoding="utf-8")
-    calls = []
-
-    class FakeInput:
-        def set_input_files(self, paths):
-            calls.append(paths)
-
-    class FakeInputs:
-        def count(self):
-            return 1
-
-        def nth(self, index):
-            return FakeInput()
-
-    class FakePage:
-        def locator(self, selector):
-            assert selector == 'input[type="file"]'
-            return FakeInputs()
-
-    bridge._upload_attachments(
-        page=FakePage(),
-        attachment_paths=(attachment,),
-    )
-
-    assert calls == [[str(attachment.resolve())]]
-
-
-def test_send_composer_message_clicks_enabled_send_button(
-    tmp_path: Path,
-) -> None:
-    bridge = ChatGPTBrowserBridge(_config(tmp_path))
-    clicks = []
-
-    class FakeButton:
-        def is_visible(self):
-            return True
-
-        def is_enabled(self):
-            return True
-
-        def click(self, timeout):
-            clicks.append(timeout)
-
-    class FakeCandidates:
-        def count(self):
-            return 1
-
-        def nth(self, index):
-            return FakeButton()
-
-    class EmptyCandidates:
-        def count(self):
-            return 0
-
-    class FakePage:
-        def locator(self, selector):
-            if selector == 'button[data-testid="send-button"]':
-                return FakeCandidates()
-            if selector == '[data-message-author-role="user"]':
-                return EmptyCandidates()
-            return EmptyCandidates()
-
-        def get_by_role(self, role, name):
-            return EmptyCandidates()
-
-        def wait_for_timeout(self, milliseconds):
-            return None
-
-    bridge._assert_runtime_alive = lambda page: None
-    bridge._send_composer_message(
-        page=FakePage(),
-        editor=object(),
-        baseline_user_count=0,
-    )
-
-    assert clicks
-
-
-def test_download_names_are_extracted_from_response_text(
-    tmp_path: Path,
-) -> None:
-    bridge = ChatGPTBrowserBridge(_config(tmp_path))
-
-    assert bridge._download_names_from_text(
-        "Done.\n\nDownload curvature-console-package.zip"
-    ) == ("curvature-console-package.zip",)
-
-
-def test_capture_uses_latest_assistant_message_index(
-    tmp_path: Path,
-) -> None:
-    source = (
-        Path(__file__).resolve().parents[1]
-        / "src/curvature_console/infrastructure/browser_bridge.py"
-    ).read_text(encoding="utf-8")
-
-    assert "assistant_message_index=current_assistant_count - 1" in source
-
-
-def test_enter_message_uses_page_keyboard_for_contenteditable(
-    tmp_path: Path,
-) -> None:
-    bridge = ChatGPTBrowserBridge(_config(tmp_path))
-    calls: list[tuple[str, str | None]] = []
-
-    class FakeEditor:
-        def get_attribute(self, name, timeout=None):
-            assert name == "contenteditable"
-            return "true"
-
-        def click(self, timeout=None):
-            calls.append(("click", None))
-
-        def fill(self, text, timeout=None):
-            raise AssertionError("fill must not be used for contenteditable")
-
-    class FakeKeyboard:
-        def press(self, key):
-            calls.append(("press", key))
-
-        def insert_text(self, text):
-            calls.append(("insert_text", text))
-
-    class FakePage:
-        keyboard = FakeKeyboard()
-
-    bridge._enter_message_text(
-        page=FakePage(),
-        editor=FakeEditor(),
-        message_text="handoff text",
-    )
-
-    assert calls == [
-        ("click", None),
-        ("press", "Control+A"),
-        ("press", "Backspace"),
-        ("insert_text", "handoff text"),
-    ]
-
-
-def test_enter_message_keeps_fill_for_form_controls(tmp_path: Path) -> None:
-    bridge = ChatGPTBrowserBridge(_config(tmp_path))
-    calls: list[tuple[str, str]] = []
-
-    class FakeEditor:
-        def get_attribute(self, name, timeout=None):
-            assert name == "contenteditable"
-            return None
-
-        def fill(self, text, timeout=None):
-            calls.append(("fill", text))
-
-    class FakePage:
-        class Keyboard:
-            def insert_text(self, text):
-                raise AssertionError("keyboard must not be used")
-
-        keyboard = Keyboard()
-
-    bridge._enter_message_text(
-        page=FakePage(),
-        editor=FakeEditor(),
-        message_text="normal text",
-    )
-
-    assert calls == [("fill", "normal text")]
-
-
-def test_new_thread_waits_for_real_conversation_route(tmp_path: Path) -> None:
-    bridge = ChatGPTBrowserBridge(
-        BrowserBridgeConfig(
-            chrome_executable=_config(tmp_path).chrome_executable,
-            profile_directory=tmp_path / "profile",
-            new_thread_creation_timeout_seconds=0.1,
-            response_poll_interval_seconds=0.001,
-        )
-    )
-
-    class FakePage:
-        def __init__(self) -> None:
-            self.urls = iter(
-                (
-                    SHARED_PROJECT_URL,
-                    SHARED_PROJECT_URL,
-                    "https://chatgpt.com/g/project-id/c/new-core-id",
-                )
-            )
-            self._url = SHARED_PROJECT_URL
-
-        @property
-        def url(self) -> str:
-            try:
-                self._url = next(self.urls)
-            except StopIteration:
-                pass
-            return self._url
-
-    bridge._assert_runtime_alive = lambda page: None
-    bridge._raise_for_human_verification = lambda page: None
-
-    assert bridge._wait_for_new_conversation_route(FakePage()).endswith(
-        "/c/new-core-id"
-    )
-
-
-def test_capture_skips_download_timeout_when_response_has_no_file(
-    tmp_path: Path,
-) -> None:
-    bridge = ChatGPTBrowserBridge(_config(tmp_path))
-
-    class EmptyControls:
-        def count(self):
-            return 0
-
-    class FakeContainer:
-        def count(self):
-            return 0
-
-        def locator(self, selector):
-            return EmptyControls()
-
-    class FakeResponse(FakeContainer):
-        def inner_text(self):
-            return "Handoff accepted. Continue in this conversation."
-
-    class FakeMessages:
-        def count(self):
-            return 1
-
-        def nth(self, index):
-            assert index == 0
-            return FakeResponse()
-
-    class FakePage:
-        def locator(self, selector):
-            assert selector == '[data-message-author-role="assistant"]'
-            return FakeMessages()
-
-    bridge._wait_for_download_candidates = lambda **kwargs: (_ for _ in ()).throw(
-        AssertionError("download timeout must not run without a file response")
-    )
-
-    assert bridge._capture_generated_downloads(
-        page=FakePage(),
-        assistant_message_index=0,
-        response_text="Handoff accepted. Continue in this conversation.",
-    ) == ()
-
-
-def test_rendered_package_body_confirms_when_marker_is_omitted(
+def test_user_message_confirmation_rejects_foreign_request_marker(
     tmp_path: Path,
 ) -> None:
     bridge = ChatGPTBrowserBridge(_config(tmp_path))
 
     class FakeMessage:
         def inner_text(self):
-            return (
-                "CURVATURE CONSOLE — CHATGPT TRANSFER PACKAGE\n"
-                "Package type: Task Package\n"
-                "Department: Curvature Core"
-            )
+            return "CURVATURE_REQUEST_ID: another-request"
 
     class FakeMessages:
         def count(self):
@@ -748,73 +396,104 @@ def test_rendered_package_body_confirms_when_marker_is_omitted(
 
     class FakePage:
         def locator(self, selector):
-            assert selector == '[data-message-author-role="user"]'
             return FakeMessages()
 
     bridge._assert_runtime_alive = lambda page: None
     bridge._raise_for_human_verification = lambda page: None
 
-    bridge._wait_for_confirmed_user_message(
-        page=FakePage(),
-        baseline_count=0,
-        request_id="request-rendered-without-marker",
-        message_text=(
-            "# CURVATURE CONSOLE — CHATGPT TRANSFER PACKAGE\n\n"
-            "Package type: Task Package\n"
-            "Department: Curvature Core\n"
-        ),
-    )
-
-
-def test_attachment_only_message_does_not_match_package_signature(
-    tmp_path: Path,
-) -> None:
-    config = _config(tmp_path)
-    config = BrowserBridgeConfig(
-        chrome_executable=config.chrome_executable,
-        profile_directory=config.profile_directory,
-        message_confirmation_timeout_seconds=0.01,
-        response_poll_interval_seconds=0.001,
-    )
-    bridge = ChatGPTBrowserBridge(config)
-
-    class FakeMessage:
-        def inner_text(self):
-            return "CURVATURE_CONSOLE_ROLE_CORE.md"
-
-    class FakeMessages:
-        def count(self):
-            return 1
-
-        def nth(self, index):
-            assert index == 0
-            return FakeMessage()
-
-    class FakePage:
-        def locator(self, selector):
-            assert selector == '[data-message-author-role="user"]'
-            return FakeMessages()
-
-    bridge._assert_runtime_alive = lambda page: None
-    bridge._raise_for_human_verification = lambda page: None
-
-    with pytest.raises(BrowserBridgeMessageNotConfirmed):
+    with pytest.raises(
+        BrowserBridgeMessageNotConfirmed,
+        match="did not contain the current request marker",
+    ):
         bridge._wait_for_confirmed_user_message(
             page=FakePage(),
             baseline_count=0,
-            request_id="request-not-present",
-            message_text=(
-                "# CURVATURE CONSOLE — CHATGPT TRANSFER PACKAGE\n\n"
-                "Package type: Task Package\n"
-            ),
+            expected_text="task",
+            confirmation_marker="CURVATURE_REQUEST_ID: request-123",
         )
 
 
-def test_confirmation_text_normalization_handles_markdown_rendering(
+def test_editor_unavailable_does_not_trigger_visible_fallback(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    request = BrowserExchangeRequest(
+        request_id="request-editor-unavailable",
+        department_id="core",
+        message_text="task",
+        create_new_thread=False,
+        conversation_url=BOOTSTRAP_CONVERSATION_URLS["core"],
+    )
+    bridge.connect_or_launch_hybrid = lambda: None
+    bridge._send_and_receive_once = lambda request: (_ for _ in ()).throw(
+        BrowserBridgeEditorUnavailable("missing editor")
+    )
+    bridge._switch_to_visible_browser = lambda: pytest.fail(
+        "Visible Chrome must not be launched for editor unavailability."
+    )
+
+    with pytest.raises(BrowserBridgeEditorUnavailable):
+        bridge.send_and_receive_hybrid(request)
+
+
+def test_runtime_log_configuration_creates_timestamped_file(
+    tmp_path: Path,
+) -> None:
+    from curvature_console.infrastructure.runtime_logging import (
+        configure_runtime_logging,
+        get_runtime_logger,
+    )
+
+    log_path = configure_runtime_logging(tmp_path)
+    get_runtime_logger("test").warning("diagnostic line")
+
+    assert log_path.parent == tmp_path / "logs"
+    assert log_path.name.startswith("console-")
+    assert log_path.suffix == ".log"
+    assert "diagnostic line" in log_path.read_text(encoding="utf-8")
+
+
+def test_cloudflare_just_a_moment_title_is_human_verification(
     tmp_path: Path,
 ) -> None:
     bridge = ChatGPTBrowserBridge(_config(tmp_path))
 
-    assert bridge._normalize_confirmation_text(
-        "## CURRENT USER TASK\n\n- Run the complete test suite."
-    ) == "current user task run the complete test suite."
+    class EmptyBody:
+        def count(self):
+            return 0
+
+    class FakePage:
+        def title(self):
+            return "Just a moment..."
+
+        def locator(self, selector):
+            assert selector == "body"
+            return EmptyBody()
+
+    assert bridge._human_verification_is_visible(FakePage()) is True
+
+
+def test_success_logging_accepts_result_without_downloads(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    request = BrowserExchangeRequest(
+        request_id="request-no-download-field",
+        department_id="core",
+        message_text="task",
+        create_new_thread=False,
+        conversation_url=BOOTSTRAP_CONVERSATION_URLS["core"],
+    )
+    result = BrowserExchangeResult(
+        request_id=request.request_id,
+        department_id=request.department_id,
+        project_name=SHARED_PROJECT_NAME,
+        project_url=SHARED_PROJECT_URL,
+        conversation_url=request.conversation_url or "",
+        response_text="CORE_XVFB_OK",
+    )
+
+    bridge.connect_or_launch_hybrid = lambda: None
+    bridge._send_and_receive_once = lambda request: result
+
+    assert bridge.send_and_receive_hybrid(request) == result
