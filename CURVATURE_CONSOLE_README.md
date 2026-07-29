@@ -129,3 +129,12 @@ data/inbox/<department>/
 
 The verified ChatGPT flow uses an HTTP attachment fetch rather than a native
 browser download event. Runtime inbox contents are local and excluded from Git.
+
+# Supervised Handoff Foundation
+
+Curvature Console includes a backend model for visible, restart-safe
+interdepartmental handoffs. The current B5.5A implementation provides data,
+validation, lifecycle transitions and SQLite persistence only.
+
+There are no B5.5 user controls or automatic department-to-department sends
+yet.

@@ -582,3 +582,15 @@ native browser download event.
 - added recursive Git exclusions for inbox, logs and live-test results;
 - made snapshot ZIP creation tolerate pre-1980 file timestamps;
 - recorded 128 passing automated tests and clean `git diff --check`.
+
+## 2026-07-29 — ASSISTANT-001B5.5A First Contact Foundation
+
+- added the structured handoff domain model;
+- added explicit draft, pending approval, sent, received, answered, closed,
+  rejected, held and stopped states;
+- added deterministic transition validation;
+- added immutable visible correspondence timeline entries;
+- added SQLite handoff and timeline persistence;
+- added source, target and status indexes and filtering;
+- added domain and restart-continuity tests;
+- made no UI or browser-send changes.

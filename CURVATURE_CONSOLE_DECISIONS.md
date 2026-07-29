@@ -923,3 +923,33 @@ Controls labelled `Coding Citation` are not generated-file candidates.
 - browser-engine replacement is not required for this delivery mechanism;
 - attachment response handling remains UI-dependent and requires explicit
   failure logging when ChatGPT changes its delivery flow.
+
+# ADR-013 — Supervised Handoff Aggregate
+
+Status: Accepted
+Date: 2026-07-29
+
+## Context
+
+Interdepartmental communication must remain visible, attributable and under
+user control. A browser message alone is insufficient because it does not
+preserve lifecycle state or the complete correspondence timeline.
+
+## Decision
+
+A handoff is an immutable domain aggregate identified by `handoff_id` and linked
+to its originating `request_id`. It records source, target, lifecycle state,
+timestamps, the user-visible instruction and an ordered visible timeline.
+
+Only Project, Core and Research may participate. Source and target must differ.
+Lifecycle transitions are explicit and terminal states cannot be reopened.
+
+SQLite stores the aggregate and timeline atomically. This foundation does not
+send messages, change routes or add automation.
+
+## Consequences
+
+- restart-safe supervised communication has a stable backend model;
+- invalid routing and lifecycle jumps fail before browser activity;
+- later approval UI can operate on one deterministic state machine;
+- controlled automation remains a later, separately approved layer.

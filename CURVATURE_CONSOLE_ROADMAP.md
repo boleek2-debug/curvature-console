@@ -74,6 +74,38 @@ package.
 
 ## ASSISTANT-001B5.5 — Supervised Interdepartmental Communication
 
+### B5.5A — First Contact Foundation
+
+Backend-only deliverables:
+
+- structured handoff aggregate;
+- validated source and target departments;
+- request and handoff identifiers;
+- explicit lifecycle transition model;
+- complete correspondence timeline;
+- SQLite persistence and restart continuity;
+- automated tests;
+- no UI and no automatic sends.
+
+### B5.5B — Supervised Controls
+
+Pending Project approval:
+
+- create and inspect handoff;
+- approve, edit, reject, hold, redirect and stop controls;
+- explicit user-visible routing;
+- no background sends.
+
+### B5.5C — Controlled Delivery
+
+Only after B5.5B live verification:
+
+- browser delivery using approved active conversation URLs;
+- bounded loop limits;
+- optional controlled automation;
+- visible stop and failure recovery.
+
+
 Deliver:
 
 - structured handoff records;

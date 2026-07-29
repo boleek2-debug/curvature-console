@@ -211,3 +211,22 @@ the download scanner.
 
 The temporary TEST-01 observer served its diagnostic purpose and is not part of
 the production workflow.
+
+# B5.5A — First Contact Foundation
+
+Status: Implemented for validation.
+
+This sprint adds the backend-only foundation for supervised
+interdepartmental communication:
+
+- immutable structured handoff records;
+- strict Project/Core/Research source and target validation;
+- stable handoff and request identifiers;
+- explicit lifecycle states and allowed transitions;
+- complete visible correspondence timelines;
+- SQLite persistence and restart continuity;
+- participant and status filtering;
+- no UI controls and no automatic delivery.
+
+The implementation intentionally stops before browser routing, approval UI,
+loop automation or background sends.

@@ -272,3 +272,25 @@ the production workflow.
 Close the repository milestone with a clean validation, explicit staging,
 commit and push. After that, promote the next approved Console sprint rather
 than extending B5.R2D2.
+
+# B5.5A Handoff Foundation
+
+The repository now has a backend-only supervised handoff aggregate.
+
+```text
+create draft
+→ request user approval
+→ send
+→ mark received
+→ record answer
+→ close
+```
+
+Alternative supervised outcomes are reject, hold and stop. Every visible
+message is retained in an ordered timeline. No browser send or automatic loop
+is introduced by B5.5A.
+
+# Required Next Handoff
+
+Project must approve the UX and authority rules for B5.5B before Core adds user
+controls. Core must not invent approval semantics or autonomous routing.

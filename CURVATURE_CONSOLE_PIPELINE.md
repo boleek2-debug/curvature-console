@@ -551,3 +551,17 @@ completed assistant response
 
 Runtime logs, downloaded files and diagnostic results are local runtime data and
 must not be committed.
+
+# B5.5A Structured Handoff Persistence
+
+```text
+validated source + target + request
+→ draft HandoffRecord
+→ explicit status transition
+→ append participant correspondence
+→ atomic SQLite aggregate save
+→ restart-safe load and filtering
+```
+
+The persistence layer owns data integrity only. It does not approve, send,
+redirect or close handoffs on behalf of the user.
