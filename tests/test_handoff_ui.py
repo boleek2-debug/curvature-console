@@ -64,7 +64,32 @@ def test_dialog_creates_approves_and_persists_visible_timeline(
     store.close()
 
 
-def test_dialog_does_not_expose_send_control(tmp_path) -> None:
+def test_deliver_button_only_emits_for_approved_handoff(tmp_path) -> None:
+    create_application(["curvature-console-handoff-deliver-test"])
+    store = SQLiteStateStore(tmp_path / "state.sqlite3")
+    dialog = HandoffControlsDialog(store)
+    emitted: list[str] = []
+    dialog.deliver_requested.connect(emitted.append)
+
+    dialog.message_editor.setPlainText("Engage.")
+    dialog.create_draft()
+    record = dialog.selected_record
+    assert record is not None
+    assert not dialog.deliver_button.isEnabled()
+
+    dialog._transition_selected(HandoffStatus.PENDING_APPROVAL)
+    dialog._transition_selected(HandoffStatus.APPROVED)
+    assert dialog.deliver_button.isEnabled()
+
+    dialog.deliver_selected()
+    assert emitted == [record.handoff_id]
+    assert store.load_handoff(record.handoff_id).status is HandoffStatus.APPROVED
+
+    dialog.close()
+    store.close()
+
+
+def test_dialog_exposes_one_explicit_deliver_control(tmp_path) -> None:
     create_application(["curvature-console-handoff-no-send-test"])
     store = SQLiteStateStore(tmp_path / "state.sqlite3")
     dialog = HandoffControlsDialog(store)
@@ -75,6 +100,6 @@ def test_dialog_does_not_expose_send_control(tmp_path) -> None:
     }
 
     assert "Send" not in button_texts
-    assert "Deliver" not in button_texts
+    assert "Deliver" in button_texts
     dialog.close()
     store.close()

@@ -578,3 +578,18 @@ create draft
 ```
 
 `approved` does not mean `sent`. No browser worker is called by Bridge Controls.
+
+# B5.5C Controlled Delivery Pipeline
+
+```text
+approved handoff
+→ user clicks Deliver
+→ user confirms target and message
+→ load target active_conversation_url
+→ persist sent
+→ run one BrowserBridgeWorker exchange
+→ success: persist received and answered
+→ failure: persist held
+```
+
+There is no automatic retry and no interdepartmental loop.

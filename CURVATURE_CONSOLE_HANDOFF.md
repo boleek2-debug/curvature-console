@@ -302,3 +302,12 @@ handoffs and never sends a ChatGPT message.
 
 The next Core sprint, B5.5C, may implement controlled delivery only after
 B5.5B UI validation and Project approval of routing and loop limits.
+
+# B5.5C Engage
+
+Bridge Controls now exposes Deliver only for approved handoffs. Delivery is
+one-shot, confirmed and visible. Responses are written into both the target
+department panel and the handoff timeline.
+
+Any multi-turn or automatic continuation remains outside B5.5C and requires a
+separate Project decision.

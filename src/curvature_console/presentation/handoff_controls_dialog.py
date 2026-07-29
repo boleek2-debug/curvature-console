@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -38,6 +38,10 @@ _DEPARTMENT_LABELS = {
 
 
 class HandoffControlsDialog(QDialog):
+    """Create, supervise and explicitly request one handoff delivery."""
+
+    deliver_requested = Signal(str)
+
     """Create and supervise handoffs without sending browser messages."""
 
     def __init__(
@@ -116,6 +120,13 @@ class HandoffControlsDialog(QDialog):
         self.redirect_button.setObjectName("redirectHandoffButton")
         self.redirect_button.clicked.connect(self.redirect_selected)
 
+        self.deliver_button = QPushButton("Deliver")
+        self.deliver_button.setObjectName("deliverHandoffButton")
+        self.deliver_button.setToolTip(
+            "Send this approved handoff once to the target department."
+        )
+        self.deliver_button.clicked.connect(self.deliver_selected)
+
         self.stop_button = QPushButton("Stop")
         self.stop_button.setObjectName("stopHandoffButton")
         self.stop_button.clicked.connect(
@@ -136,6 +147,7 @@ class HandoffControlsDialog(QDialog):
             self.reject_button,
             self.hold_button,
             self.redirect_button,
+            self.deliver_button,
             self.stop_button,
         ):
             control_row.addWidget(button)
@@ -242,6 +254,17 @@ class HandoffControlsDialog(QDialog):
         except (HandoffValidationError, HandoffTransitionError) as exc:
             self._show_error(str(exc))
 
+    def deliver_selected(self) -> None:
+        """Request exactly one delivery of an approved handoff."""
+
+        record = self.selected_record
+        if record is None:
+            return
+        if record.status is not HandoffStatus.APPROVED:
+            self._show_error("Only an approved handoff may be delivered.")
+            return
+        self.deliver_requested.emit(record.handoff_id)
+
     def _transition_selected(self, status: HandoffStatus) -> None:
         record = self.selected_record
         if record is None:
@@ -315,6 +338,9 @@ class HandoffControlsDialog(QDialog):
                 HandoffStatus.PENDING_APPROVAL,
                 HandoffStatus.HELD,
             }
+        )
+        self.deliver_button.setEnabled(
+            status is HandoffStatus.APPROVED
         )
         self.stop_button.setEnabled(
             record is not None and not record.is_terminal

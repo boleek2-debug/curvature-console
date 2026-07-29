@@ -39,6 +39,7 @@ from curvature_console.infrastructure.context_loader import (
     ContextLoadResult,
     WorkspaceContextLoader,
 )
+from curvature_console.infrastructure.handoff import HandoffStatus
 from curvature_console.infrastructure.state_store import SQLiteStateStore
 from curvature_console.infrastructure.transfer_package import (
     TransferPackage,
@@ -68,6 +69,7 @@ class PendingBrowserExchange:
     request_id: str
     department_id: str
     user_task: str
+    handoff_id: str | None = None
 
 
 class MainWindow(QMainWindow):
@@ -224,7 +226,156 @@ class MainWindow(QMainWindow):
             state_store=self.state_store,
             parent=self,
         )
+        dialog.deliver_requested.connect(self.deliver_handoff)
         dialog.exec()
+
+    def deliver_handoff(self, handoff_id: str) -> None:
+        """Deliver one approved handoff to its persisted target route."""
+
+        if self._browser_worker is not None:
+            QMessageBox.information(
+                self,
+                "ChatGPT operation in progress",
+                "Wait for the current ChatGPT exchange before delivery.",
+            )
+            return
+
+        record = self.state_store.load_handoff(handoff_id)
+        if record is None:
+            QMessageBox.critical(
+                self,
+                "Handoff unavailable",
+                f"Unknown handoff: {handoff_id}",
+            )
+            return
+        if record.status is not HandoffStatus.APPROVED:
+            QMessageBox.warning(
+                self,
+                "Handoff not approved",
+                "Only an approved handoff may be delivered.",
+            )
+            return
+
+        route = self.state_store.load_chat_route(
+            record.target_department_id
+        )
+        if route is None:
+            QMessageBox.critical(
+                self,
+                "Target route unavailable",
+                "The target department has no active conversation route.",
+            )
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Engage controlled delivery?",
+            "Send this approved handoff exactly once to "
+            f"{record.target_department_id.upper()}?\n\n"
+            f"{record.user_visible_message}",
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        message_text = (
+            f"CURVATURE_HANDOFF_ID: {record.handoff_id}\n"
+            f"CURVATURE_REQUEST_ID: {record.request_id}\n\n"
+            "# SUPERVISED INTERDEPARTMENTAL HANDOFF\n\n"
+            f"Source department: {record.source_department_id}\n"
+            f"Target department: {record.target_department_id}\n\n"
+            f"{record.user_visible_message}\n\n"
+            "Respond within the target department's authority. "
+            "Do not silently perform another department's work."
+        )
+        sent = record.transition(HandoffStatus.SENT).append_message(
+            record.source_department_id,
+            "Controlled delivery started to "
+            f"{record.target_department_id}.",
+        )
+        self.state_store.save_handoff(sent)
+
+        request_id = f"handoff-{uuid4().hex}"
+        self._pending_exchanges[request_id] = PendingBrowserExchange(
+            request_id=request_id,
+            department_id=record.target_department_id,
+            user_task=message_text,
+            handoff_id=record.handoff_id,
+        )
+        self._set_browser_operation_busy(
+            True,
+            record.target_department_id,
+        )
+        worker = BrowserBridgeWorker(
+            config=self.browser_config,
+            request=BrowserExchangeRequest(
+                request_id=request_id,
+                department_id=record.target_department_id,
+                message_text=message_text,
+                create_new_thread=False,
+                conversation_url=route.active_conversation_url,
+                confirmation_marker=(
+                    f"CURVATURE_HANDOFF_ID: {record.handoff_id}"
+                ),
+            ),
+        )
+        worker.succeeded.connect(self._handle_browser_success)
+        worker.failed.connect(self._handle_browser_failure)
+        worker.route_unverified.connect(
+            self._handle_browser_route_unverified
+        )
+        worker.stage_changed.connect(self._handle_browser_stage)
+        worker.finished.connect(self._clear_browser_worker)
+        self._browser_worker = worker
+        self.statusBar().showMessage(
+            "Controlled handoff delivery engaged..."
+        )
+        worker.start()
+
+    def _record_handoff_answer(
+        self,
+        pending: PendingBrowserExchange,
+        response_text: str,
+    ) -> None:
+        if pending.handoff_id is None:
+            return
+        record = self.state_store.load_handoff(pending.handoff_id)
+        if record is None:
+            return
+        if record.status is HandoffStatus.SENT:
+            record = record.transition(
+                HandoffStatus.RECEIVED
+            ).append_message(
+                record.target_department_id,
+                "Delivery received by target conversation.",
+            )
+        if record.status is HandoffStatus.RECEIVED:
+            record = record.transition(
+                HandoffStatus.ANSWERED
+            ).append_message(
+                record.target_department_id,
+                response_text,
+            )
+        self.state_store.save_handoff(record)
+
+    def _hold_failed_handoff(
+        self,
+        pending: PendingBrowserExchange,
+        error_message: str,
+    ) -> None:
+        if pending.handoff_id is None:
+            return
+        record = self.state_store.load_handoff(pending.handoff_id)
+        if record is None or record.status is not HandoffStatus.SENT:
+            return
+        held = record.transition(HandoffStatus.HELD).append_message(
+            record.source_department_id,
+            "Controlled delivery failed and was held: "
+            + error_message,
+        )
+        self.state_store.save_handoff(held)
 
     def _bootstrap_chat_routes(self) -> None:
         """Initialise missing department routes without using chat titles."""
@@ -440,6 +591,7 @@ class MainWindow(QMainWindow):
             return
 
         self._pending_exchanges.pop(request_id, None)
+        self._record_handoff_answer(pending, response_text)
         panel = self.department_panels[department_id]
         panel.append_browser_exchange(pending.user_task, response_text)
 
@@ -488,6 +640,7 @@ class MainWindow(QMainWindow):
             return
 
         self._pending_exchanges.pop(request_id, None)
+        self._record_handoff_answer(pending, response_text)
         panel = self.department_panels[department_id]
         panel.append_browser_exchange(pending.user_task, response_text)
         panel.input_editor.clear()
@@ -516,6 +669,7 @@ class MainWindow(QMainWindow):
             return
 
         self._pending_exchanges.pop(request_id, None)
+        self._hold_failed_handoff(pending, error_message)
         panel = self.department_panels[department_id]
         self._set_browser_operation_busy(False, department_id)
         self.statusBar().showMessage(

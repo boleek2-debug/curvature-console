@@ -605,3 +605,13 @@ native browser download event.
 - persisted every control action in the visible correspondence timeline;
 - added UI and domain tests;
 - added no automatic sends or interdepartmental loops.
+
+## 2026-07-29 — ASSISTANT-001B5.5C Engage
+
+- added an explicit Deliver control for approved handoffs;
+- added a second user confirmation before browser activity;
+- routed delivery through the target department's active conversation URL;
+- reused the existing single-exchange BrowserBridgeWorker;
+- persisted sent, received and answered transitions;
+- moved failed deliveries to held with an audit message;
+- added no background sends and no autonomous loops.

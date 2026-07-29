@@ -144,3 +144,9 @@ yet.
 Use the toolbar `Bridge Controls` button to create and supervise handoffs.
 The dialog stores actions and correspondence in SQLite. It does not send
 messages to ChatGPT.
+
+# Controlled Handoff Delivery
+
+In Bridge Controls, an approved handoff exposes `Deliver`. The action requires
+confirmation and sends one message to the target department's active ChatGPT
+conversation. It does not start an automatic dialogue loop.

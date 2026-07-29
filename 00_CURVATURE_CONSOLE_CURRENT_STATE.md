@@ -250,3 +250,25 @@ A dedicated `Bridge Controls` dialog now provides supervised handoff actions:
 Approval is represented by the explicit `approved` state. It is deliberately
 separate from `sent`; B5.5B performs no browser delivery and no background
 automation.
+
+# B5.5C — Engage Controlled Delivery
+
+Status: Implemented for validation.
+
+An approved handoff can now be delivered exactly once by an explicit `Deliver`
+action. Delivery uses the target department's persisted
+`active_conversation_url` and the existing BrowserBridgeWorker.
+
+The controlled lifecycle is:
+
+```text
+approved
+→ explicit confirmation
+→ sent
+→ received
+→ answered
+```
+
+A failed browser delivery moves `sent` to `held` with the failure recorded in
+the visible timeline. No background delivery, polling loop or autonomous
+department-to-department recursion is introduced.

@@ -974,3 +974,15 @@ drafts. Terminal states remain closed.
 - user approval cannot silently trigger a browser send;
 - B5.5C can implement delivery as a separate audited transition;
 - restart continuity preserves both state and control history.
+
+# ADR-015 — One-Shot Controlled Delivery
+
+Status: Accepted
+Date: 2026-07-29
+
+An approved handoff may be delivered only through an explicit Deliver action
+and a second user confirmation. One click starts one BrowserBridgeWorker
+exchange against the target department's persisted active conversation URL.
+
+Success records `sent → received → answered`. Failure records `sent → held`.
+No retry, continuation or reply loop runs automatically.

@@ -97,14 +97,14 @@ Implemented for validation:
 - full visible action timeline and restart continuity;
 - no background sends.
 
-### B5.5C — Controlled Delivery
+### B5.5C — Engage Controlled Delivery
 
-Only after B5.5B live verification:
+Implemented for validation:
 
-- browser delivery using approved active conversation URLs;
-- bounded loop limits;
-- optional controlled automation;
-- visible stop and failure recovery.
+- one-shot browser delivery using approved active conversation URLs;
+- explicit confirmation before every delivery;
+- sent, received, answered and held audit transitions;
+- zero automatic loops or retries.
 
 
 Deliver:
