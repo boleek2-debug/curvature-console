@@ -28,6 +28,9 @@ data/*.sqlite
 data/*.sqlite3
 data/*.json
 data/browser-profile/
+data/inbox/
+data/logs/
+data/test-results/
 !data/.gitkeep
 
 # Secrets

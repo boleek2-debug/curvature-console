@@ -421,3 +421,133 @@ assistant generates a non-ZIP file
 
 Package Review is invoked only for a valid deployment package. Ordinary
 generated files remain ordinary files.
+
+
+# 15. Format-Agnostic Download Capture
+
+For the newly completed assistant response:
+
+```text
+assistant response
+→ discover generated-file links
+→ click through Playwright download handling
+→ use suggested filename
+→ sanitise path components
+→ preserve extension
+→ collision-safe save
+→ persist provenance
+→ refresh originating panel
+```
+
+A failure to capture one candidate is logged and does not discard the textual
+assistant response.
+
+# 16. Empty Download Diagnostics
+
+When a completed response yields zero captured files, runtime logging records:
+
+- candidate element count;
+- tag, href, download, aria-label, title and data-testid;
+- bounded visible text;
+- a bounded outerHTML excerpt of the assistant turn.
+
+The diagnostic is bounded to prevent uncontrolled log growth.
+
+# 17. Two-Stage File-Card Pipeline
+
+```text
+candidate file card
+→ wait briefly for direct download
+→ if absent, inspect visible preview controls
+→ activate real Download control
+→ capture browser download
+```
+
+An unresolved preview records bounded diagnostics without discarding the text
+response.
+
+
+# 18. Evidence-First Interaction Diagnostic
+
+For a candidate that does not emit a direct download:
+
+```text
+bounded DOM snapshot before click
+→ click candidate
+→ wait 750 ms
+→ bounded DOM snapshot after click
+→ log new and removed visible interactive elements
+→ do not click any inferred follow-up control
+```
+
+
+# 19. Active-Layer Diagnostic
+
+```text
+candidate click
+→ direct-download timeout
+→ focused Close control discovery
+→ ancestor chain to body
+→ bounded blocking-layer candidate
+→ controls inside that layer
+→ bounded HTML evidence
+→ no inferred follow-up click
+```
+
+
+# 20. File-Button Activation Pipeline
+
+```text
+generated-file button
+→ scroll into view
+→ locator click
+→ centre-coordinate mouse click
+→ pointer/mouse DOM sequence
+→ Enter
+→ Space
+→ stop on first browser download event
+```
+
+Every activation method has an independent five-second bounded download wait
+and an explicit runtime log record.
+
+# File Delivery Observation
+
+```text
+existing exact file card
+→ attach request/response/download/popup/console listeners
+→ instrument fetch/XHR/createObjectURL/anchor.click
+→ click once
+→ wait two seconds
+→ write one structured observation log entry
+```
+
+
+# Fetch-Backed Generated-File Capture
+
+```text
+activate generated-file button
+→ listen for native download and attachment responses
+→ prefer native download when emitted
+→ otherwise capture HTTP 200 estuary/content response body
+→ preserve card filename
+→ save through the normal department inbox pipeline
+```
+
+# B5.R2D2 Production Download Path
+
+```text
+completed assistant response
+→ scope candidates to the active assistant turn
+→ reject non-file controls, including Coding Citation
+→ activate a real generated-file card
+→ capture native download when present
+→ otherwise capture HTTP 200 attachment response
+→ read response body
+→ preserve and sanitise the card filename
+→ write collision-safely to data/inbox/<department>/
+→ persist provenance and expose the result in the originating panel
+```
+
+Runtime logs, downloaded files and diagnostic results are local runtime data and
+must not be committed.

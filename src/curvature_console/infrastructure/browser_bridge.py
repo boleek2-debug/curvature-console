@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -16,7 +17,14 @@ from pathlib import Path
 from typing import Final
 from urllib.parse import urlparse
 
-from playwright.sync_api import Browser, BrowserContext, Locator, Page, Playwright
+from playwright.sync_api import (
+    Browser,
+    BrowserContext,
+    Locator,
+    Page,
+    Playwright,
+    TimeoutError as PlaywrightTimeoutError,
+)
 from playwright.sync_api import sync_playwright
 
 from curvature_console.infrastructure.runtime_logging import (
@@ -76,6 +84,7 @@ class BrowserBridgeStage(StrEnum):
     VERIFYING_USER_MESSAGE = "Verifying user message"
     WAITING_FOR_RESPONSE = "Waiting for response"
     RECEIVING = "Receiving"
+    CAPTURING_DOWNLOADS = "Capturing downloads"
     HUMAN_ACTION_REQUIRED = "Human action required"
     COMPLETED = "Completed"
     CLEANING_UP = "Cleaning up"
@@ -154,6 +163,8 @@ class BrowserBridgeConfig:
     human_action_timeout_seconds: float = 300.0
     process_shutdown_timeout_seconds: float = 5.0
     cdp_release_timeout_seconds: float = 5.0
+    download_timeout_seconds: float = 15.0
+    download_inbox_directory: Path | None = None
 
     @property
     def cdp_url(self) -> str:
@@ -165,6 +176,7 @@ class BrowserBridgeConfig:
         return cls(
             chrome_executable=Path("/usr/bin/google-chrome-stable"),
             profile_directory=root / "data" / "browser-profile",
+            download_inbox_directory=root / "data" / "inbox",
         )
 
     def validate(self) -> None:
@@ -188,12 +200,25 @@ class BrowserBridgeConfig:
             "Process shutdown timeout":
                 self.process_shutdown_timeout_seconds,
             "CDP release timeout": self.cdp_release_timeout_seconds,
+            "Download timeout": self.download_timeout_seconds,
         }
         for label, value in positive_values.items():
             if value <= 0:
                 raise ValueError(f"{label} must be positive.")
 
 
+
+
+@dataclass(slots=True)
+class _ResponseBackedDownload:
+    """Download-compatible adapter backed by a captured fetch response."""
+
+    suggested_filename: str
+    body_bytes: bytes
+    source_url: str
+
+    def save_as(self, target: Path) -> None:
+        target.write_bytes(self.body_bytes)
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,6 +228,7 @@ class CapturedDownload:
     original_filename: str
     saved_path: Path
     source_url: str
+    size_bytes: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,6 +253,7 @@ class BrowserExchangeResult:
     project_url: str
     conversation_url: str
     response_text: str
+    downloaded_files: tuple[CapturedDownload, ...] = ()
 
 
 class ChromeLauncher:
@@ -551,6 +578,16 @@ class ChatGPTBrowserBridge:
                 conversation_url,
             )
 
+        self._report_stage(BrowserBridgeStage.CAPTURING_DOWNLOADS)
+        latest_assistant_message = assistant_messages.nth(
+            assistant_messages.count() - 1
+        )
+        downloaded_files = self._capture_generated_downloads(
+            page=page,
+            assistant_message=latest_assistant_message,
+            request=request,
+        )
+
         self._report_stage(BrowserBridgeStage.COMPLETED)
         return BrowserExchangeResult(
             request_id=request.request_id,
@@ -559,7 +596,1015 @@ class ChatGPTBrowserBridge:
             project_url=SHARED_PROJECT_URL,
             conversation_url=conversation_url,
             response_text=response_text,
+            downloaded_files=downloaded_files,
         )
+
+
+    def _capture_generated_downloads(
+        self,
+        page: Page,
+        assistant_message: Locator,
+        request: BrowserExchangeRequest,
+    ) -> tuple[CapturedDownload, ...]:
+        """Capture generated files from the completed assistant turn.
+
+        ChatGPT may render a generated file outside the text node carrying
+        ``data-message-author-role="assistant"``. The complete conversation
+        turn is therefore searched, including links, buttons and file cards.
+        """
+
+        inbox_root = self.config.download_inbox_directory
+        if inbox_root is None:
+            self._logger.info(
+                "download_capture_disabled request_id=%s reason=no_inbox",
+                request.request_id,
+            )
+            return ()
+
+        department_inbox = (
+            inbox_root.expanduser().resolve() / request.department_id
+        )
+        department_inbox.mkdir(parents=True, exist_ok=True)
+
+        scope = self._assistant_turn_scope(assistant_message)
+        candidates = scope.locator(
+            "a[href], button, [role='button'], "
+            "[data-testid*='download' i], "
+            "[data-testid*='file' i], "
+            "[aria-label*='download' i], "
+            "[aria-label*='file' i], "
+            "[title*='download' i], "
+            "[title*='file' i]"
+        )
+
+        captured: list[CapturedDownload] = []
+        seen_signatures: set[str] = set()
+        diagnostics: list[str] = []
+        candidate_count = candidates.count()
+
+        self._logger.info(
+            "download_candidate_scan request_id=%s count=%d",
+            request.request_id,
+            candidate_count,
+        )
+
+        for index in range(candidate_count):
+            candidate = candidates.nth(index)
+            try:
+                description = self._describe_download_candidate(candidate)
+                diagnostics.append(f"{index}:{description}")
+
+                href = candidate.get_attribute("href") or ""
+                download_attribute = candidate.get_attribute("download")
+                if not self._is_generated_file_candidate(
+                    candidate,
+                    href,
+                    download_attribute,
+                ):
+                    continue
+                if not candidate.is_visible():
+                    continue
+
+                signature = "|".join(
+                    (
+                        href,
+                        download_attribute or "",
+                        candidate.get_attribute("aria-label") or "",
+                        candidate.inner_text().strip()[:160],
+                    )
+                )
+                if signature in seen_signatures:
+                    continue
+                seen_signatures.add(signature)
+
+                download = self._trigger_candidate_download(
+                    page=page,
+                    candidate=candidate,
+                    request=request,
+                    candidate_index=index,
+                )
+                if download is None:
+                    continue
+                original_filename = self._safe_download_filename(
+                    download.suggested_filename
+                    or download_attribute
+                    or self._filename_from_candidate(candidate)
+                    or "generated-file"
+                )
+                saved_path = self._collision_safe_path(
+                    department_inbox,
+                    original_filename,
+                )
+                download.save_as(saved_path)
+                size_bytes = (
+                    saved_path.stat().st_size
+                    if saved_path.is_file()
+                    else 0
+                )
+                record = CapturedDownload(
+                    original_filename=original_filename,
+                    saved_path=saved_path,
+                    source_url=href,
+                    size_bytes=size_bytes,
+                )
+                captured.append(record)
+                self._logger.info(
+                    "download_captured request_id=%s department_id=%s "
+                    "original_filename=%r saved_path=%s size_bytes=%d",
+                    request.request_id,
+                    request.department_id,
+                    original_filename,
+                    saved_path,
+                    size_bytes,
+                )
+            except PlaywrightTimeoutError:
+                self._logger.warning(
+                    "download_candidate_timeout request_id=%s index=%d "
+                    "candidate=%s",
+                    request.request_id,
+                    index,
+                    diagnostics[-1] if diagnostics else "[unavailable]",
+                )
+            except Exception:
+                self._logger.exception(
+                    "download_capture_failure request_id=%s index=%d "
+                    "candidate=%s",
+                    request.request_id,
+                    index,
+                    diagnostics[-1] if diagnostics else "[unavailable]",
+                )
+
+        if not captured:
+            self._logger.warning(
+                "download_capture_empty request_id=%s candidate_count=%d "
+                "candidates=%s scope_html=%s",
+                request.request_id,
+                candidate_count,
+                " || ".join(diagnostics[:40]) or "[none]",
+                self._safe_locator_html(scope, 4000),
+            )
+
+        self._logger.info(
+            "download_capture_complete request_id=%s count=%d",
+            request.request_id,
+            len(captured),
+        )
+        return tuple(captured)
+
+    def _observe_file_activation_channels(
+        self,
+        page: Page,
+        candidate: Locator,
+        request: BrowserExchangeRequest,
+        candidate_index: int,
+    ) -> dict:
+        """Observe all browser-visible channels used by a file-card activation."""
+
+        events: dict[str, list] = {
+            "requests": [],
+            "responses": [],
+            "downloads": [],
+            "popups": [],
+            "console": [],
+        }
+
+        def on_request(item):
+            try:
+                events["requests"].append(
+                    {
+                        "method": item.method,
+                        "url": item.url,
+                        "resource_type": item.resource_type,
+                    }
+                )
+            except Exception:
+                self._logger.exception(
+                    "file_observer_request_capture_failed request_id=%s",
+                    request.request_id,
+                )
+
+        def on_response(item):
+            try:
+                headers = item.headers
+                events["responses"].append(
+                    {
+                        "status": item.status,
+                        "url": item.url,
+                        "content_type": headers.get("content-type", ""),
+                        "content_disposition": headers.get(
+                            "content-disposition", ""
+                        ),
+                    }
+                )
+            except Exception:
+                self._logger.exception(
+                    "file_observer_response_capture_failed request_id=%s",
+                    request.request_id,
+                )
+
+        def on_download(item):
+            try:
+                events["downloads"].append(
+                    {"suggested_filename": item.suggested_filename}
+                )
+            except Exception:
+                self._logger.exception(
+                    "file_observer_download_capture_failed request_id=%s",
+                    request.request_id,
+                )
+
+        def on_popup(item):
+            try:
+                events["popups"].append({"url": item.url})
+            except Exception:
+                self._logger.exception(
+                    "file_observer_popup_capture_failed request_id=%s",
+                    request.request_id,
+                )
+
+        def on_console(item):
+            try:
+                events["console"].append(
+                    {"type": item.type, "text": item.text}
+                )
+            except Exception:
+                self._logger.exception(
+                    "file_observer_console_capture_failed request_id=%s",
+                    request.request_id,
+                )
+
+        page.on("request", on_request)
+        page.on("response", on_response)
+        page.on("download", on_download)
+        page.on("popup", on_popup)
+        page.on("console", on_console)
+
+        page.add_init_script(
+            """
+            (() => {
+              if (window.__curvatureFileObserverInstalled) return;
+              window.__curvatureFileObserverInstalled = true;
+              window.__curvatureFileObserver = {
+                fetches: [],
+                xhrs: [],
+                objectUrls: [],
+                anchorClicks: [],
+              };
+
+              const originalFetch = window.fetch;
+              window.fetch = async (...args) => {
+                const input = args[0];
+                const url = typeof input === "string"
+                  ? input
+                  : (input && input.url) || "";
+                const method = (args[1] && args[1].method)
+                  || (input && input.method)
+                  || "GET";
+                const startedAt = Date.now();
+                try {
+                  const response = await originalFetch(...args);
+                  window.__curvatureFileObserver.fetches.push({
+                    url,
+                    method,
+                    status: response.status,
+                    contentType: response.headers.get("content-type") || "",
+                    contentDisposition:
+                      response.headers.get("content-disposition") || "",
+                    startedAt,
+                  });
+                  return response;
+                } catch (error) {
+                  window.__curvatureFileObserver.fetches.push({
+                    url,
+                    method,
+                    error: String(error),
+                    startedAt,
+                  });
+                  throw error;
+                }
+              };
+
+              const originalOpen = XMLHttpRequest.prototype.open;
+              const originalSend = XMLHttpRequest.prototype.send;
+              XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+                this.__curvatureMethod = method;
+                this.__curvatureUrl = url;
+                return originalOpen.call(this, method, url, ...rest);
+              };
+              XMLHttpRequest.prototype.send = function(...args) {
+                this.addEventListener("loadend", () => {
+                  window.__curvatureFileObserver.xhrs.push({
+                    url: this.__curvatureUrl || "",
+                    method: this.__curvatureMethod || "",
+                    status: this.status,
+                    contentType:
+                      this.getResponseHeader("content-type") || "",
+                    contentDisposition:
+                      this.getResponseHeader("content-disposition") || "",
+                  });
+                }, { once: true });
+                return originalSend.apply(this, args);
+              };
+
+              const originalCreateObjectURL = URL.createObjectURL;
+              URL.createObjectURL = function(object) {
+                const result = originalCreateObjectURL.call(URL, object);
+                window.__curvatureFileObserver.objectUrls.push({
+                  url: result,
+                  type: object && object.type ? object.type : "",
+                  size: object && typeof object.size === "number"
+                    ? object.size
+                    : null,
+                });
+                return result;
+              };
+
+              const originalAnchorClick = HTMLAnchorElement.prototype.click;
+              HTMLAnchorElement.prototype.click = function() {
+                window.__curvatureFileObserver.anchorClicks.push({
+                  href: this.href || "",
+                  download: this.download || "",
+                  target: this.target || "",
+                });
+                return originalAnchorClick.call(this);
+              };
+            })();
+            """
+        )
+
+        candidate.scroll_into_view_if_needed()
+        candidate.click()
+        page.wait_for_timeout(2000)
+
+        browser_state = page.evaluate(
+            """
+            () => window.__curvatureFileObserver || {
+              fetches: [],
+              xhrs: [],
+              objectUrls: [],
+              anchorClicks: [],
+            }
+            """
+        )
+
+        result = {
+            **events,
+            "browser": browser_state,
+        }
+        self._logger.info(
+            "file_activation_observation request_id=%s index=%d data=%s",
+            request.request_id,
+            candidate_index,
+            json.dumps(result, ensure_ascii=False, sort_keys=True),
+        )
+        return result
+
+    def _trigger_candidate_download(
+        self,
+        page: Page,
+        candidate: Locator,
+        request: BrowserExchangeRequest,
+        candidate_index: int,
+    ):
+        """Capture either a native download or ChatGPT's fetch response."""
+
+        direct_timeout_ms = min(
+            int(self.config.download_timeout_seconds * 1000),
+            5000,
+        )
+        candidate.scroll_into_view_if_needed()
+        candidate_filename = (
+            self._filename_from_candidate(candidate)
+            or "generated-file"
+        )
+
+        activation_attempts = (
+            ("locator_click", lambda: candidate.click()),
+            (
+                "coordinate_click",
+                lambda: self._click_candidate_center(page, candidate),
+            ),
+            (
+                "pointer_dispatch",
+                lambda: self._dispatch_candidate_pointer_sequence(
+                    candidate
+                ),
+            ),
+            ("keyboard_enter", lambda: candidate.press("Enter")),
+            ("keyboard_space", lambda: candidate.press("Space")),
+        )
+
+        for activation_name, activate in activation_attempts:
+            attachment_responses = []
+
+            def on_response(response) -> None:
+                try:
+                    disposition = response.headers.get(
+                        "content-disposition", ""
+                    ).lower()
+                    is_estuary_content = (
+                        "/backend-api/estuary/content" in response.url
+                    )
+                    if (
+                        response.status == 200
+                        and (
+                            "attachment" in disposition
+                            or is_estuary_content
+                        )
+                    ):
+                        attachment_responses.append(response)
+                except Exception:
+                    self._logger.exception(
+                        "download_response_probe_failure "
+                        "request_id=%s index=%d method=%s",
+                        request.request_id,
+                        candidate_index,
+                        activation_name,
+                    )
+
+            page.on("response", on_response)
+            self._logger.info(
+                "download_activation_attempt request_id=%s index=%d "
+                "method=%s candidate=%s",
+                request.request_id,
+                candidate_index,
+                activation_name,
+                self._describe_download_candidate(candidate),
+            )
+            try:
+                with page.expect_download(
+                    timeout=direct_timeout_ms,
+                ) as download_info:
+                    activate()
+                self._logger.info(
+                    "download_activation_success request_id=%s index=%d "
+                    "method=%s channel=native_download",
+                    request.request_id,
+                    candidate_index,
+                    activation_name,
+                )
+                return download_info.value
+            except PlaywrightTimeoutError:
+                page.wait_for_timeout(250)
+                if attachment_responses:
+                    response = attachment_responses[-1]
+                    body_bytes = response.body()
+                    self._logger.info(
+                        "download_activation_success request_id=%s index=%d "
+                        "method=%s channel=fetch_response url=%s "
+                        "size_bytes=%d",
+                        request.request_id,
+                        candidate_index,
+                        activation_name,
+                        response.url,
+                        len(body_bytes),
+                    )
+                    return _ResponseBackedDownload(
+                        suggested_filename=candidate_filename,
+                        body_bytes=body_bytes,
+                        source_url=response.url,
+                    )
+
+                self._logger.info(
+                    "download_activation_no_event request_id=%s index=%d "
+                    "method=%s",
+                    request.request_id,
+                    candidate_index,
+                    activation_name,
+                )
+            except Exception:
+                self._logger.exception(
+                    "download_activation_failure request_id=%s index=%d "
+                    "method=%s",
+                    request.request_id,
+                    candidate_index,
+                    activation_name,
+                )
+            finally:
+                page.remove_listener("response", on_response)
+
+        self._logger.warning(
+            "download_activation_exhausted request_id=%s index=%d "
+            "candidate=%s",
+            request.request_id,
+            candidate_index,
+            self._describe_download_candidate(candidate),
+        )
+        return None
+
+    def _click_candidate_center(
+        self,
+        page: Page,
+        candidate: Locator,
+    ) -> None:
+        """Click the visible centre point of the candidate."""
+
+        box = candidate.bounding_box()
+        if box is None:
+            raise RuntimeError("Download candidate has no bounding box.")
+        page.mouse.click(
+            box["x"] + (box["width"] / 2),
+            box["y"] + (box["height"] / 2),
+        )
+
+    def _dispatch_candidate_pointer_sequence(
+        self,
+        candidate: Locator,
+    ) -> None:
+        """Dispatch a complete pointer/mouse activation sequence."""
+
+        candidate.evaluate(
+            """
+            (element) => {
+              const events = [
+                new PointerEvent("pointerdown", {
+                  bubbles: true,
+                  cancelable: true,
+                  composed: true,
+                  pointerId: 1,
+                  pointerType: "mouse",
+                  isPrimary: true,
+                  button: 0,
+                  buttons: 1,
+                }),
+                new MouseEvent("mousedown", {
+                  bubbles: true,
+                  cancelable: true,
+                  composed: true,
+                  button: 0,
+                  buttons: 1,
+                }),
+                new PointerEvent("pointerup", {
+                  bubbles: true,
+                  cancelable: true,
+                  composed: true,
+                  pointerId: 1,
+                  pointerType: "mouse",
+                  isPrimary: true,
+                  button: 0,
+                  buttons: 0,
+                }),
+                new MouseEvent("mouseup", {
+                  bubbles: true,
+                  cancelable: true,
+                  composed: true,
+                  button: 0,
+                  buttons: 0,
+                }),
+                new MouseEvent("click", {
+                  bubbles: true,
+                  cancelable: true,
+                  composed: true,
+                  button: 0,
+                  buttons: 0,
+                  detail: 1,
+                }),
+              ];
+              for (const event of events) {
+                element.dispatchEvent(event);
+              }
+            }
+            """
+        )
+
+    def _capture_interaction_snapshot(self, page: Page) -> dict[str, object]:
+        """Return bounded evidence focused on the active blocking layer."""
+
+        script = """
+        () => {
+          const MAX_HTML = 12000;
+          const MAX_CONTROLS = 80;
+
+          const visible = (element) => {
+            const style = window.getComputedStyle(element);
+            const rect = element.getBoundingClientRect();
+            return (
+              style.display !== "none" &&
+              style.visibility !== "hidden" &&
+              Number(style.opacity || "1") !== 0 &&
+              rect.width > 0 &&
+              rect.height > 0
+            );
+          };
+
+          const describe = (element, includeHtml = true) => {
+            const rect = element.getBoundingClientRect();
+            const style = window.getComputedStyle(element);
+            const text = (element.innerText || element.textContent || "")
+              .replace(/\\s+/g, " ")
+              .trim()
+              .slice(0, 600);
+            const attributes = {};
+            for (const name of [
+              "role",
+              "aria-label",
+              "aria-modal",
+              "aria-expanded",
+              "aria-controls",
+              "aria-haspopup",
+              "data-state",
+              "data-testid",
+              "title",
+              "href",
+              "download",
+              "class",
+              "style",
+            ]) {
+              const value = element.getAttribute(name);
+              if (value) {
+                attributes[name] = value.slice(0, 1200);
+              }
+            }
+            return {
+              tag: element.tagName.toLowerCase(),
+              attributes,
+              text,
+              rect: {
+                x: Math.round(rect.x),
+                y: Math.round(rect.y),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+              },
+              position: style.position,
+              zIndex: style.zIndex,
+              html: includeHtml
+                ? element.outerHTML.replace(/\\s+/g, " ").slice(0, MAX_HTML)
+                : "",
+            };
+          };
+
+          const active = document.activeElement;
+
+          const ancestors = [];
+          let cursor = active;
+          while (cursor && cursor !== document.body) {
+            ancestors.push(describe(cursor, true));
+            cursor = cursor.parentElement;
+          }
+
+          const closeButton = Array.from(
+            document.querySelectorAll(
+              [
+                "button[data-testid='close-button']",
+                "button[aria-label='Close']",
+                "[role='button'][aria-label='Close']",
+              ].join(",")
+            )
+          ).find(visible) || null;
+
+          let layer = null;
+          if (closeButton) {
+            let node = closeButton;
+            while (node && node !== document.body) {
+              const role = node.getAttribute("role");
+              const modal = node.getAttribute("aria-modal");
+              const state = node.getAttribute("data-state");
+              const style = window.getComputedStyle(node);
+              const rect = node.getBoundingClientRect();
+              const looksBlocking = (
+                role === "dialog" ||
+                modal === "true" ||
+                state === "open" ||
+                style.position === "fixed" ||
+                style.position === "absolute"
+              );
+              const meaningfullyLarge = (
+                rect.width >= 250 &&
+                rect.height >= 150
+              );
+              if (looksBlocking && meaningfullyLarge) {
+                layer = node;
+                break;
+              }
+              node = node.parentElement;
+            }
+
+            if (!layer) {
+              layer = closeButton.parentElement;
+            }
+          }
+
+          const controls = [];
+          if (layer) {
+            for (const element of Array.from(
+              layer.querySelectorAll(
+                [
+                  "a",
+                  "button",
+                  "[role='button']",
+                  "[role='link']",
+                  "[aria-label]",
+                  "[data-testid]",
+                ].join(",")
+              )
+            )) {
+              if (!visible(element)) {
+                continue;
+              }
+              controls.push(describe(element, true));
+              if (controls.length >= MAX_CONTROLS) {
+                break;
+              }
+            }
+          }
+
+          const body = document.body;
+          return {
+            url: location.href,
+            title: document.title,
+            body: {
+              class: body.className || "",
+              style: body.getAttribute("style") || "",
+              dataScrollLocked: body.getAttribute("data-scroll-locked"),
+            },
+            activeElement: active ? describe(active, true) : null,
+            activeAncestors: ancestors,
+            closeButton: closeButton ? describe(closeButton, true) : null,
+            layer: layer ? describe(layer, true) : null,
+            layerControls: controls,
+          };
+        }
+        """
+        try:
+            result = page.evaluate(script)
+        except Exception:
+            self._logger.exception("download_interaction_snapshot_failure")
+            return {"error": "snapshot_failed"}
+        return result if isinstance(result, dict) else {"value": result}
+
+    def _diff_interaction_snapshots(
+        self,
+        before: dict[str, object],
+        after: dict[str, object],
+    ) -> dict[str, object]:
+        """Summarise evidence relevant to the active blocking layer."""
+
+        return {
+            "bodyChanged": before.get("body") != after.get("body"),
+            "activeElementChanged": (
+                before.get("activeElement") != after.get("activeElement")
+            ),
+            "closeButtonAppeared": (
+                before.get("closeButton") is None
+                and after.get("closeButton") is not None
+            ),
+            "layerAppeared": (
+                before.get("layer") is None
+                and after.get("layer") is not None
+            ),
+            "afterLayer": after.get("layer"),
+            "afterLayerControls": after.get("layerControls", []),
+            "afterActiveAncestors": after.get("activeAncestors", []),
+        }
+
+    def _capture_download_from_open_preview(
+        self,
+        page: Page,
+        request: BrowserExchangeRequest,
+        candidate_index: int,
+    ):
+        """Find and activate the real Download control after a file-card click."""
+
+        preview_candidates = page.locator(
+            "a[download], "
+            "a[href*='/backend-api/files/'], "
+            "a[href*='files.oaiusercontent.com'], "
+            "button[aria-label*='download' i], "
+            "[role='button'][aria-label*='download' i], "
+            "[data-testid*='download' i], "
+            "[title*='download' i]"
+        )
+
+        descriptions: list[str] = []
+        visible_candidates: list[Locator] = []
+        for index in range(preview_candidates.count()):
+            preview_candidate = preview_candidates.nth(index)
+            try:
+                if not preview_candidate.is_visible():
+                    continue
+                visible_candidates.append(preview_candidate)
+                descriptions.append(
+                    f"{index}:"
+                    f"{self._describe_download_candidate(preview_candidate)}"
+                )
+            except Exception:
+                self._logger.exception(
+                    "download_preview_candidate_inspection_failure "
+                    "request_id=%s source_index=%d preview_index=%d",
+                    request.request_id,
+                    candidate_index,
+                    index,
+                )
+
+        self._logger.info(
+            "download_preview_scan request_id=%s source_index=%d "
+            "visible_count=%d candidates=%s",
+            request.request_id,
+            candidate_index,
+            len(visible_candidates),
+            " || ".join(descriptions[:30]) or "[none]",
+        )
+
+        timeout_ms = int(self.config.download_timeout_seconds * 1000)
+        for preview_index, preview_candidate in enumerate(
+            visible_candidates
+        ):
+            try:
+                with page.expect_download(
+                    timeout=timeout_ms,
+                ) as download_info:
+                    preview_candidate.click()
+                self._logger.info(
+                    "download_preview_triggered request_id=%s "
+                    "source_index=%d preview_index=%d",
+                    request.request_id,
+                    candidate_index,
+                    preview_index,
+                )
+                return download_info.value
+            except PlaywrightTimeoutError:
+                self._logger.warning(
+                    "download_preview_candidate_timeout request_id=%s "
+                    "source_index=%d preview_index=%d",
+                    request.request_id,
+                    candidate_index,
+                    preview_index,
+                )
+            except Exception:
+                self._logger.exception(
+                    "download_preview_candidate_failure request_id=%s "
+                    "source_index=%d preview_index=%d",
+                    request.request_id,
+                    candidate_index,
+                    preview_index,
+                )
+
+        self._logger.warning(
+            "download_preview_unresolved request_id=%s source_index=%d "
+            "page_html=%s",
+            request.request_id,
+            candidate_index,
+            self._safe_locator_html(page.locator("body"), 5000),
+        )
+        return None
+
+    def _assistant_turn_scope(self, assistant_message: Locator) -> Locator:
+        """Return the complete assistant turn containing text and file cards."""
+
+        article = assistant_message.locator("xpath=ancestor::article[1]")
+        if article.count() > 0:
+            return article.first
+
+        conversation_turn = assistant_message.locator(
+            "xpath=ancestor::*[contains(@data-testid, "
+            "'conversation-turn')][1]"
+        )
+        if conversation_turn.count() > 0:
+            return conversation_turn.first
+
+        parent = assistant_message.locator("xpath=parent::*")
+        if parent.count() > 0:
+            return parent.first
+
+        return assistant_message
+
+    def _is_generated_file_candidate(
+        self,
+        candidate: Locator,
+        href: str,
+        download_attribute: str | None,
+    ) -> bool:
+        if self._is_generated_file_link(href, download_attribute):
+            return True
+
+        attributes = " ".join(
+            filter(
+                None,
+                (
+                    candidate.get_attribute("aria-label"),
+                    candidate.get_attribute("title"),
+                    candidate.get_attribute("data-testid"),
+                ),
+            )
+        ).lower()
+        text = candidate.inner_text().strip().lower()
+
+        if "download" in attributes or "download" in text:
+            return True
+
+        if "coding citation" in attributes:
+            return False
+
+        file_hint = f"{attributes} {text}"
+        return bool(
+            re.search(
+                r"\b[^/\s]+\."
+                r"(txt|md|json|csv|pdf|png|jpe?g|webp|gif|docx?|xlsx?|"
+                r"pptx?|zip|tar|gz|xml|yaml|yml|log)\b",
+                file_hint,
+                flags=re.IGNORECASE,
+            )
+        )
+
+    def _filename_from_candidate(self, candidate: Locator) -> str | None:
+        values = (
+            candidate.get_attribute("download"),
+            candidate.get_attribute("aria-label"),
+            candidate.get_attribute("title"),
+            candidate.inner_text().strip(),
+        )
+        for value in values:
+            if not value:
+                continue
+
+            cleaned_value = re.sub(
+                r"^\s*(?:download|open|save|file)\s*[:\-–—]?\s*",
+                "",
+                value,
+                flags=re.IGNORECASE,
+            )
+
+            match = re.search(
+                r"([A-Za-z0-9._()-]+(?: [A-Za-z0-9._()-]+)*\."
+                r"(?:txt|md|json|csv|pdf|png|jpe?g|webp|gif|docx?|xlsx?|"
+                r"pptx?|zip|tar|gz|xml|yaml|yml|log))",
+                cleaned_value,
+                flags=re.IGNORECASE,
+            )
+            if match:
+                return match.group(1).strip()
+        return None
+
+    def _describe_download_candidate(self, candidate: Locator) -> str:
+        tag_name = candidate.evaluate("(element) => element.tagName")
+        values = {
+            "tag": str(tag_name).lower(),
+            "href": candidate.get_attribute("href") or "",
+            "download": candidate.get_attribute("download") or "",
+            "aria": candidate.get_attribute("aria-label") or "",
+            "title": candidate.get_attribute("title") or "",
+            "testid": candidate.get_attribute("data-testid") or "",
+            "text": candidate.inner_text().strip()[:240],
+        }
+        return ",".join(
+            f"{key}={value!r}" for key, value in values.items()
+        )
+
+    def _safe_locator_html(
+        self,
+        locator: Locator,
+        limit: int,
+    ) -> str:
+        try:
+            html = locator.evaluate("(element) => element.outerHTML")
+        except Exception:
+            return "[unavailable]"
+        compact = re.sub(r"\s+", " ", str(html)).strip()
+        return compact[:limit]
+
+    def _is_generated_file_link(
+        self,
+        href: str,
+        download_attribute: str | None,
+    ) -> bool:
+        if download_attribute:
+            return True
+
+        lowered = href.lower()
+        return (
+            lowered.startswith("sandbox:")
+            or "/mnt/data/" in lowered
+            or "files.oaiusercontent.com" in lowered
+            or "/backend-api/files/" in lowered
+        )
+
+    def _safe_download_filename(self, value: str) -> str:
+        name = Path(value.replace("\\\\", "/")).name.strip()
+        if not name or name in {".", ".."}:
+            name = "generated-file"
+
+        safe_name = re.sub(r"[^A-Za-z0-9._() -]+", "_", name)
+        safe_name = safe_name.strip(" .")
+        return safe_name or "generated-file"
+
+    def _collision_safe_path(
+        self,
+        directory: Path,
+        filename: str,
+    ) -> Path:
+        candidate = directory / filename
+        if not candidate.exists():
+            return candidate
+
+        original = Path(filename)
+        stem = original.stem or "generated-file"
+        suffix = original.suffix
+        counter = 2
+        while True:
+            candidate = directory / f"{stem}-{counter}{suffix}"
+            if not candidate.exists():
+                return candidate
+            counter += 1
 
     def _verify_requested_route(
         self,

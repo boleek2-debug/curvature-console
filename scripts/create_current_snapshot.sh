@@ -120,6 +120,7 @@ with zipfile.ZipFile(
     mode="w",
     compression=zipfile.ZIP_DEFLATED,
     compresslevel=9,
+    strict_timestamps=False,
 ) as archive:
     archive.writestr("SNAPSHOT_INFO.txt", snapshot_info)
 

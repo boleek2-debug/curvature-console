@@ -113,6 +113,7 @@ def test_browser_success_appends_and_persists_response(tmp_path) -> None:
         "https://chatgpt.com/g/g-p-core/project",
         "https://chatgpt.com/c/core-chat",
         "Exact assistant response.\nSecond line.",
+        (),
     )
 
     transcript = panel.conversation_view.toPlainText()
@@ -255,6 +256,7 @@ def test_stale_request_result_is_ignored(tmp_path) -> None:
         "https://chatgpt.com/g/project/project",
         "https://chatgpt.com/c/core",
         "must not be stored",
+        (),
     )
 
     assert panel.conversation_view.toPlainText() == before
@@ -334,4 +336,60 @@ def test_browser_exchange_adds_request_confirmation_marker(
     # synthetic in-progress state before closing the window so closeEvent does
     # not open a modal dialog and block the headless test process.
     window._browser_worker = None
+    window.close()
+
+
+def test_browser_success_persists_and_displays_generated_files(
+    tmp_path,
+) -> None:
+    from curvature_console.infrastructure.browser_bridge import (
+        CapturedDownload,
+    )
+    from curvature_console.presentation.main_window import (
+        PendingBrowserExchange,
+    )
+
+    create_application(["curvature-console-download-success-test"])
+    window = MainWindow(
+        state_path=tmp_path / "state.sqlite3",
+        data_directory=tmp_path / "data",
+    )
+    request_id = "request-download"
+    saved_file = tmp_path / "data" / "inbox" / "core" / "result.txt"
+    saved_file.parent.mkdir(parents=True)
+    saved_file.write_text("result", encoding="utf-8")
+
+    window._pending_exchanges[request_id] = PendingBrowserExchange(
+        request_id=request_id,
+        department_id="core",
+        user_task="Generate a text file.",
+    )
+
+    window._handle_browser_success(
+        request_id,
+        "core",
+        "Curvature",
+        "https://chatgpt.com/g/project/project",
+        "https://chatgpt.com/c/core",
+        "Done.",
+        (
+            CapturedDownload(
+                original_filename="result.txt",
+                saved_path=saved_file,
+                source_url="sandbox:/mnt/data/result.txt",
+                size_bytes=6,
+            ),
+        ),
+    )
+
+    records = window.state_store.load_generated_downloads("core")
+    assert len(records) == 1
+    assert records[0].original_filename == "result.txt"
+    assert records[0].saved_path == saved_file
+    assert window.department_panels["core"].download_list.count() == 1
+    assert (
+        window.department_panels["core"]
+        .package_review_button.isEnabled()
+        is False
+    )
     window.close()

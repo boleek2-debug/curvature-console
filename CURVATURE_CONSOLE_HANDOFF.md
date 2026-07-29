@@ -101,7 +101,7 @@ department-specific evidence or configuration differences.
 # 9. Next Sprint
 
 ```text
-ASSISTANT-001B5.2D2 — General Generated-File Capture
+ASSISTANT-001B5.R2D2 — General Generated-File Capture
 ```
 
 Required scope:
@@ -125,3 +125,150 @@ ASSISTANT-001B5.5 — Supervised Interdepartmental Communication
 
 Panels may prepare and route structured handoffs, while the user can inspect,
 edit, approve, reject, hold or stop every cross-department message.
+
+
+# 11. B5.R2D2 Implementation Candidate
+
+The active candidate:
+
+- scopes download discovery to the newly completed assistant response;
+- supports arbitrary generated file types;
+- preserves the browser-suggested filename and extension;
+- sanitises unsafe path components;
+- uses collision-safe storage under `data/inbox/<department>/`;
+- binds captured files to request, department and conversation URL;
+- persists metadata and refreshes the originating panel;
+- keeps Package Review enabled only for selected `.zip` files.
+
+Required live proof is one generated `.txt` file in Core.
+
+# 12. B5.R2D2 Live Finding
+
+The first live Core test proved that generated-file UI can exist outside the
+assistant text node. The next candidate searches the complete assistant turn and
+supports links, buttons, role buttons and file-card metadata.
+
+If capture is still empty, the runtime log contains candidate attributes and a
+bounded outerHTML excerpt for the exact completed assistant turn.
+
+# 13. Two-Stage File Download
+
+The bridge now supports:
+
+```text
+file card click
+→ direct download, or
+→ preview opens
+→ visible Download control discovered
+→ browser download captured
+```
+
+Preview discovery is logged with bounded candidate attributes and page HTML when
+no usable Download control is found.
+
+
+# 14. Citation Interaction Diagnostic
+
+The prior live run proved only that `Coding Citation` did not emit a direct
+browser download and that a later whole-page query saw `Download apps`.
+
+The diagnostic candidate now records generic visible interactive DOM before and
+after the click. It does not assume a modal, popover, preview or download
+selector.
+
+
+# 15. Focused Active-Layer Evidence
+
+Confirmed live evidence:
+
+- the body becomes scroll-locked;
+- pointer events are disabled on the body;
+- focus moves from the composer to `button[data-testid="close-button"]`.
+
+The active diagnostic records the Close button's ancestor chain and every
+visible interactive control inside its containing blocking layer. No second
+action is performed.
+
+
+# 16. Generated-File Button Activation
+
+Confirmed live DOM:
+
+```html
+<button aria-label="curvature-download-test.txt" type="button">
+```
+
+Confirmed prior behaviour: `candidate.click()` changed focus but emitted no
+download event.
+
+Current candidate implementation tests deterministic activation methods on the
+same file button and does not treat `Coding Citation` as the desired download
+source.
+
+# Existing File-Card Observation
+
+Use the already-rendered `curvature-download-test.txt` file card as the test
+target. Do not generate a new assistant response for this diagnostic. The
+observer records the exact browser channel used by the card.
+
+
+# Generated-File Delivery Mechanism Confirmed
+
+Confirmed live delivery chain:
+
+```text
+file button
+→ interpreter/download metadata request
+→ estuary/content fetch
+→ HTTP 200 attachment response
+```
+
+There is no native browser download event, Blob URL, anchor click or popup.
+The implementation captures the final attachment response body directly.
+
+# B5.R2D2 Generated-File Capture — Closed
+
+Status: **LIVE PASS**
+
+Verified on 2026-07-28:
+
+```text
+128 automated tests passed
+git diff --check passed
+Core generated a real curvature-download-test.txt file card
+Console activated the exact file card
+ChatGPT delivered the file through a fetch response
+final endpoint: /backend-api/estuary/content
+HTTP status: 200
+Content-Disposition: attachment
+captured size: 29 bytes
+saved path: data/inbox/core/curvature-download-test.txt
+saved content: CURVATURE_DOWNLOAD_CAPTURE_OK
+exchange result: downloads=1
+```
+
+Confirmed delivery model:
+
+```text
+assistant file card
+→ button activation
+→ interpreter/download metadata
+→ Estuary attachment fetch
+→ response body capture
+→ collision-safe department inbox write
+```
+
+A native Playwright download event, Blob URL, programmatic anchor click and popup
+were not used in the verified flow.
+
+`Coding Citation` is not a generated-file candidate and must not be activated by
+the download scanner.
+
+The temporary TEST-01 observer served its diagnostic purpose and is not part of
+the production workflow.
+
+# Exact Next Step
+
+Close the repository milestone with a clean validation, explicit staging,
+commit and push. After that, promote the next approved Console sprint rather
+than extending B5.R2D2.

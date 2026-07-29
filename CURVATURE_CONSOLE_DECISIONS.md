@@ -852,3 +852,74 @@ Package Review remains a separate workflow for supported deployment packages.
 - ZIP is one supported download type, not the universal type;
 - arbitrary generated files can be stored and traced;
 - package validation is not applied to ordinary downloads.
+
+
+---
+
+# ADR-018 — Assistant-Response-Scoped Download Capture
+
+Status: Accepted
+Date: 2026-07-26
+
+Generated-file discovery is restricted to the newly completed assistant message
+for the active request.
+
+The browser-suggested filename is authoritative after path sanitisation. Storage
+uses collision-safe suffixes while preserving the extension.
+
+Individual download failures are logged and do not invalidate an otherwise
+successful text response.
+
+---
+
+# ADR-019 — Complete Assistant-Turn File Discovery
+
+Status: Accepted
+Date: 2026-07-26
+
+Generated-file controls may be siblings of the assistant text node. Discovery
+therefore scopes to the complete assistant conversation turn and inspects links,
+buttons, role buttons and file-card metadata.
+
+Empty capture writes bounded candidate and DOM diagnostics.
+
+---
+
+# ADR-020 — Two-Stage Generated-File Interaction
+
+Status: Accepted
+Date: 2026-07-26
+
+A generated-file card is not assumed to be the final download control. Console
+first attempts direct capture, then searches a newly opened preview for the real
+Download action.
+
+# ADR-012 — Generated-File Fetch Capture
+
+Status: Accepted
+Date: 2026-07-28
+
+## Context
+
+Live B5.R2D2 verification showed that a ChatGPT generated-file card can deliver
+its payload through a successful `/backend-api/estuary/content` fetch response
+without emitting a native Playwright download event.
+
+## Decision
+
+The browser bridge supports two verified capture channels:
+
+1. native browser download events when present;
+2. HTTP 200 attachment responses, including Estuary content responses.
+
+The final response body is saved through the same filename sanitisation,
+collision handling, department isolation and provenance pipeline.
+
+Controls labelled `Coding Citation` are not generated-file candidates.
+
+## Consequences
+
+- generated non-ZIP files can be captured reliably;
+- browser-engine replacement is not required for this delivery mechanism;
+- attachment response handling remains UI-dependent and requires explicit
+  failure logging when ChatGPT changes its delivery flow.

@@ -44,7 +44,7 @@ owned_process_cleanup_complete cdp_port=9222 released=true
 Next:
 
 ```text
-ASSISTANT-001B5.2D2 — General Generated-File Capture
+ASSISTANT-001B5.R2D2 — General Generated-File Capture
 ```
 
 The next sprint restores generated-file capture on the rewritten bridge and
@@ -515,3 +515,70 @@ Environment decision:
 - Curvature Console is installed in editable mode;
 - Playwright is an explicit Python dependency;
 - the approved browser runtime is system Google Chrome controlled through CDP.
+
+
+## 2026-07-26 — B5.R2D2 Candidate
+
+Added format-agnostic generated-file capture to the deterministic bridge.
+
+Candidate capabilities:
+
+- assistant-response-scoped file discovery;
+- arbitrary extension preservation;
+- safe filename handling;
+- collision-safe department inbox storage;
+- request/department/conversation provenance;
+- persistent per-panel download records;
+- ZIP-only Package Review remains separate.
+
+## 2026-07-26 — B5.R2D2 File-Card Candidate
+
+Expanded generated-file discovery from assistant text links to the complete
+assistant turn, including buttons and file cards. Added bounded runtime DOM
+diagnostics for empty captures.
+
+## 2026-07-26 — B5.R2D2 Two-Stage Download Candidate
+
+Added direct-download fallback to file-card preview discovery and activation of
+the preview's real Download control.
+
+
+## 2026-07-27 — B5.R2D2 Citation DOM Diagnostic
+
+Replaced inferred second-stage clicking with bounded before/after DOM evidence.
+No follow-up control is selected until the live diagnostic identifies it.
+
+
+## 2026-07-27 — B5.R2D2 Active-Layer Diagnostic
+
+Replaced the broad first-80-elements snapshot with focused evidence rooted at
+the visible Close control and its containing blocking layer.
+
+
+## 2026-07-27 — B5.R2D2 File-Button Activation
+
+Added bounded fallback activation methods for real generated-file buttons after
+live evidence showed that a normal locator click only focused the button.
+
+## 2026-07-28 — Existing File-Card Observer
+
+Added bounded browser-channel instrumentation for one exact generated-file card
+to determine whether ChatGPT uses a native download, fetch/XHR, blob URL,
+programmatic anchor click or popup.
+
+
+## 2026-07-28 — B5.R2D2 Fetch-Response Capture
+
+Added direct capture of ChatGPT's successful Estuary attachment response after
+TEST-01 confirmed that generated files are delivered through `fetch`, not a
+native browser download event.
+
+## 2026-07-28 — ASSISTANT-001B5.R2D2 Closed
+
+- verified real generated `.txt` capture end-to-end in Core;
+- confirmed ChatGPT delivery through an Estuary attachment fetch response;
+- captured and saved the 29-byte response body under the original filename;
+- excluded `Coding Citation` from generated-file activation;
+- added recursive Git exclusions for inbox, logs and live-test results;
+- made snapshot ZIP creation tolerate pre-1980 file timestamps;
+- recorded 128 passing automated tests and clean `git diff --check`.

@@ -25,6 +25,7 @@ user's ChatGPT Plus subscription.
 - ASSISTANT-001B5.2R — Deterministic Browser Bridge Rewrite
 - ASSISTANT-001B5.2E — Package Review and Safe Apply
 - ASSISTANT-001B5.4 — Thread Pressure and Thread Handoff
+- ASSISTANT-001B5.R2D2 — General Generated-File Capture
 
 # B5.2R Verified Result
 
@@ -42,9 +43,9 @@ CDP port 9222 released=true
 
 B5.2R is complete after documentation, commit and push.
 
-# Active Next Sprint
+# Closed Corrective Sprint
 
-## ASSISTANT-001B5.2D2 — General Generated-File Capture
+## ASSISTANT-001B5.R2D2 — General Generated-File Capture
 
 Purpose:
 
@@ -69,7 +70,7 @@ Package Review remains a separate workflow and accepts only valid deployment
 packages. A downloaded `.txt` must remain a `.txt` and must not be treated as a
 package.
 
-# Following Sprint
+# Active Next Sprint
 
 ## ASSISTANT-001B5.5 — Supervised Interdepartmental Communication
 
@@ -98,3 +99,34 @@ Every change must preserve:
 - no automatic commit or push;
 - complete automated tests;
 - clean Git state.
+
+
+## B5.R2D2 Candidate Acceptance
+
+Automated validation must cover filename preservation, collision-safe naming,
+format-agnostic link detection, request-result transport, persistence and panel
+display.
+
+Live acceptance requires Core to generate and return one `.txt` file that is
+captured under `data/inbox/core/` without any ZIP conversion.
+
+## B5.R2D2 File-Card Capture Gate
+
+Acceptance now includes generated-file cards rendered outside the assistant text
+container. Empty capture must produce actionable bounded DOM diagnostics.
+
+## B5.R2D2 Two-Stage Acceptance
+
+Live acceptance requires a real generated file card to either download directly
+or open a preview whose Download control is captured by Console.
+
+
+# B5.R2D2 Acceptance Result
+
+```text
+automated validation: 128 passed
+live Core file card: PASS
+delivery channel: fetch response
+saved file: data/inbox/core/curvature-download-test.txt
+exact content verified: CURVATURE_DOWNLOAD_CAPTURE_OK
+```

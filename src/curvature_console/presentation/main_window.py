@@ -408,6 +408,7 @@ class MainWindow(QMainWindow):
         project_url: str,
         conversation_url: str,
         response_text: str,
+        downloaded_files: object,
     ) -> None:
         pending = self._pending_exchange(request_id, department_id)
         if pending is None:
@@ -416,6 +417,18 @@ class MainWindow(QMainWindow):
         self._pending_exchanges.pop(request_id, None)
         panel = self.department_panels[department_id]
         panel.append_browser_exchange(pending.user_task, response_text)
+
+        captured_downloads = tuple(downloaded_files)
+        self.state_store.save_generated_downloads(
+            request_id=request_id,
+            department_id=department_id,
+            conversation_url=conversation_url,
+            downloads=captured_downloads,
+        )
+        panel.set_generated_downloads(
+            self.state_store.load_generated_downloads(department_id)
+        )
+
         self.state_store.save_chat_route(
             department_id=department_id,
             project_name=project_name,
@@ -425,9 +438,15 @@ class MainWindow(QMainWindow):
         panel.input_editor.clear()
         self._set_browser_operation_busy(False, department_id)
         self.save_department_state(department_id)
+        download_count = len(captured_downloads)
+        download_suffix = (
+            f"; {download_count} generated file(s) captured"
+            if download_count
+            else ""
+        )
         self.statusBar().showMessage(
             f"ChatGPT response received and saved: "
-            f"{panel.title_label.text()}"
+            f"{panel.title_label.text()}{download_suffix}"
         )
 
     def _handle_browser_route_unverified(

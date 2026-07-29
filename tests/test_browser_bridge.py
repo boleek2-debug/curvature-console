@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 import signal
 
 import pytest
@@ -20,6 +21,7 @@ from curvature_console.infrastructure.browser_bridge import (
     BrowserExchangeRequest,
     BrowserExchangeResult,
     ChatGPTBrowserBridge,
+    _ResponseBackedDownload,
     ChromeLauncher,
 )
 
@@ -497,3 +499,519 @@ def test_success_logging_accepts_result_without_downloads(
     bridge._send_and_receive_once = lambda request: result
 
     assert bridge.send_and_receive_hybrid(request) == result
+
+
+def test_safe_download_filename_preserves_real_extension(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    assert bridge._safe_download_filename("../../report.txt") == "report.txt"
+    assert bridge._safe_download_filename("notes.md") == "notes.md"
+    assert bridge._safe_download_filename("data.csv") == "data.csv"
+    assert bridge._safe_download_filename("archive.zip") == "archive.zip"
+
+
+def test_collision_safe_path_preserves_extension(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    existing = tmp_path / "report.txt"
+    existing.write_text("first", encoding="utf-8")
+
+    assert bridge._collision_safe_path(
+        tmp_path,
+        "report.txt",
+    ) == tmp_path / "report-2.txt"
+
+
+def test_generated_file_link_detection_is_format_agnostic(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    assert bridge._is_generated_file_link(
+        "sandbox:/mnt/data/result.txt",
+        None,
+    )
+    assert bridge._is_generated_file_link(
+        "https://files.oaiusercontent.com/file.pdf",
+        None,
+    )
+    assert bridge._is_generated_file_link(
+        "https://example.com/download",
+        "result.json",
+    )
+    assert not bridge._is_generated_file_link(
+        "https://example.com/article",
+        None,
+    )
+
+
+def test_exchange_result_defaults_to_no_downloads() -> None:
+    result = BrowserExchangeResult(
+        request_id="request",
+        department_id="core",
+        project_name=SHARED_PROJECT_NAME,
+        project_url=SHARED_PROJECT_URL,
+        conversation_url="https://chatgpt.com/c/core",
+        response_text="done",
+    )
+
+    assert result.downloaded_files == ()
+
+
+def test_file_card_candidate_is_detected_without_anchor(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeCandidate:
+        def get_attribute(self, name):
+            return {
+                "aria-label": "Download curvature-download-test.txt",
+                "title": None,
+                "data-testid": "file-download-button",
+            }.get(name)
+
+        def inner_text(self):
+            return "curvature-download-test.txt"
+
+    assert bridge._is_generated_file_candidate(
+        FakeCandidate(),
+        "",
+        None,
+    )
+
+
+def test_filename_can_be_read_from_file_card_text(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeCandidate:
+        def get_attribute(self, name):
+            return None
+
+        def inner_text(self):
+            return "Download curvature-download-test.txt"
+
+    assert bridge._filename_from_candidate(
+        FakeCandidate()
+    ) == "curvature-download-test.txt"
+
+
+def test_filename_extraction_does_not_include_action_label(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeCandidate:
+        def get_attribute(self, name):
+            return None
+
+        def inner_text(self):
+            return "Download curvature-download-test.txt"
+
+    assert (
+        bridge._filename_from_candidate(FakeCandidate())
+        == "curvature-download-test.txt"
+    )
+
+
+def test_filename_extraction_preserves_spaces_inside_filename(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeCandidate:
+        def get_attribute(self, name):
+            return None
+
+        def inner_text(self):
+            return "Download curvature report 2026.txt"
+
+    assert (
+        bridge._filename_from_candidate(FakeCandidate())
+        == "curvature report 2026.txt"
+    )
+
+
+def test_filename_extraction_strips_common_action_prefixes(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeCandidate:
+        def __init__(self, text):
+            self._text = text
+
+        def get_attribute(self, name):
+            return None
+
+        def inner_text(self):
+            return self._text
+
+    assert (
+        bridge._filename_from_candidate(
+            FakeCandidate("Open: curvature report 2026.txt")
+        )
+        == "curvature report 2026.txt"
+    )
+    assert (
+        bridge._filename_from_candidate(
+            FakeCandidate("Save - result.json")
+        )
+        == "result.json"
+    )
+
+
+def test_dom_snapshot_diff_reports_active_layer(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    before = {
+        "body": {"style": "", "dataScrollLocked": None},
+        "activeElement": {"tag": "div"},
+        "closeButton": None,
+        "layer": None,
+        "layerControls": [],
+        "activeAncestors": [],
+    }
+    after = {
+        "body": {
+            "style": "pointer-events: none;",
+            "dataScrollLocked": "1",
+        },
+        "activeElement": {"tag": "button", "text": "Close"},
+        "closeButton": {"tag": "button", "text": "Close"},
+        "layer": {"tag": "div", "text": "Generated file details"},
+        "layerControls": [
+            {"tag": "button", "text": "Download"},
+        ],
+        "activeAncestors": [
+            {"tag": "button", "text": "Close"},
+            {"tag": "div", "text": "Generated file details"},
+        ],
+    }
+
+    changes = bridge._diff_interaction_snapshots(before, after)
+
+    assert changes["bodyChanged"] is True
+    assert changes["activeElementChanged"] is True
+    assert changes["closeButtonAppeared"] is True
+    assert changes["layerAppeared"] is True
+    assert changes["afterLayerControls"] == [
+        {"tag": "button", "text": "Download"},
+    ]
+
+
+def test_observe_file_activation_channels_collects_browser_events(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class EventItem:
+        method = "GET"
+        url = "https://example.test/file"
+        resource_type = "fetch"
+        status = 200
+        headers = {
+            "content-type": "text/plain",
+            "content-disposition": "attachment; filename=test.txt",
+        }
+        suggested_filename = "test.txt"
+        type = "log"
+        text = "console"
+
+    class FakeCandidate:
+        def __init__(self):
+            self.scrolled = False
+            self.clicked = False
+
+        def scroll_into_view_if_needed(self):
+            self.scrolled = True
+
+        def click(self):
+            self.clicked = True
+
+    class FakePage:
+        def __init__(self):
+            self.handlers = {}
+            self.init_script = None
+            self.waited = None
+
+        def on(self, name, handler):
+            self.handlers[name] = handler
+
+        def add_init_script(self, script):
+            self.init_script = script
+
+        def wait_for_timeout(self, value):
+            self.waited = value
+
+        def evaluate(self, script):
+            return {
+                "fetches": [{"url": "https://example.test/file"}],
+                "xhrs": [],
+                "objectUrls": [{"url": "blob:test", "size": 3}],
+                "anchorClicks": [{"href": "blob:test", "download": "test.txt"}],
+            }
+
+    page = FakePage()
+    candidate = FakeCandidate()
+    request = BrowserExchangeRequest(
+        request_id="request",
+        department_id="core",
+        message_text="observe file",
+        create_new_thread=False,
+        conversation_url="https://chatgpt.com/c/core",
+    )
+
+    result = bridge._observe_file_activation_channels(
+        page=page,
+        candidate=candidate,
+        request=request,
+        candidate_index=0,
+    )
+
+    assert candidate.scrolled is True
+    assert candidate.clicked is True
+    assert page.waited == 2000
+    assert "window.fetch" in page.init_script
+    assert "URL.createObjectURL" in page.init_script
+    assert result["browser"]["objectUrls"][0]["url"] == "blob:test"
+
+
+def test_response_backed_download_saves_bytes(tmp_path: Path) -> None:
+    download = _ResponseBackedDownload(
+        suggested_filename="file.txt",
+        body_bytes=b"payload",
+        source_url="https://chatgpt.com/backend-api/estuary/content",
+    )
+    target = tmp_path / "file.txt"
+
+    download.save_as(target)
+
+    assert target.read_bytes() == b"payload"
+
+
+def test_trigger_candidate_download_captures_attachment_fetch_response(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeResponse:
+        status = 200
+        url = "https://chatgpt.com/backend-api/estuary/content?id=file"
+        headers = {
+            "content-disposition": 'attachment; filename="file.txt"',
+            "content-type": "text/plain",
+        }
+
+        def body(self):
+            return b"CURVATURE_DOWNLOAD_CAPTURE_OK"
+
+    class FakeDownloadInfo:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            raise PlaywrightTimeoutError("no native download")
+
+    class FakePage:
+        def __init__(self):
+            self.handler = None
+
+        def on(self, name, handler):
+            assert name == "response"
+            self.handler = handler
+
+        def remove_listener(self, name, handler):
+            assert name == "response"
+            assert handler is self.handler
+
+        def expect_download(self, timeout):
+            return FakeDownloadInfo()
+
+        def wait_for_timeout(self, milliseconds):
+            assert milliseconds == 250
+
+    class FakeCandidate:
+        def scroll_into_view_if_needed(self):
+            return None
+
+        def click(self):
+            page.handler(FakeResponse())
+
+        def get_attribute(self, name):
+            if name == "aria-label":
+                return "curvature-download-test.txt"
+            return None
+
+        def inner_text(self):
+            return "curvature-download-test.txt"
+
+        def evaluate(self, script):
+            if script == "(element) => element.tagName":
+                return "BUTTON"
+            raise AssertionError(script)
+
+    page = FakePage()
+    result = bridge._trigger_candidate_download(
+        page=page,
+        candidate=FakeCandidate(),
+        request=BrowserExchangeRequest(
+            request_id="request",
+            department_id="core",
+            message_text="create file",
+            create_new_thread=False,
+            conversation_url="https://chatgpt.com/c/core",
+        ),
+        candidate_index=0,
+    )
+
+    assert result.suggested_filename == "curvature-download-test.txt"
+    assert result.body_bytes == b"CURVATURE_DOWNLOAD_CAPTURE_OK"
+
+
+def test_trigger_candidate_download_uses_fallback_activation_methods(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeDownloadInfo:
+        def __init__(self, succeeds):
+            self.succeeds = succeeds
+            self.value = "download"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            if not self.succeeds:
+                raise PlaywrightTimeoutError("no download")
+            return False
+
+    class FakeMouse:
+        def __init__(self):
+            self.clicked = False
+
+        def click(self, x, y):
+            self.clicked = (x, y)
+
+    class FakePage:
+        def __init__(self):
+            self.calls = 0
+            self.mouse = FakeMouse()
+            self.response_handler = None
+
+        def on(self, name, handler):
+            assert name == "response"
+            self.response_handler = handler
+
+        def remove_listener(self, name, handler):
+            assert name == "response"
+            assert handler is self.response_handler
+            self.response_handler = None
+
+        def wait_for_timeout(self, milliseconds):
+            assert milliseconds == 250
+
+        def expect_download(self, timeout):
+            self.calls += 1
+            return FakeDownloadInfo(self.calls == 2)
+
+    class FakeCandidate:
+        def __init__(self):
+            self.scrolled = False
+            self.clicked = False
+
+        def scroll_into_view_if_needed(self):
+            self.scrolled = True
+
+        def click(self):
+            self.clicked = True
+
+        def bounding_box(self):
+            return {"x": 10, "y": 20, "width": 30, "height": 40}
+
+        def press(self, key):
+            raise AssertionError("keyboard fallback should not be reached")
+
+        def evaluate(self, script):
+            if script == "(element) => element.tagName":
+                return "BUTTON"
+            raise AssertionError("pointer fallback should not be reached")
+
+        def get_attribute(self, name):
+            if name == "aria-label":
+                return "curvature-download-test.txt"
+            return None
+
+        def inner_text(self):
+            return "curvature-download-test.txt"
+
+    page = FakePage()
+    candidate = FakeCandidate()
+
+    result = bridge._trigger_candidate_download(
+        page=page,
+        candidate=candidate,
+        request=BrowserExchangeRequest(
+            request_id="request",
+            department_id="core",
+            message_text="create file",
+            create_new_thread=False,
+            conversation_url="https://chatgpt.com/c/core",
+        ),
+        candidate_index=0,
+    )
+
+    assert result == "download"
+    assert candidate.scrolled is True
+    assert candidate.clicked is True
+    assert page.mouse.clicked == (25.0, 40.0)
+
+
+def test_dispatch_candidate_pointer_sequence_uses_dom_events(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeCandidate:
+        def __init__(self):
+            self.script = None
+
+        def evaluate(self, script):
+            self.script = script
+
+    candidate = FakeCandidate()
+    bridge._dispatch_candidate_pointer_sequence(candidate)
+
+    assert "PointerEvent" in candidate.script
+    assert 'new MouseEvent("click"' in candidate.script
+
+
+def test_coding_citation_is_not_treated_as_generated_file_candidate(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeCandidate:
+        def get_attribute(self, name):
+            return {
+                "aria-label": "Coding Citation",
+                "title": None,
+                "data-testid": None,
+            }.get(name)
+
+        def inner_text(self):
+            return ""
+
+    assert not bridge._is_generated_file_candidate(
+        FakeCandidate(),
+        "",
+        None,
+    )

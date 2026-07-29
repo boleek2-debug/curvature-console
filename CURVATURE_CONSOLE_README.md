@@ -79,7 +79,7 @@ deployment package.
 # Next
 
 ```text
-ASSISTANT-001B5.2D2 — General Generated-File Capture
+ASSISTANT-001B5.R2D2 — General Generated-File Capture
 ```
 
 Then:
@@ -97,3 +97,35 @@ ASSISTANT-001B5.5 — Supervised Interdepartmental Communication
 - explicit repository-write approval;
 - no automatic commit or push;
 - test → verify → document → commit → push.
+
+
+# Generated-File Inbox
+
+Generated files are stored by department:
+
+```text
+data/inbox/project/
+data/inbox/core/
+data/inbox/research/
+```
+
+The file type is preserved. Package Review remains available only for ZIP files
+that may contain a supported deployment manifest.
+
+Generated files may be rendered as links, buttons or file cards. Console scans
+the complete assistant turn rather than only the text message node.
+
+Generated-file cards may use a two-stage interaction. Console supports both a
+direct card download and card → preview → Download.
+
+# Generated Files
+
+Generated files returned by ChatGPT are captured from the active assistant turn
+and stored under:
+
+```text
+data/inbox/<department>/
+```
+
+The verified ChatGPT flow uses an HTTP attachment fetch rather than a native
+browser download event. Runtime inbox contents are local and excluded from Git.
