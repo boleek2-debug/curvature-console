@@ -230,3 +230,23 @@ interdepartmental communication:
 
 The implementation intentionally stops before browser routing, approval UI,
 loop automation or background sends.
+
+# B5.5B — Bridge Controls
+
+Status: Implemented for validation.
+
+A dedicated `Bridge Controls` dialog now provides supervised handoff actions:
+
+- create draft;
+- edit draft instruction;
+- request approval;
+- approve without sending;
+- reject;
+- hold;
+- redirect before delivery;
+- stop;
+- inspect the complete visible timeline.
+
+Approval is represented by the explicit `approved` state. It is deliberately
+separate from `sent`; B5.5B performs no browser delivery and no background
+automation.

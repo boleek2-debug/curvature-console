@@ -294,3 +294,11 @@ is introduced by B5.5A.
 
 Project must approve the UX and authority rules for B5.5B before Core adds user
 controls. Core must not invent approval semantics or autonomous routing.
+
+# B5.5B Bridge Controls
+
+The toolbar now exposes `Bridge Controls`. The dialog supervises persisted
+handoffs and never sends a ChatGPT message.
+
+The next Core sprint, B5.5C, may implement controlled delivery only after
+B5.5B UI validation and Project approval of routing and loop limits.

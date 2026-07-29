@@ -688,6 +688,7 @@ class SQLiteStateStore:
                         status IN (
                             'draft',
                             'pending_approval',
+                            'approved',
                             'sent',
                             'received',
                             'answered',

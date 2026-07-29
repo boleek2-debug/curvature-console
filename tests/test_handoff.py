@@ -64,20 +64,24 @@ def test_status_transitions_are_explicit_and_terminal() -> None:
         updated_at="2026-07-29T12:01:00+00:00",
     )
     handoff = handoff.transition(
-        HandoffStatus.SENT,
+        HandoffStatus.APPROVED,
         updated_at="2026-07-29T12:02:00+00:00",
     )
     handoff = handoff.transition(
-        HandoffStatus.RECEIVED,
+        HandoffStatus.SENT,
         updated_at="2026-07-29T12:03:00+00:00",
     )
     handoff = handoff.transition(
-        HandoffStatus.ANSWERED,
+        HandoffStatus.RECEIVED,
         updated_at="2026-07-29T12:04:00+00:00",
     )
     handoff = handoff.transition(
-        HandoffStatus.CLOSED,
+        HandoffStatus.ANSWERED,
         updated_at="2026-07-29T12:05:00+00:00",
+    )
+    handoff = handoff.transition(
+        HandoffStatus.CLOSED,
+        updated_at="2026-07-29T12:06:00+00:00",
     )
 
     assert handoff.is_terminal
@@ -138,3 +142,54 @@ def test_timeline_rejects_non_participant_author() -> None:
 
     with pytest.raises(HandoffValidationError):
         handoff.append_message("project", "I should not be inserted.")
+
+
+
+def test_approval_is_separate_from_browser_delivery() -> None:
+    handoff = create_handoff(
+        request_id="request-approval",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="Implement this.",
+    )
+    handoff = handoff.transition(HandoffStatus.PENDING_APPROVAL)
+    handoff = handoff.transition(HandoffStatus.APPROVED)
+
+    assert handoff.status is HandoffStatus.APPROVED
+    assert HandoffStatus.SENT in available_handoff_transitions(
+        HandoffStatus.APPROVED
+    )
+
+
+def test_only_draft_instruction_can_be_edited() -> None:
+    handoff = create_handoff(
+        request_id="request-edit",
+        source_department_id="project",
+        target_department_id="research",
+        user_visible_message="Old instruction.",
+    )
+    edited = handoff.edit_visible_message("New instruction.")
+
+    assert edited.user_visible_message == "New instruction."
+
+    pending = edited.transition(HandoffStatus.PENDING_APPROVAL)
+    with pytest.raises(HandoffTransitionError):
+        pending.edit_visible_message("Too late.")
+
+
+def test_redirect_is_bounded_to_supervised_pre_delivery_states() -> None:
+    handoff = create_handoff(
+        request_id="request-redirect",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="Route this.",
+    )
+
+    redirected = handoff.redirect("research")
+    assert redirected.target_department_id == "research"
+
+    approved = redirected.transition(
+        HandoffStatus.PENDING_APPROVAL
+    ).transition(HandoffStatus.APPROVED)
+    with pytest.raises(HandoffTransitionError):
+        approved.redirect("core")

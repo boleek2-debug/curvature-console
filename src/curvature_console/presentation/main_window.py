@@ -53,6 +53,9 @@ from curvature_console.presentation.context_preview_dialog import (
     ContextPreviewDialog,
 )
 from curvature_console.presentation.department_panel import DepartmentPanel
+from curvature_console.presentation.handoff_controls_dialog import (
+    HandoffControlsDialog,
+)
 from curvature_console.presentation.package_review_dialog import (
     PackageReviewDialog,
 )
@@ -182,11 +185,24 @@ class MainWindow(QMainWindow):
         self.refresh_all_button.setObjectName("refreshAllContextButton")
         self.refresh_all_button.clicked.connect(self.refresh_all_contexts)
 
+        self.handoff_controls_button = QPushButton("Bridge Controls")
+        self.handoff_controls_button.setObjectName(
+            "handoffBridgeControlsButton"
+        )
+        self.handoff_controls_button.setToolTip(
+            "Create and supervise interdepartmental handoffs. "
+            "This does not send browser messages."
+        )
+        self.handoff_controls_button.clicked.connect(
+            self.open_handoff_controls
+        )
+
         toolbar = QToolBar("Workspace")
         toolbar.setObjectName("workspaceToolbar")
         toolbar.setMovable(False)
         toolbar.addWidget(self.restore_button)
         toolbar.addWidget(self.refresh_all_button)
+        toolbar.addWidget(self.handoff_controls_button)
         self.addToolBar(toolbar)
 
         status_bar = QStatusBar()
@@ -200,6 +216,15 @@ class MainWindow(QMainWindow):
         self.refresh_all_contexts()
         self.restore_persisted_state()
         self._restoring_state = False
+
+    def open_handoff_controls(self) -> None:
+        """Open supervised handoff controls without browser delivery."""
+
+        dialog = HandoffControlsDialog(
+            state_store=self.state_store,
+            parent=self,
+        )
+        dialog.exec()
 
     def _bootstrap_chat_routes(self) -> None:
         """Initialise missing department routes without using chat titles."""

@@ -565,3 +565,16 @@ validated source + target + request
 
 The persistence layer owns data integrity only. It does not approve, send,
 redirect or close handoffs on behalf of the user.
+
+# B5.5B Supervised Control Pipeline
+
+```text
+create draft
+→ edit or redirect while allowed
+→ request approval
+→ approve / reject / hold / stop
+→ persist aggregate and visible action timeline
+→ restart-safe reload
+```
+
+`approved` does not mean `sent`. No browser worker is called by Bridge Controls.

@@ -17,6 +17,7 @@ class HandoffStatus(str, Enum):
 
     DRAFT = "draft"
     PENDING_APPROVAL = "pending_approval"
+    APPROVED = "approved"
     SENT = "sent"
     RECEIVED = "received"
     ANSWERED = "answered"
@@ -46,8 +47,15 @@ _ALLOWED_TRANSITIONS = {
     HandoffStatus.PENDING_APPROVAL: frozenset(
         {
             HandoffStatus.DRAFT,
-            HandoffStatus.SENT,
+            HandoffStatus.APPROVED,
             HandoffStatus.REJECTED,
+            HandoffStatus.HELD,
+            HandoffStatus.STOPPED,
+        }
+    ),
+    HandoffStatus.APPROVED: frozenset(
+        {
+            HandoffStatus.SENT,
             HandoffStatus.HELD,
             HandoffStatus.STOPPED,
         }
@@ -151,6 +159,56 @@ class HandoffRecord:
         return replace(
             self,
             status=status,
+            updated_at=updated_at or _utc_now(),
+        )
+
+    def edit_visible_message(
+        self,
+        message: str,
+        *,
+        updated_at: str | None = None,
+    ) -> HandoffRecord:
+        """Edit a draft instruction before approval."""
+
+        if self.status is not HandoffStatus.DRAFT:
+            raise HandoffTransitionError(
+                "Only draft handoffs may be edited."
+            )
+        clean_message = message.strip()
+        if not clean_message:
+            raise HandoffValidationError(
+                "user_visible_message cannot be empty."
+            )
+        return replace(
+            self,
+            user_visible_message=clean_message,
+            updated_at=updated_at or _utc_now(),
+        )
+
+    def redirect(
+        self,
+        target_department_id: str,
+        *,
+        updated_at: str | None = None,
+    ) -> HandoffRecord:
+        """Redirect a draft, pending or held handoff to another department."""
+
+        if self.status not in {
+            HandoffStatus.DRAFT,
+            HandoffStatus.PENDING_APPROVAL,
+            HandoffStatus.HELD,
+        }:
+            raise HandoffTransitionError(
+                "Only draft, pending or held handoffs may be redirected."
+            )
+        _validate_department_id(target_department_id)
+        if target_department_id == self.source_department_id:
+            raise HandoffValidationError(
+                "Source and target departments must be different."
+            )
+        return replace(
+            self,
+            target_department_id=target_department_id,
             updated_at=updated_at or _utc_now(),
         )
 

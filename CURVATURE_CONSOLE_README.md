@@ -138,3 +138,9 @@ validation, lifecycle transitions and SQLite persistence only.
 
 There are no B5.5 user controls or automatic department-to-department sends
 yet.
+
+# Bridge Controls
+
+Use the toolbar `Bridge Controls` button to create and supervise handoffs.
+The dialog stores actions and correspondence in SQLite. It does not send
+messages to ChatGPT.

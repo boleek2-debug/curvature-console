@@ -953,3 +953,24 @@ send messages, change routes or add automation.
 - invalid routing and lifecycle jumps fail before browser activity;
 - later approval UI can operate on one deterministic state machine;
 - controlled automation remains a later, separately approved layer.
+
+# ADR-014 — Approval Is Not Delivery
+
+Status: Accepted
+Date: 2026-07-29
+
+## Decision
+
+A supervised handoff enters an explicit `approved` state before it may enter
+`sent`. B5.5B may create and approve records, but it may not perform browser
+delivery.
+
+All user control actions are persisted as visible timeline messages. Redirect
+is limited to draft, pending-approval and held records. Editing is limited to
+drafts. Terminal states remain closed.
+
+## Consequences
+
+- user approval cannot silently trigger a browser send;
+- B5.5C can implement delivery as a separate audited transition;
+- restart continuity preserves both state and control history.

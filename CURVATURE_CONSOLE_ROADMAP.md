@@ -87,13 +87,14 @@ Backend-only deliverables:
 - automated tests;
 - no UI and no automatic sends.
 
-### B5.5B — Supervised Controls
+### B5.5B — Bridge Controls
 
-Pending Project approval:
+Implemented for validation:
 
 - create and inspect handoff;
-- approve, edit, reject, hold, redirect and stop controls;
-- explicit user-visible routing;
+- request approval, approve, edit, reject, hold, redirect and stop controls;
+- explicit `approved` state separated from `sent`;
+- full visible action timeline and restart continuity;
 - no background sends.
 
 ### B5.5C — Controlled Delivery

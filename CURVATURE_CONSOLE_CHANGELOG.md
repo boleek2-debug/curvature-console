@@ -594,3 +594,14 @@ native browser download event.
 - added source, target and status indexes and filtering;
 - added domain and restart-continuity tests;
 - made no UI or browser-send changes.
+
+## 2026-07-29 — ASSISTANT-001B5.5B Bridge Controls
+
+- added a dedicated Bridge Controls dialog;
+- added create, edit, request approval, approve, reject, hold, redirect and
+  stop controls;
+- added the explicit `approved` lifecycle state;
+- kept approval separate from browser delivery;
+- persisted every control action in the visible correspondence timeline;
+- added UI and domain tests;
+- added no automatic sends or interdepartmental loops.
