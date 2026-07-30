@@ -1,7 +1,7 @@
 # CURVATURE CONSOLE — SOURCE OVERVIEW
 
 Status: Active
-Version: 2.2.0
+Version: 2.3.0
 Owner: Project Curvature
 Last Updated: 2026-07-30
 
@@ -98,9 +98,10 @@ Thread Handoff after restart.
 B5.5A handoff foundation: complete
 B5.5B supervised controls: complete
 B5.5C one-shot controlled delivery: complete at commit 10dbf6c
+B5.5D1 department-generated draft intake: complete at commit f50e89c
 B5.5F bounded normal Task context: complete
 B5.6A Reply Viewer: complete and user-verified
-automated validation: 154 passed
+automated validation: 175 passed
 git diff --check: passed
 ```
 
@@ -115,10 +116,15 @@ git diff --check: passed
 - no automatic commit or push;
 - test → verify → document → commit → push.
 
-# Supervised Communication Hub Candidate
+# Supervised Communication Hub
 
-B5.5D1 allows Project, Core and Research to prepare structured handoff proposals
-for one another. Valid proposals returned in department responses are captured
-as persistent drafts in the shared Communication Hub. The user still reviews,
-edits, approves and explicitly delivers every handoff; no autonomous
-interdepartmental conversation is introduced.
+Project, Core and Research may prepare structured handoff proposals for one
+another. Valid proposals returned in department responses are captured as
+persistent `PENDING_APPROVAL` records in the shared Supervised Communication
+Hub. Manual drafts remain available as `DRAFT`. The operator must explicitly
+approve and confirm Deliver once before a handoff crosses a department boundary.
+The target reply is captured into the handoff record. No autonomous
+interdepartmental conversation loop is introduced.
+
+Repository snapshots are archived under `data/snapshots/` as timestamped ZIPs.
+`latest.zip` is a symlink, not a duplicate archive.

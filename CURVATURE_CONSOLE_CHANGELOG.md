@@ -1,7 +1,7 @@
 # CURVATURE CONSOLE CHANGELOG
 
 Status: Active
-Version: 1.0.0
+Version: 1.1.0
 Owner: Project Curvature
 Last Updated: 2026-07-30
 
@@ -660,3 +660,48 @@ Prepared for local validation:
 
 Full repository validation and one live department-response intake test remain
 required before closeout.
+
+
+## 2026-07-30
+
+### ASSISTANT-001B5.5D1 — Department-Generated Draft Intake
+
+Completed, committed and live-verified at commit `f50e89c`.
+
+Delivered:
+
+- structured department-generated handoff proposal envelopes;
+- source binding to the originating department exchange;
+- strict validation and duplicate-safe intake;
+- shared Supervised Communication Hub;
+- direct `PENDING_APPROVAL` intake for department-generated proposals;
+- manual draft fallback;
+- resizable and scrollable Deliver confirmation;
+- delivery progress stages and elapsed-time feedback;
+- restored ProseMirror message entry;
+- active Send-button activation with Enter fallback;
+- request-marker and assistant-turn submit confirmation;
+- stable assistant-message identity reply capture;
+- timestamped repository snapshots under `data/snapshots/`;
+- preservation of explicit approval, one-shot delivery and no autonomous loop.
+
+Verified:
+
+```text
+175 automated tests passed
+git diff --check passed
+Project proposal intake live pass
+Project → Core controlled delivery live pass
+Core reply: B5.5D1-H6 REPLY CAPTURE RECEIVED
+reply capture live pass
+commit f50e89c pushed
+main == origin/main
+working tree clean
+```
+
+Result:
+
+Curvature departments can now generate supervised handoff proposals that enter
+a common operator-controlled queue, cross one department boundary only after
+explicit approval and Deliver once confirmation, and return the target reply to
+the handoff record without autonomous continuation.

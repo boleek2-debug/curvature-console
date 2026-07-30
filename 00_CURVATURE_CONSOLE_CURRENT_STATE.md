@@ -1,7 +1,7 @@
 # CURVATURE CONSOLE — CURRENT STATE
 
-Status: Operational; B5.5F and B5.6A completed and verified
-Version: 2.2.0
+Status: Operational; B5.5D1 completed, committed and live-verified
+Version: 2.3.0
 Owner: Curvature Core
 Last Updated: 2026-07-30
 
@@ -15,9 +15,10 @@ of Curvature Console.
 ```text
 Repository: ~/curvature-console
 Branch: main
-Base commit: ec2067eb064f4f2bf3c879b361f8e75c0a39df3b
-Push state before closeout: main == origin/main
-Working tree: B5.2R implementation and documentation changes pending commit
+Base commit: f50e89c68458c52f1cf1b2a973324040594ac109
+Push state: main == origin/main
+Working tree: clean
+Final snapshot: curvature-console-snapshot-20260730-175323-f50e89c.zip
 ```
 
 # B5.2R Verification
@@ -304,28 +305,55 @@ this closeout.
 
 # B5.5D1 — Department-Generated Draft Intake
 
-Status: Implementation candidate prepared for local validation.
+Status: Completed, committed and live-verified.
 
-This increment turns Bridge Controls into the shared supervised communication
-hub for Project, Core and Research. Any department response may include one or
-more validated `BEGIN_CURVATURE_HANDOFF_PROPOSAL` JSON envelopes. Console:
+Commit `f50e89c` completed the supervised department-generated handoff intake and
+its live delivery hardening.
 
-- infers the source from the originating department exchange;
-- validates the target and structured proposal fields;
-- renders the proposal into a complete visible instruction;
-- persists it as a `DRAFT` handoff;
-- adds it to the shared Bridge Controls list;
-- records its origin in the visible timeline;
-- never approves or delivers it automatically.
+Delivered:
 
-The user remains the mandatory approval and delivery gate. Manual `Create Draft`
-remains available as a fallback, not the primary workflow.
+- strict `BEGIN_CURVATURE_HANDOFF_PROPOSAL` schema-version-1 envelopes;
+- source identity bound to the originating department response;
+- validation of target and all required proposal fields;
+- duplicate-safe persistence in the shared Supervised Communication Hub;
+- department-generated proposals entering directly as `PENDING_APPROVAL`;
+- manual draft creation retained as a fallback;
+- explicit operator approval and `Deliver once` confirmation before any
+  department boundary is crossed;
+- resizable and scrollable delivery confirmation;
+- visible delivery stage and elapsed-time feedback;
+- verified ProseMirror keyboard entry;
+- active Send-button activation with Enter only as fallback;
+- robust post-submit confirmation through request markers and new assistant
+  turns;
+- robust assistant reply capture through stable message identity;
+- failure-to-`HELD` behaviour preserved;
+- timestamped snapshots stored under `data/snapshots/` with a `latest.zip`
+  symlink and no duplicate archive copy.
 
-Exact validation target:
+Final verification:
 
 ```text
-department response containing one valid proposal
-→ automatic DRAFT in Supervised Communication Hub
-→ user review/edit/approval remains required
-→ no browser delivery occurs automatically
+175 automated tests passed
+git diff --check passed
+Project proposal intake: live pass
+explicit approval gate: live pass
+controlled Project → Core delivery: live pass
+Core exact reply capture: live pass
+reply persisted by Console: live pass
+no timeout: live pass
+no autonomous loop: preserved
 ```
+
+Live verification reply:
+
+```text
+B5.5D1-H6 REPLY CAPTURE RECEIVED
+```
+
+# Exact Next Step
+
+Document and preserve the `f50e89c` baseline. Then define B5.5D2 as a separate
+supervised return-path increment. B5.5D2 must not introduce an autonomous
+conversation loop; every response crossing back to the source remains subject
+to explicit operator review and approval.

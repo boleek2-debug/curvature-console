@@ -1,7 +1,7 @@
 # CURVATURE CONSOLE ROADMAP
 
-Status: Operational; closeout and communication audit
-Version: 2.2.0
+Status: Operational; B5.5D1 closed
+Version: 2.3.0
 Owner: Project Curvature
 Last Updated: 2026-07-30
 
@@ -26,6 +26,7 @@ user's ChatGPT Plus subscription.
 - ASSISTANT-001B5.2E — Package Review and Safe Apply
 - ASSISTANT-001B5.4 — Thread Pressure and Thread Handoff
 - ASSISTANT-001B5.R2D2 — General Generated-File Capture
+- ASSISTANT-001B5.5D1 — Department-Generated Draft Intake
 
 # B5.2R Verified Result
 
@@ -101,45 +102,45 @@ current and earlier reply inspection, and preserved restart/context continuity.
 # Current Gate
 
 ```text
-154 automated tests passed
+175 automated tests passed
 git diff --check passed
-manual Reply Viewer verification passed
-manual department ordering verification passed
+B5.5D1 live end-to-end verification passed
+commit f50e89c pushed
+main == origin/main
+working tree clean
+final snapshot created
 ```
 
 # Exact Next Step
 
-1. Apply the closeout documentation package.
-2. Run the full validation script and `git diff --check`.
-3. Stage intended files explicitly, commit and push.
-4. Confirm `main == origin/main` and a clean working tree.
-5. Create a fresh current snapshot.
-6. Audit the implemented handoff path against the intended supervised
-   Project → Core → Research workflow.
-7. Define the smallest remaining communication sprint from evidence in that
+1. Apply and commit the B5.5D1 closeout documentation.
+2. Confirm a clean repository state and create a fresh documentation-complete
    snapshot.
+3. Start B5.5D2 only through a separate explicit sprint decision.
 
-No additional Console feature is approved before the snapshot audit.
+# Next Candidate Sprint
 
-# Maintenance Gate
+## ASSISTANT-001B5.5D2 — Supervised Return Path
 
-Every change must preserve:
+Purpose:
 
-- strict department isolation;
-- exact URL routing;
-- immutable request identity;
-- invisible normal browser operation;
-- visible activity heartbeat;
-- runtime diagnostics;
-- explicit repository-write and delivery approval;
-- no autonomous background loop;
-- no automatic commit or push;
-- complete automated tests;
-- clean Git state.
+Allow the operator to review the target department reply and explicitly decide
+whether a bounded response should return to the source department.
 
-# Active Sprint
+Required constraints:
+
+- no automatic return delivery;
+- no autonomous conversation loop;
+- same handoff identity and complete visible timeline;
+- operator may edit, approve, hold or close the reply;
+- only an approved return message may be delivered once to the exact persisted
+  source conversation.
+
+# Completed Sprint
 
 ## ASSISTANT-001B5.5D1 — Department-Generated Draft Intake
+
+Status: Completed, committed and live-verified at `f50e89c`.
 
 Purpose:
 

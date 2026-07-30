@@ -1,6 +1,6 @@
 # CURVATURE CONSOLE HANDOFF
 
-Status: B5.5F and B5.6A completed and verified
+Status: B5.5D1 completed, committed and live-verified
 Version: 2.2.0
 Owner: Curvature Core
 Last Updated: 2026-07-30
@@ -308,34 +308,40 @@ Reply Viewer manually verified
 department reply ordering manually verified
 ```
 
+# B5.5D1 Closeout
+
+Commit:
+
+```text
+f50e89c Complete B5.5D1 department-generated draft intake
+```
+
+Verification:
+
+```text
+175 automated tests passed
+git diff --check passed
+main == origin/main
+working tree clean
+final snapshot: curvature-console-snapshot-20260730-175323-f50e89c.zip
+```
+
+Live path verified:
+
+```text
+Project response emits proposal envelope
+→ Console creates PENDING_APPROVAL handoff
+→ operator approves
+→ operator confirms Deliver once
+→ exact persisted Core conversation receives handoff
+→ Core replies B5.5D1-H6 REPLY CAPTURE RECEIVED
+→ Console captures the reply
+→ no timeout and no autonomous continuation
+```
+
 # Exact Next Step
 
-Commit and push this closeout with explicit staging, then create a fresh current
-repository snapshot. Use that snapshot to audit how much of supervised
-interdepartmental communication is complete and define only the remaining gap.
-
-# Active Implementation — B5.5D1 Department-Generated Draft Intake
-
-The existing B5.5A–B5.5C record, controls and one-shot delivery remain the
-foundation. B5.5D1 adds only the missing intake path:
-
-```text
-department recognises that another department must act
-→ department emits a structured handoff proposal
-→ Console validates and stores a DRAFT
-→ draft appears in Supervised Communication Hub
-→ user reviews and controls every later transition
-```
-
-Protocol markers:
-
-```text
-BEGIN_CURVATURE_HANDOFF_PROPOSAL
-{ valid schema-version-1 JSON }
-END_CURVATURE_HANDOFF_PROPOSAL
-```
-
-Source identity is never trusted from response JSON; it is bound to the
-originating browser exchange. Target must be a different known department.
-Malformed proposals are ignored with bounded diagnostics and never become
-handoffs. No proposal is approved or delivered automatically.
+Define and implement B5.5D2 as a separate supervised return-path increment. The
+target department reply may be reviewed, edited, held or approved by the
+operator before anything is sent back to the source department. No response may
+return automatically and no autonomous department loop is permitted.

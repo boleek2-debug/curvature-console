@@ -628,7 +628,7 @@ B5.5C controlled delivery remains intact
 
 Stage intended files explicitly, commit, push and confirm a clean working tree.
 
-# B5.5D1 Validation Gate
+# B5.5D1 Validation Gate — Closed
 
 Required automated coverage:
 
@@ -650,3 +650,19 @@ Required live proof:
    visible instruction.
 5. Confirm no approval or browser delivery occurred automatically.
 6. Restart Console and confirm the draft remains present.
+
+
+# B5.5D2 Candidate — Supervised Return Path
+
+Status: Not started. Requires explicit sprint start.
+
+Candidate scope:
+
+- associate the captured target reply with the originating handoff;
+- present the reply for operator review;
+- allow edit, approve, hold or close;
+- send an approved return message once to the persisted source conversation;
+- preserve the same handoff identity and complete visible timeline;
+- prevent automatic return delivery and automatic multi-step loops.
+
+This candidate must not be mixed into B5.5D1 closeout documentation.
