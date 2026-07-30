@@ -1,7 +1,7 @@
 # CURVATURE CONSOLE — CURRENT STATE
 
-Status: Operational; B5.5D1 completed, committed and live-verified
-Version: 2.3.0
+Status: Operational; B5.5D2A implemented and automated-verified; real workflow validation pending
+Version: 2.4.0
 Owner: Curvature Core
 Last Updated: 2026-07-30
 
@@ -15,10 +15,10 @@ of Curvature Console.
 ```text
 Repository: ~/curvature-console
 Branch: main
-Base commit: f50e89c68458c52f1cf1b2a973324040594ac109
-Push state: main == origin/main
-Working tree: clean
-Final snapshot: curvature-console-snapshot-20260730-175323-f50e89c.zip
+Base commit: 34bf968a5c9b9d3bee9a50f0adf501e20a475a02
+Push state before D2A commit: main == origin/main
+Working tree: B5.5D2A implementation and tests pending commit
+Current snapshot: curvature-console-snapshot-20260730-185252-34bf968.zip
 ```
 
 # B5.2R Verification
@@ -351,9 +351,42 @@ Live verification reply:
 B5.5D1-H6 REPLY CAPTURE RECEIVED
 ```
 
+# B5.5D2A — Supervised Return Path Foundation
+
+Status: Implemented and automated-verified; real workflow validation pending.
+
+Delivered candidate:
+
+- captured target replies remain attached to the originating handoff;
+- target replies move the handoff to `AWAITING_USER_DECISION`;
+- operator decisions: `Continue in Target`, `Return to Source`, `Hold`, `Close`;
+- `Continue in Target` keeps the handoff open as `IN_PROGRESS`;
+- `Return to Source` requires a separate preview and `Return once` confirmation;
+- returned messages use the original source department and the same handoff identity;
+- return success and failure are recorded in the same visible timeline;
+- new return-path statuses are persisted through an in-place SQLite schema migration;
+- the open Communication Hub refreshes after delivery, reply capture, return and failure while preserving selection;
+- the obsolete inline `Reply received` field is removed;
+- `View Replies (N) • X new` exposes persistent unread state;
+- opening Reply Viewer marks replies read, including across restart;
+- the three-panel shell test now reflects the intentional removal of the old inline conversation widget.
+
+Automated verification:
+
+```text
+184 automated tests passed
+git diff --check passed
+```
+
+The earlier controlled return-path trial confirmed that the reply could reach the
+source and the handoff could reach `RETURNED`; it also exposed the stale open-Hub
+refresh and reply-notification UX defects now corrected by this candidate. A new
+real Project → Core → Project workflow using an actual Curvature change remains
+the required live validation.
+
 # Exact Next Step
 
-Document and preserve the `f50e89c` baseline. Then define B5.5D2 as a separate
-supervised return-path increment. B5.5D2 must not introduce an autonomous
-conversation loop; every response crossing back to the source remains subject
-to explicit operator review and approval.
+Commit and push B5.5D2A with this documentation, create a fresh clean snapshot,
+then run one real supervised Project → Core → Project workflow. Do not mark D2A
+complete until the open Hub refresh, unread reply state, same-handoff timeline and
+explicit Return once path are verified in that real workflow.

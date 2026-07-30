@@ -705,3 +705,37 @@ Curvature departments can now generate supervised handoff proposals that enter
 a common operator-controlled queue, cross one department boundary only after
 explicit approval and Deliver once confirmation, and return the target reply to
 the handoff record without autonomous continuation.
+
+
+## 2026-07-30
+
+### ASSISTANT-001B5.5D2A — Supervised Return Path Foundation Candidate
+
+Implemented for commit before real-workflow validation:
+
+- attached target replies to the originating handoff;
+- introduced `AWAITING_USER_DECISION`, `IN_PROGRESS`, `RETURN_SENT` and
+  `RETURNED`;
+- added operator actions `Continue in Target`, `Return to Source`, `Hold` and
+  `Close`;
+- required a separate review and `Return once` confirmation before returning
+  anything to the source department;
+- retained one handoff identity and one complete timeline across both directions;
+- preserved the prohibition on automatic returns and autonomous loops;
+- added an in-place SQLite status-constraint migration;
+- refreshed the open Communication Hub after async delivery and return changes;
+- preserved the selected handoff during refresh;
+- removed the obsolete inline `Reply received` field;
+- added persistent unread counts to `View Replies`;
+- corrected a stale three-panel test instead of restoring intentionally removed UI.
+
+Automated verification:
+
+```text
+184 tests passed
+git diff --check passed
+```
+
+A preliminary return-path trial reached `RETURNED` and identified the live-refresh
+and unread-notification defects addressed above. Final live closeout remains
+pending one real Project → Core → Project Curvature workflow after commit and push.

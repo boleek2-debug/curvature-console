@@ -203,3 +203,110 @@ def test_delivery_progress_dialog_shows_stage_and_elapsed_feedback() -> None:
     assert elapsed.text().startswith("Elapsed: ")
 
     dialog.finish()
+
+
+def test_reply_decision_controls_are_only_enabled_for_captured_reply(
+    tmp_path,
+) -> None:
+    from curvature_console.infrastructure.handoff import create_handoff
+
+    create_application(["curvature-console-reply-decision-controls-test"])
+    store = SQLiteStateStore(tmp_path / "state.sqlite3")
+    record = create_handoff(
+        handoff_id="handoff-reply-1",
+        request_id="request-reply-1",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="Plan the implementation.",
+    )
+    record = record.transition(HandoffStatus.PENDING_APPROVAL)
+    record = record.transition(HandoffStatus.APPROVED)
+    record = record.transition(HandoffStatus.SENT)
+    record = record.transition(HandoffStatus.RECEIVED)
+    record = record.transition(HandoffStatus.AWAITING_USER_DECISION)
+    record = record.append_message("core", "Task accepted. Plan follows.")
+    store.save_handoff(record)
+
+    dialog = HandoffControlsDialog(store)
+
+    assert dialog.continue_button.isEnabled()
+    assert dialog.return_button.isEnabled()
+    assert dialog.close_button.isEnabled()
+    assert not dialog.deliver_button.isEnabled()
+
+    dialog.close()
+    store.close()
+
+
+def test_return_button_emits_only_for_reply_awaiting_decision(tmp_path) -> None:
+    from curvature_console.infrastructure.handoff import create_handoff
+
+    create_application(["curvature-console-return-control-test"])
+    store = SQLiteStateStore(tmp_path / "state.sqlite3")
+    record = create_handoff(
+        handoff_id="handoff-return-ui",
+        request_id="request-return-ui",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="Return the plan.",
+    )
+    record = record.transition(HandoffStatus.PENDING_APPROVAL)
+    record = record.transition(HandoffStatus.APPROVED)
+    record = record.transition(HandoffStatus.SENT)
+    record = record.transition(HandoffStatus.RECEIVED)
+    record = record.transition(HandoffStatus.AWAITING_USER_DECISION)
+    record = record.append_message("core", "Execution plan.")
+    store.save_handoff(record)
+
+    dialog = HandoffControlsDialog(store)
+    emitted: list[str] = []
+    dialog.return_requested.connect(emitted.append)
+    dialog.return_selected()
+
+    assert emitted == ["handoff-return-ui"]
+    assert store.load_handoff("handoff-return-ui").status is HandoffStatus.AWAITING_USER_DECISION
+
+    dialog.close()
+    store.close()
+
+
+def test_open_hub_refreshes_after_handoff_reply_is_recorded(tmp_path) -> None:
+    from curvature_console.infrastructure.handoff import create_handoff
+    from curvature_console.presentation.main_window import PendingBrowserExchange
+
+    create_application(["curvature-console-live-hub-refresh-test"])
+    window = MainWindow(
+        state_path=tmp_path / "state.sqlite3",
+        data_directory=tmp_path / "data",
+    )
+    record = create_handoff(
+        handoff_id="handoff-live-refresh",
+        request_id="request-live-refresh",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="Return a plan.",
+    )
+    record = record.transition(HandoffStatus.PENDING_APPROVAL)
+    record = record.transition(HandoffStatus.APPROVED)
+    record = record.transition(HandoffStatus.SENT)
+    window.state_store.save_handoff(record)
+
+    dialog = HandoffControlsDialog(window.state_store, parent=window)
+    dialog.show()
+    window._handoff_controls_dialog = dialog
+    pending = PendingBrowserExchange(
+        request_id="browser-live-refresh",
+        department_id="core",
+        user_task="handoff",
+        handoff_id=record.handoff_id,
+    )
+
+    window._record_handoff_answer(pending, "Plan ready.")
+
+    assert dialog.selected_record is not None
+    assert dialog.selected_record.handoff_id == record.handoff_id
+    assert dialog.selected_record.status is HandoffStatus.AWAITING_USER_DECISION
+    assert "Plan ready." in dialog.timeline_view.toPlainText()
+
+    dialog.close()
+    window.state_store.close()

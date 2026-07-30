@@ -47,7 +47,7 @@ def test_success_records_received_and_answered_timeline(tmp_path) -> None:
 
     restored = window.state_store.load_handoff("handoff-1")
     assert restored is not None
-    assert restored.status is HandoffStatus.ANSWERED
+    assert restored.status is HandoffStatus.AWAITING_USER_DECISION
     assert restored.timeline[-1].body == "Core response."
     window.close()
 
@@ -142,4 +142,65 @@ END_CURVATURE_HANDOFF_PROPOSAL'''
     assert first == (1, ())
     assert second == (0, ())
     assert len(window.state_store.load_handoffs()) == 1
+    window.close()
+
+
+def test_return_success_records_source_acknowledgement_and_keeps_open(
+    tmp_path,
+) -> None:
+    create_application(["handoff-return-success-test"])
+    window = MainWindow(
+        state_path=tmp_path / "state.sqlite3",
+        data_directory=tmp_path / "data",
+    )
+    record = _approved_handoff().transition(
+        HandoffStatus.RECEIVED
+    ).transition(HandoffStatus.AWAITING_USER_DECISION)
+    record = record.append_message("core", "Sprint plan ready.")
+    record = record.transition(HandoffStatus.RETURN_SENT)
+    window.state_store.save_handoff(record)
+    pending = PendingBrowserExchange(
+        request_id="browser-return-1",
+        department_id="project",
+        user_task="return",
+        handoff_id="handoff-1",
+        handoff_return=True,
+    )
+
+    window._record_handoff_answer(pending, "Project acknowledged the plan.")
+
+    restored = window.state_store.load_handoff("handoff-1")
+    assert restored is not None
+    assert restored.status is HandoffStatus.RETURNED
+    assert restored.timeline[-1].body == "Project acknowledged the plan."
+    assert not restored.is_terminal
+    window.close()
+
+
+def test_return_failure_moves_return_sent_handoff_to_held(tmp_path) -> None:
+    create_application(["handoff-return-failure-test"])
+    window = MainWindow(
+        state_path=tmp_path / "state.sqlite3",
+        data_directory=tmp_path / "data",
+    )
+    record = _approved_handoff().transition(
+        HandoffStatus.RECEIVED
+    ).transition(HandoffStatus.AWAITING_USER_DECISION)
+    record = record.append_message("core", "Update.")
+    record = record.transition(HandoffStatus.RETURN_SENT)
+    window.state_store.save_handoff(record)
+    pending = PendingBrowserExchange(
+        request_id="browser-return-2",
+        department_id="project",
+        user_task="return",
+        handoff_id="handoff-1",
+        handoff_return=True,
+    )
+
+    window._hold_failed_handoff(pending, "Source route failed.")
+
+    restored = window.state_store.load_handoff("handoff-1")
+    assert restored is not None
+    assert restored.status is HandoffStatus.HELD
+    assert "Controlled return failed" in restored.timeline[-1].body
     window.close()

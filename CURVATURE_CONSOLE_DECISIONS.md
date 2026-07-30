@@ -1110,3 +1110,51 @@ Repository snapshots are written as one timestamped ZIP under
 `data/snapshots/`. Historical snapshots are retained. `latest.zip` is a symlink
 to the latest timestamped archive rather than a duplicate copy. Snapshot output
 must exclude the snapshot archive itself.
+
+
+# ADR-021 — Replies Require an Operator Decision Before Return
+
+Status: Accepted and implemented as B5.5D2A candidate
+Date: 2026-07-30
+
+## Decision
+
+A captured target-department reply does not automatically return to the source
+and does not automatically close the handoff. It enters
+`AWAITING_USER_DECISION`. The operator chooses `Continue in Target`,
+`Return to Source`, `Hold` or `Close`.
+
+`Return to Source` requires review and a separate `Return once` confirmation.
+The return uses the original handoff identity, exact persisted source route and
+complete shared timeline.
+
+## Consequences
+
+- a handoff may remain open across multiple implementation sprints;
+- the first target reply may be an accepted-task plan rather than a final result;
+- progress updates do not force return or closure;
+- no department boundary is crossed without explicit operator action;
+- no autonomous multi-turn loop is introduced.
+
+# ADR-022 — Reply Attention Is Persistent State, Not an Inline Text Box
+
+Status: Accepted and implemented as B5.5D2A candidate
+Date: 2026-07-30
+
+## Decision
+
+Remove the inline `Reply received` field from each department panel. Unread reply
+attention is represented by a highlighted `View Replies (N) • X new` control.
+Opening Reply Viewer marks the current replies read. The read position is stored
+in SQLite and survives restart.
+
+The open Communication Hub must refresh immediately after asynchronous handoff
+changes and preserve the selected handoff.
+
+## Consequences
+
+- the three-panel workspace no longer duplicates reply content;
+- unread work remains visible without a blocking notification window;
+- users do not need to close and reopen the Hub to see a new status;
+- tests must reflect intentional UI removals rather than restoring obsolete
+  compatibility attributes.

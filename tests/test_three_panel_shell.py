@@ -34,23 +34,25 @@ def test_three_department_panels_exist_and_are_visible(window: MainWindow) -> No
 def test_each_department_has_independent_conversation_and_input(
     window: MainWindow,
 ) -> None:
-    conversation_objects = []
     input_objects = []
+    restored_transcripts: dict[str, str] = {}
 
     for department_id, panel in window.department_panels.items():
-        assert isinstance(panel.conversation_view, QPlainTextEdit)
+        assert not hasattr(panel, "conversation_view")
         assert isinstance(panel.input_editor, QPlainTextEdit)
-        assert panel.conversation_view.isReadOnly()
         assert not panel.input_editor.isReadOnly()
-        assert panel.conversation_view.objectName() == (
-            f"{department_id}Conversation"
-        )
         assert panel.input_editor.objectName() == f"{department_id}Input"
 
-        conversation_objects.append(panel.conversation_view)
+        transcript = f"{department_id} independent transcript"
+        panel.restore_conversation_text(transcript)
+        restored_transcripts[department_id] = panel.conversation_text()
         input_objects.append(panel.input_editor)
 
-    assert len({id(item) for item in conversation_objects}) == 3
+    assert restored_transcripts == {
+        "project": "project independent transcript",
+        "core": "core independent transcript",
+        "research": "research independent transcript",
+    }
     assert len({id(item) for item in input_objects}) == 3
 
 

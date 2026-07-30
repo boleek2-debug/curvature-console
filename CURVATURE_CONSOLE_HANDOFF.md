@@ -1,7 +1,7 @@
 # CURVATURE CONSOLE HANDOFF
 
-Status: B5.5D1 completed, committed and live-verified
-Version: 2.2.0
+Status: B5.5D2A implemented and automated-verified; live workflow pending
+Version: 2.3.0
 Owner: Curvature Core
 Last Updated: 2026-07-30
 
@@ -345,3 +345,56 @@ Define and implement B5.5D2 as a separate supervised return-path increment. The
 target department reply may be reviewed, edited, held or approved by the
 operator before anything is sent back to the source department. No response may
 return automatically and no autonomous department loop is permitted.
+
+
+# B5.5D2A Current Handoff State
+
+Repository baseline before candidate commit:
+
+```text
+branch: main
+base commit: 34bf968a5c9b9d3bee9a50f0adf501e20a475a02
+main == origin/main before local D2A changes
+automated validation: 184 passed
+git diff --check: passed
+```
+
+Implemented candidate:
+
+```text
+target reply captured
+→ AWAITING_USER_DECISION
+→ operator chooses Continue in Target / Return to Source / Hold / Close
+→ Return to Source opens review
+→ operator confirms Return once
+→ exact persisted source conversation receives the bounded return
+→ source acknowledgement remains in the same handoff timeline
+```
+
+Persistence and UI hardening:
+
+- SQLite migration accepts `awaiting_user_decision`, `in_progress`,
+  `return_sent` and `returned` without losing existing handoffs or messages;
+- the open Supervised Communication Hub refreshes after asynchronous state
+  changes and preserves the selected handoff;
+- the inline `Reply received` field is removed;
+- `View Replies (N) • X new` is highlighted for unread replies;
+- read/unread state persists across restart;
+- tests were aligned with the intentional UI removal rather than restoring a
+  deleted widget.
+
+Live status:
+
+A controlled trial reached `RETURNED` and exposed the stale-Hub and unread-reply
+issues now fixed. The required closeout proof is a real Curvature task routed
+Project → Core and explicitly returned Core → Project while the Hub remains open.
+
+# Exact Next Step After Commit
+
+1. Commit and push the D2A implementation, tests and canonical documentation.
+2. Confirm `main == origin/main` and a clean working tree.
+3. Create a fresh timestamped snapshot.
+4. Run one real multi-sprint-oriented Curvature handoff.
+5. Verify `AWAITING_USER_DECISION`, live Hub refresh, unread highlighting,
+   explicit Return once, same-handoff timeline and no autonomous loop.
+6. Close D2A only after that live evidence passes.

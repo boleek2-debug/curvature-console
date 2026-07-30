@@ -1,7 +1,7 @@
 # CURVATURE CONSOLE ROADMAP
 
-Status: Operational; B5.5D1 closed
-Version: 2.3.0
+Status: Operational; B5.5D2A candidate ready for commit and live validation
+Version: 2.4.0
 Owner: Project Curvature
 Last Updated: 2026-07-30
 
@@ -102,72 +102,50 @@ current and earlier reply inspection, and preserved restart/context continuity.
 # Current Gate
 
 ```text
-175 automated tests passed
-git diff --check passed
 B5.5D1 live end-to-end verification passed
-commit f50e89c pushed
-main == origin/main
-working tree clean
-final snapshot created
+B5.5D1 commit f50e89c pushed
+B5.5D1 documentation commit 34bf968 pushed
+B5.5D2A candidate: 184 automated tests passed
+git diff --check passed
+real D2A workflow validation pending
+```
+
+# Current Candidate
+
+## ASSISTANT-001B5.5D2A — Supervised Return Path Foundation
+
+Status: Implemented and automated-verified; final live workflow pending.
+
+Delivered candidate:
+
+- `AWAITING_USER_DECISION` after target reply capture;
+- `Continue in Target`, `Return to Source`, `Hold`, `Close`;
+- explicit review and `Return once`;
+- same handoff identity and complete timeline across both directions;
+- SQLite migration for new lifecycle states;
+- live refresh of the open Hub with selection preservation;
+- persistent unread reply highlighting;
+- removal of obsolete inline reply receipt;
+- no automatic return and no autonomous loop.
+
+Current automated gate:
+
+```text
+184 tests passed
+git diff --check passed
 ```
 
 # Exact Next Step
 
-1. Apply and commit the B5.5D1 closeout documentation.
-2. Confirm a clean repository state and create a fresh documentation-complete
-   snapshot.
-3. Start B5.5D2 only through a separate explicit sprint decision.
+1. Commit and push the B5.5D2A implementation, tests and documentation.
+2. Confirm clean `main == origin/main`.
+3. Create a fresh timestamped snapshot.
+4. Use a real Curvature change for one Project → Core → Project workflow.
+5. Close B5.5D2A only after live Hub refresh, unread replies, explicit return,
+   same-handoff timeline and no autonomous continuation are verified.
 
-# Next Candidate Sprint
+# Following Design Question
 
-## ASSISTANT-001B5.5D2 — Supervised Return Path
-
-Purpose:
-
-Allow the operator to review the target department reply and explicitly decide
-whether a bounded response should return to the source department.
-
-Required constraints:
-
-- no automatic return delivery;
-- no autonomous conversation loop;
-- same handoff identity and complete visible timeline;
-- operator may edit, approve, hold or close the reply;
-- only an approved return message may be delivered once to the exact persisted
-  source conversation.
-
-# Completed Sprint
-
-## ASSISTANT-001B5.5D1 — Department-Generated Draft Intake
-
-Status: Completed, committed and live-verified at `f50e89c`.
-
-Purpose:
-
-Turn the existing Bridge Controls list into the common supervised intake queue
-for all six interdepartmental directions:
-
-```text
-Project  → Core
-Project  → Research
-Core     → Project
-Core     → Research
-Research → Project
-Research → Core
-```
-
-Deliver in this increment:
-
-- a strict machine-readable handoff proposal envelope;
-- proposal instructions in every department transfer package;
-- parsing and validation of proposals returned in assistant responses;
-- automatic persistence as reviewable `DRAFT` handoffs;
-- duplicate-safe intake for one browser response;
-- shared Communication Hub wording and list visibility;
-- no automatic approval, delivery, return path or conversation loop.
-
-Following increments remain separate:
-
-- user decision inbox and clearer status grouping;
-- supervised response review and return path;
-- multi-step correspondence under explicit approval at every boundary.
+After real use, decide whether one long-lived handoff needs explicit update types
+such as initial execution plan, progress update, milestone result, blocker and final
+closeout. Do not implement the larger hierarchy before observing D2A in real work.

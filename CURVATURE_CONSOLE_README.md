@@ -1,7 +1,7 @@
 # CURVATURE CONSOLE — SOURCE OVERVIEW
 
 Status: Active
-Version: 2.3.0
+Version: 2.4.0
 Owner: Project Curvature
 Last Updated: 2026-07-30
 
@@ -87,10 +87,11 @@ boundaries. Thread Handoff remains the full-context continuity mechanism.
 
 # Viewing Replies
 
-Department panels show `Reply received` and `View Replies (N)`. The Reply Viewer
-opens the complete saved task and reply history for that department. The underlying
-transcript remains persisted and continues to feed Task context, Thread Pressure and
-Thread Handoff after restart.
+Department panels use `View Replies (N) • X new` as the reply-attention control.
+The obsolete inline `Reply received` field is removed. Opening the resizable Reply
+Viewer marks replies read, and the read position persists in SQLite across restart.
+The underlying transcript remains persisted and continues to feed Task context,
+Thread Pressure and Thread Handoff.
 
 # Verified Closeout State
 
@@ -101,7 +102,8 @@ B5.5C one-shot controlled delivery: complete at commit 10dbf6c
 B5.5D1 department-generated draft intake: complete at commit f50e89c
 B5.5F bounded normal Task context: complete
 B5.6A Reply Viewer: complete and user-verified
-automated validation: 175 passed
+B5.5D2A return-path candidate: implemented
+automated validation: 184 passed
 git diff --check: passed
 ```
 
@@ -128,3 +130,15 @@ interdepartmental conversation loop is introduced.
 
 Repository snapshots are archived under `data/snapshots/` as timestamped ZIPs.
 `latest.zip` is a symlink, not a duplicate archive.
+
+
+# Supervised Return Path Candidate
+
+A captured target reply enters `AWAITING_USER_DECISION`. The operator may keep
+work in the target department, explicitly return a reviewed message to the source,
+hold the handoff or close it. Return delivery requires `Return once`; no reply is
+automatically sent back and no autonomous department loop exists.
+
+The open Communication Hub refreshes after asynchronous changes without losing
+selection. Final D2A closeout requires one real Project → Core → Project Curvature
+workflow after the candidate is committed and pushed.

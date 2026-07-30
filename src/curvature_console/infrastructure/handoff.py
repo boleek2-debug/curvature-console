@@ -21,6 +21,10 @@ class HandoffStatus(str, Enum):
     SENT = "sent"
     RECEIVED = "received"
     ANSWERED = "answered"
+    AWAITING_USER_DECISION = "awaiting_user_decision"
+    IN_PROGRESS = "in_progress"
+    RETURN_SENT = "return_sent"
+    RETURNED = "returned"
     CLOSED = "closed"
     REJECTED = "rejected"
     HELD = "held"
@@ -70,13 +74,47 @@ _ALLOWED_TRANSITIONS = {
     HandoffStatus.RECEIVED: frozenset(
         {
             HandoffStatus.ANSWERED,
+            HandoffStatus.AWAITING_USER_DECISION,
             HandoffStatus.HELD,
             HandoffStatus.STOPPED,
         }
     ),
     HandoffStatus.ANSWERED: frozenset(
         {
-            HandoffStatus.SENT,
+            HandoffStatus.IN_PROGRESS,
+            HandoffStatus.RETURN_SENT,
+            HandoffStatus.CLOSED,
+            HandoffStatus.HELD,
+            HandoffStatus.STOPPED,
+        }
+    ),
+    HandoffStatus.AWAITING_USER_DECISION: frozenset(
+        {
+            HandoffStatus.IN_PROGRESS,
+            HandoffStatus.RETURN_SENT,
+            HandoffStatus.CLOSED,
+            HandoffStatus.HELD,
+            HandoffStatus.STOPPED,
+        }
+    ),
+    HandoffStatus.IN_PROGRESS: frozenset(
+        {
+            HandoffStatus.RETURN_SENT,
+            HandoffStatus.CLOSED,
+            HandoffStatus.HELD,
+            HandoffStatus.STOPPED,
+        }
+    ),
+    HandoffStatus.RETURN_SENT: frozenset(
+        {
+            HandoffStatus.RETURNED,
+            HandoffStatus.HELD,
+            HandoffStatus.STOPPED,
+        }
+    ),
+    HandoffStatus.RETURNED: frozenset(
+        {
+            HandoffStatus.IN_PROGRESS,
             HandoffStatus.CLOSED,
             HandoffStatus.HELD,
             HandoffStatus.STOPPED,
@@ -88,6 +126,10 @@ _ALLOWED_TRANSITIONS = {
             HandoffStatus.SENT,
             HandoffStatus.RECEIVED,
             HandoffStatus.ANSWERED,
+            HandoffStatus.AWAITING_USER_DECISION,
+            HandoffStatus.IN_PROGRESS,
+            HandoffStatus.RETURN_SENT,
+            HandoffStatus.RETURNED,
             HandoffStatus.REJECTED,
             HandoffStatus.STOPPED,
         }

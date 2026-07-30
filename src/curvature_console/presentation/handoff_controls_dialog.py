@@ -128,12 +128,12 @@ class HandoffDeliveryConfirmationDialog(QDialog):
             target_department_id,
             target_department_id.upper(),
         )
-        summary = QLabel(
+        self.summary_label = QLabel(
             "Send this approved handoff exactly once to "
             f"{target_label}?"
         )
-        summary.setObjectName("handoffDeliverySummary")
-        summary.setWordWrap(True)
+        self.summary_label.setObjectName("handoffDeliverySummary")
+        self.summary_label.setWordWrap(True)
 
         title_label = QLabel(handoff_title)
         title_label.setObjectName("handoffDeliveryTitle")
@@ -167,10 +167,40 @@ class HandoffDeliveryConfirmationDialog(QDialog):
             cancel_button.setFocus()
 
         layout = QVBoxLayout(self)
-        layout.addWidget(summary)
+        layout.addWidget(self.summary_label)
         layout.addWidget(title_label)
         layout.addWidget(details, 1)
         layout.addWidget(buttons)
+
+
+def confirm_handoff_return(
+    *,
+    parent: QWidget | None,
+    source_department_id: str,
+    reply_text: str,
+) -> bool:
+    """Return whether the operator approved one reply return."""
+
+    dialog = HandoffDeliveryConfirmationDialog(
+        target_department_id=source_department_id,
+        handoff_title="Return captured reply to source",
+        handoff_message=reply_text,
+        parent=parent,
+    )
+    dialog.setWindowTitle("Return captured reply?")
+    dialog.summary_label.setText(
+        "Return this captured target reply exactly once to "
+        + _DEPARTMENT_LABELS.get(
+            source_department_id, source_department_id.upper()
+        )
+        + "?"
+    )
+    buttons = dialog.findChild(QDialogButtonBox, "handoffDeliveryButtons")
+    if buttons is not None:
+        yes_button = buttons.button(QDialogButtonBox.StandardButton.Yes)
+        if yes_button is not None:
+            yes_button.setText("Return once")
+    return dialog.exec() == QDialog.DialogCode.Accepted
 
 
 def confirm_handoff_delivery(
@@ -196,6 +226,7 @@ class HandoffControlsDialog(QDialog):
     """Create, supervise and explicitly request one handoff delivery."""
 
     deliver_requested = Signal(str)
+    return_requested = Signal(str)
 
     """Create and supervise handoffs without sending browser messages."""
 
@@ -282,6 +313,31 @@ class HandoffControlsDialog(QDialog):
         )
         self.deliver_button.clicked.connect(self.deliver_selected)
 
+        self.continue_button = QPushButton("Continue in Target")
+        self.continue_button.setObjectName("continueHandoffButton")
+        self.continue_button.setToolTip(
+            "Accept this reply as a progress update and keep the handoff open."
+        )
+        self.continue_button.clicked.connect(
+            lambda: self._transition_selected(HandoffStatus.IN_PROGRESS)
+        )
+
+        self.return_button = QPushButton("Return to Source")
+        self.return_button.setObjectName("returnHandoffButton")
+        self.return_button.setToolTip(
+            "Return the latest captured target reply once to the source department."
+        )
+        self.return_button.clicked.connect(self.return_selected)
+
+        self.close_button = QPushButton("Close")
+        self.close_button.setObjectName("closeHandoffButton")
+        self.close_button.setToolTip(
+            "Close this handoff only when the requested work is complete."
+        )
+        self.close_button.clicked.connect(
+            lambda: self._transition_selected(HandoffStatus.CLOSED)
+        )
+
         self.stop_button = QPushButton("Stop")
         self.stop_button.setObjectName("stopHandoffButton")
         self.stop_button.clicked.connect(
@@ -293,25 +349,34 @@ class HandoffControlsDialog(QDialog):
         form.addRow("Target", self.target_combo)
         form.addRow("Instruction", self.message_editor)
 
-        control_row = QHBoxLayout()
+        preparation_row = QHBoxLayout()
         for button in (
             self.new_button,
             self.edit_button,
             self.submit_button,
             self.approve_button,
             self.reject_button,
-            self.hold_button,
             self.redirect_button,
+        ):
+            preparation_row.addWidget(button)
+
+        decision_row = QHBoxLayout()
+        for button in (
             self.deliver_button,
+            self.continue_button,
+            self.return_button,
+            self.hold_button,
+            self.close_button,
             self.stop_button,
         ):
-            control_row.addWidget(button)
+            decision_row.addWidget(button)
 
         right = QWidget()
         right_layout = QVBoxLayout(right)
         right_layout.addWidget(self.status_label)
         right_layout.addLayout(form)
-        right_layout.addLayout(control_row)
+        right_layout.addLayout(preparation_row)
+        right_layout.addLayout(decision_row)
         right_layout.addWidget(QLabel("Complete visible timeline"))
         right_layout.addWidget(self.timeline_view, 1)
 
@@ -423,6 +488,22 @@ class HandoffControlsDialog(QDialog):
             return
         self.deliver_requested.emit(record.handoff_id)
 
+    def return_selected(self) -> None:
+        """Request one supervised return of the latest target reply."""
+
+        record = self.selected_record
+        if record is None:
+            return
+        if record.status not in {
+            HandoffStatus.AWAITING_USER_DECISION,
+            HandoffStatus.ANSWERED,
+        }:
+            self._show_error(
+                "Only a captured reply awaiting decision may be returned."
+            )
+            return
+        self.return_requested.emit(record.handoff_id)
+
     def _transition_selected(self, status: HandoffStatus) -> None:
         record = self.selected_record
         if record is None:
@@ -487,6 +568,10 @@ class HandoffControlsDialog(QDialog):
                 HandoffStatus.SENT,
                 HandoffStatus.RECEIVED,
                 HandoffStatus.ANSWERED,
+                HandoffStatus.AWAITING_USER_DECISION,
+                HandoffStatus.IN_PROGRESS,
+                HandoffStatus.RETURN_SENT,
+                HandoffStatus.RETURNED,
             }
         )
         self.redirect_button.setEnabled(
@@ -499,6 +584,30 @@ class HandoffControlsDialog(QDialog):
         )
         self.deliver_button.setEnabled(
             status is HandoffStatus.APPROVED
+        )
+        self.continue_button.setEnabled(
+            status
+            in {
+                HandoffStatus.AWAITING_USER_DECISION,
+                HandoffStatus.ANSWERED,
+                HandoffStatus.RETURNED,
+            }
+        )
+        self.return_button.setEnabled(
+            status
+            in {
+                HandoffStatus.AWAITING_USER_DECISION,
+                HandoffStatus.ANSWERED,
+            }
+        )
+        self.close_button.setEnabled(
+            status
+            in {
+                HandoffStatus.AWAITING_USER_DECISION,
+                HandoffStatus.ANSWERED,
+                HandoffStatus.IN_PROGRESS,
+                HandoffStatus.RETURNED,
+            }
         )
         self.stop_button.setEnabled(
             record is not None and not record.is_terminal

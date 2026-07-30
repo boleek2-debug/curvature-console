@@ -609,7 +609,7 @@ Thread Handoff
 # Reply Presentation
 
 ```text
-response captured → transcript persisted → Reply received → View Replies (N) → large viewer
+response captured → transcript persisted → View Replies (N) • X new → large viewer
 ```
 
 # B5.5F / B5.6A Closeout Gate
@@ -652,17 +652,40 @@ Required live proof:
 6. Restart Console and confirm the draft remains present.
 
 
-# B5.5D2 Candidate — Supervised Return Path
+# B5.5D2A Validation Gate — Active
 
-Status: Not started. Requires explicit sprint start.
+Status: Implemented and automated-verified; real workflow validation pending.
 
-Candidate scope:
+Implemented scope:
 
-- associate the captured target reply with the originating handoff;
-- present the reply for operator review;
-- allow edit, approve, hold or close;
-- send an approved return message once to the persisted source conversation;
-- preserve the same handoff identity and complete visible timeline;
-- prevent automatic return delivery and automatic multi-step loops.
+- target reply attached to the originating handoff;
+- operator decision state `AWAITING_USER_DECISION`;
+- `Continue in Target`, `Return to Source`, `Hold`, `Close`;
+- explicit review and `Return once`;
+- same handoff identity and full timeline in both directions;
+- SQLite migration for new statuses;
+- open-Hub live refresh with selection preservation;
+- persistent unread reply count;
+- no inline `Reply received` field;
+- no automatic return and no autonomous loop.
 
-This candidate must not be mixed into B5.5D1 closeout documentation.
+Automated gate:
+
+```text
+184 tests passed
+git diff --check passed
+```
+
+Required real-workflow gate after commit and push:
+
+1. Project creates a real Curvature implementation handoff for Core.
+2. Core returns an acceptance and proposed sprint plan.
+3. The same handoff enters `AWAITING_USER_DECISION` while Hub remains open.
+4. The Hub updates without being reopened and preserves selection.
+5. `View Replies` shows the reply as unread and clears it when opened.
+6. Operator explicitly returns the reviewed plan to Project.
+7. Project receives it through the persisted source route.
+8. Both directions remain in the same timeline.
+9. No automatic continuation occurs.
+
+Do not close B5.5D2A until this gate passes.

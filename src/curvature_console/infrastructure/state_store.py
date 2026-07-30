@@ -24,6 +24,7 @@ class DepartmentState:
 
     conversation_text: str
     draft_text: str
+    last_read_reply_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +91,7 @@ class SQLiteStateStore:
         department_id: str,
         conversation_text: str,
         draft_text: str,
+        last_read_reply_count: int = 0,
     ) -> None:
         with self._connection:
             self._connection.execute(
@@ -97,14 +99,21 @@ class SQLiteStateStore:
                 INSERT INTO department_state (
                     department_id,
                     conversation_text,
-                    draft_text
+                    draft_text,
+                    last_read_reply_count
                 )
-                VALUES (?, ?, ?)
+                VALUES (?, ?, ?, ?)
                 ON CONFLICT(department_id) DO UPDATE SET
                     conversation_text = excluded.conversation_text,
-                    draft_text = excluded.draft_text
+                    draft_text = excluded.draft_text,
+                    last_read_reply_count = excluded.last_read_reply_count
                 """,
-                (department_id, conversation_text, draft_text),
+                (
+                    department_id,
+                    conversation_text,
+                    draft_text,
+                    max(0, int(last_read_reply_count)),
+                ),
             )
 
     def load_department_state(
@@ -113,7 +122,7 @@ class SQLiteStateStore:
     ) -> DepartmentState | None:
         row = self._connection.execute(
             """
-            SELECT conversation_text, draft_text
+            SELECT conversation_text, draft_text, last_read_reply_count
             FROM department_state
             WHERE department_id = ?
             """,
@@ -126,6 +135,7 @@ class SQLiteStateStore:
         return DepartmentState(
             conversation_text=row["conversation_text"],
             draft_text=row["draft_text"],
+            last_read_reply_count=row["last_read_reply_count"],
         )
 
     def save_chat_route(
@@ -625,7 +635,8 @@ class SQLiteStateStore:
                 CREATE TABLE IF NOT EXISTS department_state (
                     department_id TEXT PRIMARY KEY,
                     conversation_text TEXT NOT NULL,
-                    draft_text TEXT NOT NULL
+                    draft_text TEXT NOT NULL,
+                    last_read_reply_count INTEGER NOT NULL DEFAULT 0
                 );
 
                 CREATE TABLE IF NOT EXISTS application_state (
@@ -692,6 +703,10 @@ class SQLiteStateStore:
                             'sent',
                             'received',
                             'answered',
+                            'awaiting_user_decision',
+                            'in_progress',
+                            'return_sent',
+                            'returned',
                             'closed',
                             'rejected',
                             'held',
@@ -734,3 +749,128 @@ class SQLiteStateStore:
                 );
                 """
             )
+
+        self._migrate_department_reply_state()
+        self._migrate_handoff_status_constraint()
+
+    def _migrate_department_reply_state(self) -> None:
+        """Add persisted reply-read state to databases created by older builds."""
+
+        columns = {
+            row["name"]
+            for row in self._connection.execute(
+                "PRAGMA table_info(department_state)"
+            ).fetchall()
+        }
+        if "last_read_reply_count" in columns:
+            return
+        with self._connection:
+            self._connection.execute(
+                "ALTER TABLE department_state "
+                "ADD COLUMN last_read_reply_count INTEGER NOT NULL DEFAULT 0"
+            )
+
+    def _migrate_handoff_status_constraint(self) -> None:
+        """Expand legacy handoff status CHECK constraints without data loss."""
+
+        row = self._connection.execute(
+            """
+            SELECT sql
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'handoff_record'
+            """
+        ).fetchone()
+        schema_sql = "" if row is None or row["sql"] is None else row["sql"]
+        required_statuses = (
+            "awaiting_user_decision",
+            "in_progress",
+            "return_sent",
+            "returned",
+        )
+        if all(status in schema_sql for status in required_statuses):
+            return
+
+        self._connection.commit()
+        self._connection.execute("PRAGMA foreign_keys = OFF")
+        try:
+            with self._connection:
+                self._connection.executescript(
+                    """
+                    DROP TABLE IF EXISTS handoff_record_new;
+
+                    CREATE TABLE handoff_record_new (
+                        handoff_id TEXT PRIMARY KEY,
+                        request_id TEXT NOT NULL,
+                        source_department_id TEXT NOT NULL,
+                        target_department_id TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        user_visible_message TEXT NOT NULL,
+                        CHECK (
+                            source_department_id
+                            IN ('project', 'core', 'research')
+                        ),
+                        CHECK (
+                            target_department_id
+                            IN ('project', 'core', 'research')
+                        ),
+                        CHECK (
+                            source_department_id != target_department_id
+                        ),
+                        CHECK (
+                            status IN (
+                                'draft',
+                                'pending_approval',
+                                'approved',
+                                'sent',
+                                'received',
+                                'answered',
+                                'awaiting_user_decision',
+                                'in_progress',
+                                'return_sent',
+                                'returned',
+                                'closed',
+                                'rejected',
+                                'held',
+                                'stopped'
+                            )
+                        )
+                    );
+
+                    INSERT INTO handoff_record_new (
+                        handoff_id,
+                        request_id,
+                        source_department_id,
+                        target_department_id,
+                        status,
+                        created_at,
+                        updated_at,
+                        user_visible_message
+                    )
+                    SELECT
+                        handoff_id,
+                        request_id,
+                        source_department_id,
+                        target_department_id,
+                        status,
+                        created_at,
+                        updated_at,
+                        user_visible_message
+                    FROM handoff_record;
+
+                    DROP TABLE handoff_record;
+                    ALTER TABLE handoff_record_new RENAME TO handoff_record;
+
+                    CREATE INDEX IF NOT EXISTS idx_handoff_source
+                    ON handoff_record (source_department_id, created_at);
+
+                    CREATE INDEX IF NOT EXISTS idx_handoff_target
+                    ON handoff_record (target_department_id, created_at);
+
+                    CREATE INDEX IF NOT EXISTS idx_handoff_status
+                    ON handoff_record (status, updated_at);
+                    """
+                )
+        finally:
+            self._connection.execute("PRAGMA foreign_keys = ON")

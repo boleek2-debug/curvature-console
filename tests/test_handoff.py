@@ -193,3 +193,31 @@ def test_redirect_is_bounded_to_supervised_pre_delivery_states() -> None:
     ).transition(HandoffStatus.APPROVED)
     with pytest.raises(HandoffTransitionError):
         approved.redirect("core")
+
+
+def test_reply_decision_and_return_lifecycle_remains_open_until_close() -> None:
+    handoff = create_handoff(
+        request_id="request-return",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="Implement a multi-sprint task.",
+    )
+    handoff = handoff.transition(HandoffStatus.PENDING_APPROVAL)
+    handoff = handoff.transition(HandoffStatus.APPROVED)
+    handoff = handoff.transition(HandoffStatus.SENT)
+    handoff = handoff.transition(HandoffStatus.RECEIVED)
+    handoff = handoff.transition(HandoffStatus.AWAITING_USER_DECISION)
+
+    assert not handoff.is_terminal
+    assert HandoffStatus.IN_PROGRESS in available_handoff_transitions(
+        handoff.status
+    )
+    assert HandoffStatus.RETURN_SENT in available_handoff_transitions(
+        handoff.status
+    )
+
+    returned = handoff.transition(HandoffStatus.RETURN_SENT).transition(
+        HandoffStatus.RETURNED
+    )
+    assert not returned.is_terminal
+    assert returned.transition(HandoffStatus.IN_PROGRESS).status is HandoffStatus.IN_PROGRESS

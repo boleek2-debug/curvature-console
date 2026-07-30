@@ -65,6 +65,7 @@ from curvature_console.presentation.handoff_controls_dialog import (
     HandoffControlsDialog,
     HandoffDeliveryProgressDialog,
     confirm_handoff_delivery,
+    confirm_handoff_return,
 )
 from curvature_console.presentation.package_review_dialog import (
     PackageReviewDialog,
@@ -82,6 +83,7 @@ class PendingBrowserExchange:
     department_id: str
     user_task: str
     handoff_id: str | None = None
+    handoff_return: bool = False
 
 
 class MainWindow(QMainWindow):
@@ -161,6 +163,7 @@ class MainWindow(QMainWindow):
             HandoffDeliveryProgressDialog | None
         ) = None
         self._handoff_progress_request_id: str | None = None
+        self._handoff_controls_dialog: HandoffControlsDialog | None = None
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setObjectName("departmentSplitter")
@@ -243,8 +246,23 @@ class MainWindow(QMainWindow):
             state_store=self.state_store,
             parent=self,
         )
+        self._handoff_controls_dialog = dialog
         dialog.deliver_requested.connect(self.deliver_handoff)
-        dialog.exec()
+        dialog.return_requested.connect(self.return_handoff)
+        try:
+            dialog.exec()
+        finally:
+            self._handoff_controls_dialog = None
+
+    def _refresh_handoff_controls(
+        self,
+        handoff_id: str | None = None,
+    ) -> None:
+        """Refresh the open Hub without losing the current handoff selection."""
+
+        dialog = self._handoff_controls_dialog
+        if dialog is not None and dialog.isVisible():
+            dialog.reload(handoff_id)
 
     def deliver_handoff(self, handoff_id: str) -> None:
         """Deliver one approved handoff to its persisted target route."""
@@ -307,6 +325,7 @@ class MainWindow(QMainWindow):
             f"{record.target_department_id}.",
         )
         self.state_store.save_handoff(sent)
+        self._refresh_handoff_controls(sent.handoff_id)
 
         request_id = f"handoff-{uuid4().hex}"
         self._pending_exchanges[request_id] = PendingBrowserExchange(
@@ -348,6 +367,124 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             "Controlled handoff delivery engaged..."
         )
+        worker.start()
+
+
+    def return_handoff(self, handoff_id: str) -> None:
+        """Return the latest captured target reply once to the source route."""
+
+        if self._browser_worker is not None:
+            QMessageBox.information(
+                self,
+                "ChatGPT operation in progress",
+                "Wait for the current ChatGPT exchange before returning a reply.",
+            )
+            return
+
+        record = self.state_store.load_handoff(handoff_id)
+        if record is None:
+            QMessageBox.critical(
+                self, "Handoff unavailable", f"Unknown handoff: {handoff_id}"
+            )
+            return
+        if record.status not in {
+            HandoffStatus.AWAITING_USER_DECISION,
+            HandoffStatus.ANSWERED,
+        }:
+            QMessageBox.warning(
+                self,
+                "Reply not awaiting decision",
+                "Only a captured target reply awaiting decision may be returned.",
+            )
+            return
+
+        reply = next(
+            (
+                message.body
+                for message in reversed(record.timeline)
+                if message.author_department_id == record.target_department_id
+                and not message.body.startswith("Delivery received by target")
+            ),
+            "",
+        )
+        if not reply:
+            QMessageBox.critical(
+                self,
+                "Captured reply unavailable",
+                "No target reply is available for this handoff.",
+            )
+            return
+
+        route = self.state_store.load_chat_route(record.source_department_id)
+        if route is None:
+            QMessageBox.critical(
+                self,
+                "Source route unavailable",
+                "The source department has no active conversation route.",
+            )
+            return
+
+        if not confirm_handoff_return(
+            parent=self,
+            source_department_id=record.source_department_id,
+            reply_text=reply,
+        ):
+            return
+
+        message_text = (
+            f"CURVATURE_HANDOFF_ID: {record.handoff_id}\n"
+            f"CURVATURE_REQUEST_ID: {record.request_id}\n\n"
+            "# SUPERVISED HANDOFF RETURN\n\n"
+            f"Original source department: {record.source_department_id}\n"
+            f"Target department: {record.target_department_id}\n\n"
+            "The operator approved the following captured target reply "
+            "for return to the original source department:\n\n"
+            f"{reply}\n\n"
+            "Review this update within the source department's authority. "
+            "Do not automatically close the handoff or start another "
+            "cross-department delivery."
+        )
+        returning = record.transition(HandoffStatus.RETURN_SENT).append_message(
+            record.target_department_id,
+            "Controlled return started to " + record.source_department_id + ".",
+        )
+        self.state_store.save_handoff(returning)
+        self._refresh_handoff_controls(returning.handoff_id)
+
+        request_id = f"handoff-return-{uuid4().hex}"
+        self._pending_exchanges[request_id] = PendingBrowserExchange(
+            request_id=request_id,
+            department_id=record.source_department_id,
+            user_task=message_text,
+            handoff_id=record.handoff_id,
+            handoff_return=True,
+        )
+        self._set_browser_operation_busy(True, record.source_department_id)
+        worker = BrowserBridgeWorker(
+            config=self.browser_config,
+            request=BrowserExchangeRequest(
+                request_id=request_id,
+                department_id=record.source_department_id,
+                message_text=message_text,
+                create_new_thread=False,
+                conversation_url=route.active_conversation_url,
+                confirmation_marker=(
+                    f"CURVATURE_HANDOFF_ID: {record.handoff_id}"
+                ),
+            ),
+        )
+        worker.succeeded.connect(self._handle_browser_success)
+        worker.failed.connect(self._handle_browser_failure)
+        worker.route_unverified.connect(self._handle_browser_route_unverified)
+        worker.stage_changed.connect(self._handle_browser_stage)
+        worker.finished.connect(self._clear_browser_worker)
+        self._browser_worker = worker
+        self._show_handoff_progress(
+            request_id=request_id,
+            target_department_id=record.source_department_id,
+            handoff_message="# Return captured reply to source",
+        )
+        self.statusBar().showMessage("Controlled handoff return engaged...")
         worker.start()
 
     def _capture_department_handoff_proposals(
@@ -415,6 +552,21 @@ class MainWindow(QMainWindow):
         record = self.state_store.load_handoff(pending.handoff_id)
         if record is None:
             return
+        if pending.handoff_return:
+            if record.status is HandoffStatus.RETURN_SENT:
+                record = record.transition(
+                    HandoffStatus.RETURNED
+                ).append_message(
+                    record.source_department_id,
+                    "Returned update received by source conversation.",
+                ).append_message(
+                    record.source_department_id,
+                    response_text,
+                )
+            self.state_store.save_handoff(record)
+            self._refresh_handoff_controls(record.handoff_id)
+            return
+
         if record.status is HandoffStatus.SENT:
             record = record.transition(
                 HandoffStatus.RECEIVED
@@ -424,12 +576,13 @@ class MainWindow(QMainWindow):
             )
         if record.status is HandoffStatus.RECEIVED:
             record = record.transition(
-                HandoffStatus.ANSWERED
+                HandoffStatus.AWAITING_USER_DECISION
             ).append_message(
                 record.target_department_id,
                 response_text,
             )
         self.state_store.save_handoff(record)
+        self._refresh_handoff_controls(record.handoff_id)
 
     def _hold_failed_handoff(
         self,
@@ -439,14 +592,24 @@ class MainWindow(QMainWindow):
         if pending.handoff_id is None:
             return
         record = self.state_store.load_handoff(pending.handoff_id)
-        if record is None or record.status is not HandoffStatus.SENT:
+        if record is None:
             return
-        held = record.transition(HandoffStatus.HELD).append_message(
-            record.source_department_id,
-            "Controlled delivery failed and was held: "
-            + error_message,
-        )
+        if pending.handoff_return:
+            if record.status is not HandoffStatus.RETURN_SENT:
+                return
+            held = record.transition(HandoffStatus.HELD).append_message(
+                record.target_department_id,
+                "Controlled return failed and was held: " + error_message,
+            )
+        else:
+            if record.status is not HandoffStatus.SENT:
+                return
+            held = record.transition(HandoffStatus.HELD).append_message(
+                record.source_department_id,
+                "Controlled delivery failed and was held: " + error_message,
+            )
         self.state_store.save_handoff(held)
+        self._refresh_handoff_controls(held.handoff_id)
 
     def _bootstrap_chat_routes(self) -> None:
         """Initialise missing department routes without using chat titles."""
@@ -944,6 +1107,7 @@ class MainWindow(QMainWindow):
             state = self.state_store.load_department_state(department_id)
             if state is not None:
                 panel.restore_conversation_text(state.conversation_text)
+                panel.restore_reply_read_state(state.last_read_reply_count)
                 panel.input_editor.setPlainText(state.draft_text)
 
             panel.attachment_list.restore_records(
@@ -977,6 +1141,7 @@ class MainWindow(QMainWindow):
             department_id=department_id,
             conversation_text=panel.conversation_text(),
             draft_text=panel.input_editor.toPlainText(),
+            last_read_reply_count=panel.last_read_reply_count,
         )
         self.state_store.replace_attachments(
             department_id,
@@ -993,7 +1158,9 @@ class MainWindow(QMainWindow):
     def show_reply_viewer(self, department_id: str) -> None:
         if department_id not in self.department_panels:
             raise ValueError(f"Unknown department: {department_id}")
-        panel=self.department_panels[department_id]
+        panel = self.department_panels[department_id]
+        panel.mark_replies_read()
+        self.save_department_state(department_id)
         ReplyViewerDialog(
             department_title=panel.title_label.text(),
             transcript=panel.conversation_text(),

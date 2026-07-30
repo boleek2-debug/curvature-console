@@ -16,6 +16,7 @@ def test_department_state_survives_reopen(tmp_path: Path) -> None:
         "core",
         "Core transcript",
         "Unsaved Core draft",
+        last_read_reply_count=3,
     )
     store.close()
 
@@ -25,6 +26,7 @@ def test_department_state_survives_reopen(tmp_path: Path) -> None:
     assert state is not None
     assert state.conversation_text == "Core transcript"
     assert state.draft_text == "Unsaved Core draft"
+    assert state.last_read_reply_count == 3
 
     reopened.close()
 
@@ -276,4 +278,154 @@ def test_saving_updated_handoff_replaces_timeline_atomically(
 
     assert restored is not None
     assert restored.timeline == updated.timeline
+    store.close()
+
+
+def test_legacy_handoff_status_constraint_is_migrated_without_data_loss(
+    tmp_path: Path,
+) -> None:
+    import sqlite3
+
+    database = tmp_path / "state.sqlite3"
+    connection = sqlite3.connect(database)
+    connection.executescript(
+        """
+        PRAGMA foreign_keys = ON;
+
+        CREATE TABLE handoff_record (
+            handoff_id TEXT PRIMARY KEY,
+            request_id TEXT NOT NULL,
+            source_department_id TEXT NOT NULL,
+            target_department_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            user_visible_message TEXT NOT NULL,
+            CHECK (
+                source_department_id IN ('project', 'core', 'research')
+            ),
+            CHECK (
+                target_department_id IN ('project', 'core', 'research')
+            ),
+            CHECK (source_department_id != target_department_id),
+            CHECK (
+                status IN (
+                    'draft',
+                    'pending_approval',
+                    'approved',
+                    'sent',
+                    'received',
+                    'answered',
+                    'closed',
+                    'rejected',
+                    'held',
+                    'stopped'
+                )
+            )
+        );
+
+        CREATE TABLE handoff_message (
+            message_id TEXT PRIMARY KEY,
+            handoff_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            author_department_id TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE (handoff_id, sequence),
+            FOREIGN KEY (handoff_id)
+                REFERENCES handoff_record(handoff_id)
+                ON DELETE CASCADE
+        );
+
+        INSERT INTO handoff_record (
+            handoff_id,
+            request_id,
+            source_department_id,
+            target_department_id,
+            status,
+            created_at,
+            updated_at,
+            user_visible_message
+        ) VALUES (
+            'handoff-legacy',
+            'request-legacy',
+            'project',
+            'core',
+            'answered',
+            '2026-07-30T10:00:00+00:00',
+            '2026-07-30T10:01:00+00:00',
+            'Legacy handoff'
+        );
+
+        INSERT INTO handoff_message (
+            message_id,
+            handoff_id,
+            sequence,
+            author_department_id,
+            body,
+            created_at
+        ) VALUES (
+            'message-legacy',
+            'handoff-legacy',
+            0,
+            'core',
+            'Legacy reply',
+            '2026-07-30T10:01:00+00:00'
+        );
+        """
+    )
+    connection.close()
+
+    store = SQLiteStateStore(database)
+    restored = store.load_handoff("handoff-legacy")
+
+    assert restored is not None
+    assert restored.status.value == "answered"
+    assert restored.timeline[0].body == "Legacy reply"
+
+    from dataclasses import replace
+    from curvature_console.infrastructure.handoff import HandoffStatus
+
+    updated = replace(
+        restored,
+        status=HandoffStatus.AWAITING_USER_DECISION,
+    )
+    store.save_handoff(updated)
+    store.close()
+
+    reopened = SQLiteStateStore(database)
+    migrated = reopened.load_handoff("handoff-legacy")
+
+    assert migrated is not None
+    assert migrated.status.value == "awaiting_user_decision"
+    assert migrated.timeline[0].body == "Legacy reply"
+    reopened.close()
+
+
+def test_legacy_department_state_gains_reply_read_column(tmp_path: Path) -> None:
+    import sqlite3
+
+    database = tmp_path / "legacy-state.sqlite3"
+    connection = sqlite3.connect(database)
+    connection.execute(
+        "CREATE TABLE department_state ("
+        "department_id TEXT PRIMARY KEY, "
+        "conversation_text TEXT NOT NULL, "
+        "draft_text TEXT NOT NULL)"
+    )
+    connection.execute(
+        "INSERT INTO department_state VALUES (?, ?, ?)",
+        ("project", "Transcript", "Draft"),
+    )
+    connection.commit()
+    connection.close()
+
+    store = SQLiteStateStore(database)
+    state = store.load_department_state("project")
+    assert state is not None
+    assert state.last_read_reply_count == 0
+    store.save_department_state(
+        "project", "Transcript", "Draft", last_read_reply_count=2
+    )
+    assert store.load_department_state("project").last_read_reply_count == 2
     store.close()
