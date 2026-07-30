@@ -1,9 +1,9 @@
 # CURVATURE CONSOLE — CURRENT STATE
 
-Status: B5.2R verified; closeout pending
-Version: 1.1.0
+Status: Operational; B5.5F and B5.6A completed and verified
+Version: 2.2.0
 Owner: Curvature Core
-Last Updated: 2026-07-26
+Last Updated: 2026-07-30
 
 # Purpose
 
@@ -214,7 +214,7 @@ the production workflow.
 
 # B5.5A — First Contact Foundation
 
-Status: Implemented for validation.
+Status: Completed and verified.
 
 This sprint adds the backend-only foundation for supervised
 interdepartmental communication:
@@ -233,7 +233,7 @@ loop automation or background sends.
 
 # B5.5B — Bridge Controls
 
-Status: Implemented for validation.
+Status: Completed and verified.
 
 A dedicated `Bridge Controls` dialog now provides supervised handoff actions:
 
@@ -253,22 +253,51 @@ automation.
 
 # B5.5C — Engage Controlled Delivery
 
-Status: Implemented for validation.
+Status: Completed, committed and verified.
 
-An approved handoff can now be delivered exactly once by an explicit `Deliver`
-action. Delivery uses the target department's persisted
-`active_conversation_url` and the existing BrowserBridgeWorker.
+Commit `10dbf6c` added one-shot supervised delivery of an approved handoff:
 
-The controlled lifecycle is:
+- only an explicitly approved handoff may be delivered;
+- the user confirms the delivery before browser activity begins;
+- the exact persisted target department conversation URL is used;
+- the handoff identifier is included in the delivered message;
+- success records received and answered timeline entries;
+- browser failure moves the handoff to held with a visible reason;
+- no autonomous loop or background interdepartmental conversation is introduced.
+
+# B5.5F — Bounded Normal Task Context
+
+Status: Completed and verified.
+
+Direct comparison of commit `2d21958` with `10dbf6c` confirmed that
+`browser_bridge.py` and `transfer_package.py` were byte-identical. The browser
+entry path was not changed by B5.5A–B5.5C.
+
+The normal Task payload grew because the two full authoritative Markdown
+documents grew while the builder continued embedding both without a size
+boundary. Normal Task context is now bounded at document boundaries. Current
+state has priority; additional authoritative documents are omitted when the
+12,000-character section budget would be exceeded. Thread Handoff remains the
+full-context route.
+
+# B5.6A — Reply Viewer
+
+Status: Completed and user-verified.
+
+Panels show `Reply received` and activate `View Replies (N)`. Full transcripts remain persisted and feed Task context and Thread Pressure. A large resizable viewer shows saved tasks and replies.
+
+# 2026-07-30 Closeout Verification
+
+Verified state before final repository commit:
 
 ```text
-approved
-→ explicit confirmation
-→ sent
-→ received
-→ answered
+154 automated tests passed
+git diff --check passed
+Reply Viewer manually verified by the user
+normal task ordering and continuity manually verified
+B5.5C remains the committed controlled-delivery baseline
 ```
 
-A failed browser delivery moves `sent` to `held` with the failure recorded in
-the visible timeline. No background delivery, polling loop or autonomous
-department-to-department recursion is introduced.
+The next activity is a fresh repository snapshot and an audit of the remaining
+interdepartmental communication scope. No further Console feature is approved by
+this closeout.

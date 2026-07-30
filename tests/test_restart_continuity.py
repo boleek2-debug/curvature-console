@@ -31,7 +31,7 @@ def test_window_restores_drafts_attachments_and_focus(
     first.department_panels["core"].input_editor.setPlainText(
         "Continue implementing persistence."
     )
-    first.department_panels["core"].conversation_view.setPlainText(
+    first.department_panels["core"].restore_conversation_text(
         "Core conversation transcript"
     )
     first.department_panels["core"].attachment_list.add_paths([attachment])
@@ -59,7 +59,7 @@ def test_window_restores_drafts_attachments_and_focus(
         == "Continue implementing persistence."
     )
     assert (
-        second.department_panels["core"].conversation_view.toPlainText()
+        second.department_panels["core"].conversation_text()
         == "Core conversation transcript"
     )
     assert [

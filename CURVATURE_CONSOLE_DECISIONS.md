@@ -1,9 +1,9 @@
 # CURVATURE CONSOLE ARCHITECTURE DECISIONS
 
 Status: Active
-Version: 1.4.0
+Version: 1.5.0
 Owner: Project Curvature
-Last Updated: 2026-07-24
+Last Updated: 2026-07-30
 
 ---
 
@@ -975,14 +975,62 @@ drafts. Terminal states remain closed.
 - B5.5C can implement delivery as a separate audited transition;
 - restart continuity preserves both state and control history.
 
-# ADR-015 — One-Shot Controlled Delivery
+
+# ADR-015 — One-Shot Approved Handoff Delivery
 
 Status: Accepted
 Date: 2026-07-29
 
-An approved handoff may be delivered only through an explicit Deliver action
-and a second user confirmation. One click starts one BrowserBridgeWorker
-exchange against the target department's persisted active conversation URL.
+## Decision
 
-Success records `sent → received → answered`. Failure records `sent → held`.
-No retry, continuation or reply loop runs automatically.
+An approved interdepartmental handoff may be delivered exactly once only after a
+separate visible user confirmation. Delivery uses the target department's exact
+persisted conversation URL and remains bound to immutable request and handoff
+identifiers.
+
+Success records the returned answer in the handoff timeline. Failure transitions
+the handoff to held with a visible reason. Approval does not create an autonomous
+loop, and Console does not continue the conversation in the background.
+
+## Consequences
+
+- Project, Core and Research can exchange a supervised message through Console;
+- the user remains the mandatory gate before delivery;
+- failed delivery is recoverable without losing the handoff record;
+- multi-turn or autonomous departmental communication remains outside this ADR.
+
+# ADR-018 — Bound Normal Task Context, Not Browser Input
+
+Status: Accepted
+Date: 2026-07-29
+
+Evidence showed no browser-entry code difference between the last live-passing
+commit and B5.5C. The changed input was the unbounded authoritative context:
+the same builder embedded two Markdown documents whose combined size increased.
+
+Normal Task packages therefore use a fixed 12,000-character authoritative
+section budget and omit additional whole documents rather than truncating them.
+The current-state document has priority. Full continuity belongs to Thread
+Handoff mode.
+
+# ADR-019 — Separate Reply Status from Reply Reading
+
+Status: Accepted
+Date: 2026-07-30
+
+## Decision
+
+Department panels show compact reply availability rather than rendering the full
+transcript inline. Full tasks and replies remain persisted and are read through a
+dedicated, resizable per-department Reply Viewer.
+
+The persisted transcript remains the source for normal Task context, Thread
+Pressure and Thread Handoff. Replacing inline transcript display must not replace
+or truncate the underlying stored conversation.
+
+## Consequences
+
+- long responses no longer crowd the three-panel workspace;
+- users can inspect current and earlier replies on demand;
+- restart continuity and context construction remain unchanged;
+- reply presentation and transcript persistence remain separate concerns.

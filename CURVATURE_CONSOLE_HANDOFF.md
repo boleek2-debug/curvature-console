@@ -1,9 +1,9 @@
 # CURVATURE CONSOLE HANDOFF
 
-Status: B5.2R verified; closeout pending
-Version: 2.1.0
+Status: B5.5F and B5.6A completed and verified
+Version: 2.2.0
 Owner: Curvature Core
-Last Updated: 2026-07-26
+Last Updated: 2026-07-30
 
 # 1. Mission
 
@@ -267,47 +267,49 @@ the download scanner.
 The temporary TEST-01 observer served its diagnostic purpose and is not part of
 the production workflow.
 
-# Exact Next Step
+# Completed Supervised Handoff Scope
 
-Close the repository milestone with a clean validation, explicit staging,
-commit and push. After that, promote the next approved Console sprint rather
-than extending B5.R2D2.
+## B5.5A — First Contact Foundation
 
-# B5.5A Handoff Foundation
+Structured handoff records, lifecycle validation, complete visible timelines and
+SQLite restart continuity are implemented.
 
-The repository now has a backend-only supervised handoff aggregate.
+## B5.5B — Bridge Controls
+
+The user may create, inspect, edit, request approval, approve, reject, hold,
+redirect or stop a handoff. Approval remains distinct from delivery.
+
+## B5.5C — Engage Controlled Delivery
+
+Commit `10dbf6c` implements one-shot delivery of an approved handoff after a
+separate user confirmation. Success records the target response; failure holds the
+handoff with a visible reason. No autonomous loop is implemented.
+
+# Completed Context and Reply Scope
+
+## B5.5F — Bounded Normal Task Context
+
+Normal Task authoritative context is bounded at whole-document boundaries with a
+12,000-character budget. Current State has priority. Thread Handoff remains the
+full-context route.
+
+## B5.6A — Reply Viewer
+
+Department panels show compact reply receipts and `View Replies (N)`. The
+resizable viewer exposes saved tasks and replies while the complete persisted
+transcript continues feeding context, Thread Pressure and Thread Handoff.
+
+# Verification
 
 ```text
-create draft
-→ request user approval
-→ send
-→ mark received
-→ record answer
-→ close
+154 automated tests passed
+git diff --check passed
+Reply Viewer manually verified
+department reply ordering manually verified
 ```
 
-Alternative supervised outcomes are reject, hold and stop. Every visible
-message is retained in an ordered timeline. No browser send or automatic loop
-is introduced by B5.5A.
+# Exact Next Step
 
-# Required Next Handoff
-
-Project must approve the UX and authority rules for B5.5B before Core adds user
-controls. Core must not invent approval semantics or autonomous routing.
-
-# B5.5B Bridge Controls
-
-The toolbar now exposes `Bridge Controls`. The dialog supervises persisted
-handoffs and never sends a ChatGPT message.
-
-The next Core sprint, B5.5C, may implement controlled delivery only after
-B5.5B UI validation and Project approval of routing and loop limits.
-
-# B5.5C Engage
-
-Bridge Controls now exposes Deliver only for approved handoffs. Delivery is
-one-shot, confirmed and visible. Responses are written into both the target
-department panel and the handoff timeline.
-
-Any multi-turn or automatic continuation remains outside B5.5C and requires a
-separate Project decision.
+Commit and push this closeout with explicit staging, then create a fresh current
+repository snapshot. Use that snapshot to audit how much of supervised
+interdepartmental communication is complete and define only the remaining gap.

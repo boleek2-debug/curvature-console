@@ -1,9 +1,9 @@
 # CURVATURE CONSOLE DEVELOPMENT PIPELINE
 
 Status: Active
-Version: 1.3.0
+Version: 1.4.0
 Owner: Curvature Core
-Last Updated: 2026-07-24
+Last Updated: 2026-07-30
 
 ---
 
@@ -577,19 +577,53 @@ create draft
 → restart-safe reload
 ```
 
-`approved` does not mean `sent`. No browser worker is called by Bridge Controls.
+`approved` does not mean `sent`. Bridge Controls emits a separate delivery request only after the user chooses Engage and confirms the one-shot send.
 
-# B5.5C Controlled Delivery Pipeline
+# Controlled Handoff Delivery
 
 ```text
 approved handoff
-→ user clicks Deliver
-→ user confirms target and message
-→ load target active_conversation_url
-→ persist sent
-→ run one BrowserBridgeWorker exchange
-→ success: persist received and answered
-→ failure: persist held
+→ user selects Engage
+→ explicit one-shot confirmation
+→ exact target active_conversation_url
+→ request- and handoff-bound browser exchange
+→ answer appended to visible timeline
+→ or failure transitions handoff to held
 ```
 
-There is no automatic retry and no interdepartmental loop.
+No success path automatically creates another handoff or sends another message.
+
+# Bounded Task Context
+
+```text
+normal Task
+→ current-state document first
+→ include further authoritative document only within 12,000-character budget
+→ otherwise emit explicit omission marker
+→ browser delivery
+
+Thread Handoff
+→ full context unchanged
+```
+
+# Reply Presentation
+
+```text
+response captured → transcript persisted → Reply received → View Replies (N) → large viewer
+```
+
+# B5.5F / B5.6A Closeout Gate
+
+Required evidence:
+
+```text
+full automated suite passes
+git diff --check passes
+Reply Viewer opens current and earlier replies
+restart preserves reply count and transcript use
+normal Task remains bounded
+Thread Handoff remains full-context
+B5.5C controlled delivery remains intact
+```
+
+Stage intended files explicitly, commit, push and confirm a clean working tree.

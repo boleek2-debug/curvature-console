@@ -1,9 +1,9 @@
 # CURVATURE CONSOLE ROADMAP
 
-Status: Active corrective development
-Version: 2.1.0
+Status: Operational; closeout and communication audit
+Version: 2.2.0
 Owner: Project Curvature
-Last Updated: 2026-07-26
+Last Updated: 2026-07-30
 
 # Product Constraint
 
@@ -70,53 +70,56 @@ Package Review remains a separate workflow and accepts only valid deployment
 packages. A downloaded `.txt` must remain a `.txt` and must not be treated as a
 package.
 
-# Active Next Sprint
+# Completed Supervised Communication Milestones
 
-## ASSISTANT-001B5.5 — Supervised Interdepartmental Communication
+## ASSISTANT-001B5.5A — First Contact Foundation
 
-### B5.5A — First Contact Foundation
+Completed: structured handoff aggregate, explicit lifecycle, complete timeline,
+SQLite persistence and restart continuity.
 
-Backend-only deliverables:
+## ASSISTANT-001B5.5B — Bridge Controls
 
-- structured handoff aggregate;
-- validated source and target departments;
-- request and handoff identifiers;
-- explicit lifecycle transition model;
-- complete correspondence timeline;
-- SQLite persistence and restart continuity;
-- automated tests;
-- no UI and no automatic sends.
+Completed: create, inspect, edit, approval, reject, hold, redirect and stop controls.
+Approval remains separate from delivery.
 
-### B5.5B — Bridge Controls
+## ASSISTANT-001B5.5C — Engage Controlled Delivery
 
-Implemented for validation:
+Completed at commit `10dbf6c`: one approved handoff can be sent once to the target
+department after explicit user confirmation. The response is recorded in the
+timeline; failure holds the handoff. No autonomous loop exists.
 
-- create and inspect handoff;
-- request approval, approve, edit, reject, hold, redirect and stop controls;
-- explicit `approved` state separated from `sent`;
-- full visible action timeline and restart continuity;
-- no background sends.
+## ASSISTANT-001B5.5F — Bounded Normal Task Context
 
-### B5.5C — Engage Controlled Delivery
+Completed: normal Tasks use a 12,000-character whole-document authoritative
+context budget with Current State priority. Thread Handoff remains full-context.
 
-Implemented for validation:
+## ASSISTANT-001B5.6A — Reply Viewer
 
-- one-shot browser delivery using approved active conversation URLs;
-- explicit confirmation before every delivery;
-- sent, received, answered and held audit transitions;
-- zero automatic loops or retries.
+Completed and user-verified: compact reply receipts, per-department history,
+current and earlier reply inspection, and preserved restart/context continuity.
 
+# Current Gate
 
-Deliver:
+```text
+154 automated tests passed
+git diff --check passed
+manual Reply Viewer verification passed
+manual department ordering verification passed
+```
 
-- structured handoff records;
-- source and target department;
-- full visible correspondence timeline;
-- draft, pending approval, sent, received, answered and closed states;
-- user controls to approve, edit, reject, hold, redirect or stop;
-- request and handoff identifiers;
-- safe loop limits;
-- optional controlled automation only after the supervised path is verified.
+# Exact Next Step
+
+1. Apply the closeout documentation package.
+2. Run the full validation script and `git diff --check`.
+3. Stage intended files explicitly, commit and push.
+4. Confirm `main == origin/main` and a clean working tree.
+5. Create a fresh current snapshot.
+6. Audit the implemented handoff path against the intended supervised
+   Project → Core → Research workflow.
+7. Define the smallest remaining communication sprint from evidence in that
+   snapshot.
+
+No additional Console feature is approved before the snapshot audit.
 
 # Maintenance Gate
 
@@ -128,38 +131,8 @@ Every change must preserve:
 - invisible normal browser operation;
 - visible activity heartbeat;
 - runtime diagnostics;
-- explicit repository-write approval;
+- explicit repository-write and delivery approval;
+- no autonomous background loop;
 - no automatic commit or push;
 - complete automated tests;
 - clean Git state.
-
-
-## B5.R2D2 Candidate Acceptance
-
-Automated validation must cover filename preservation, collision-safe naming,
-format-agnostic link detection, request-result transport, persistence and panel
-display.
-
-Live acceptance requires Core to generate and return one `.txt` file that is
-captured under `data/inbox/core/` without any ZIP conversion.
-
-## B5.R2D2 File-Card Capture Gate
-
-Acceptance now includes generated-file cards rendered outside the assistant text
-container. Empty capture must produce actionable bounded DOM diagnostics.
-
-## B5.R2D2 Two-Stage Acceptance
-
-Live acceptance requires a real generated file card to either download directly
-or open a preview whose Download control is captured by Console.
-
-
-# B5.R2D2 Acceptance Result
-
-```text
-automated validation: 128 passed
-live Core file card: PASS
-delivery channel: fetch response
-saved file: data/inbox/core/curvature-download-test.txt
-exact content verified: CURVATURE_DOWNLOAD_CAPTURE_OK
-```

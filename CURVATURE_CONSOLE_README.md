@@ -1,9 +1,9 @@
 # CURVATURE CONSOLE — SOURCE OVERVIEW
 
 Status: Active
-Version: 2.1.0
+Version: 2.2.0
 Owner: Project Curvature
-Last Updated: 2026-07-26
+Last Updated: 2026-07-30
 
 # Purpose
 
@@ -66,26 +66,42 @@ Visible Chrome is reserved for confirmed login or human verification.
 Console-owned Chrome and Xvfb run in one owned process group and are terminated
 after each exchange. Port 9222 is verified as released.
 
-# Download and Package Distinction
+# Generated Files and Packages
 
-Generated-file capture is the next active corrective sprint.
+Generated files returned by ChatGPT are captured from the active assistant turn and
+stored under `data/inbox/<department>/` with their original file type. Package
+Review is separate and accepts only supported deployment ZIPs containing
+`CURVATURE_PACKAGE.json`. Repository writes always require explicit user approval.
 
-Downloads may be any file type. The original extension must be preserved.
+# Supervised Interdepartmental Communication
 
-Package Review is separate and applies only to valid deployment packages with a
-supported manifest. A normal `.txt`, `.pdf`, image or office document is not a
-deployment package.
+Console provides a persisted handoff model and Bridge Controls for Project, Core
+and Research. The user may create, edit, approve, reject, hold, redirect, stop and
+engage a handoff. Engage performs one confirmed delivery to the target department's
+exact active conversation URL. It does not create an autonomous conversation loop.
 
-# Next
+# Bounded Tasks and Full Handoffs
+
+Normal Task packages use bounded authoritative context at whole-document
+boundaries. Thread Handoff remains the full-context continuity mechanism.
+
+# Viewing Replies
+
+Department panels show `Reply received` and `View Replies (N)`. The Reply Viewer
+opens the complete saved task and reply history for that department. The underlying
+transcript remains persisted and continues to feed Task context, Thread Pressure and
+Thread Handoff after restart.
+
+# Verified Closeout State
 
 ```text
-ASSISTANT-001B5.R2D2 — General Generated-File Capture
-```
-
-Then:
-
-```text
-ASSISTANT-001B5.5 — Supervised Interdepartmental Communication
+B5.5A handoff foundation: complete
+B5.5B supervised controls: complete
+B5.5C one-shot controlled delivery: complete at commit 10dbf6c
+B5.5F bounded normal Task context: complete
+B5.6A Reply Viewer: complete and user-verified
+automated validation: 154 passed
+git diff --check: passed
 ```
 
 # Non-Negotiable Rules
@@ -94,59 +110,7 @@ ASSISTANT-001B5.5 — Supervised Interdepartmental Communication
 - no routing by conversation title;
 - no arbitrary existing-tab selection;
 - explicit request and department binding;
-- explicit repository-write approval;
+- user approval before repository writes or interdepartmental delivery;
+- no autonomous background department loop;
 - no automatic commit or push;
 - test → verify → document → commit → push.
-
-
-# Generated-File Inbox
-
-Generated files are stored by department:
-
-```text
-data/inbox/project/
-data/inbox/core/
-data/inbox/research/
-```
-
-The file type is preserved. Package Review remains available only for ZIP files
-that may contain a supported deployment manifest.
-
-Generated files may be rendered as links, buttons or file cards. Console scans
-the complete assistant turn rather than only the text message node.
-
-Generated-file cards may use a two-stage interaction. Console supports both a
-direct card download and card → preview → Download.
-
-# Generated Files
-
-Generated files returned by ChatGPT are captured from the active assistant turn
-and stored under:
-
-```text
-data/inbox/<department>/
-```
-
-The verified ChatGPT flow uses an HTTP attachment fetch rather than a native
-browser download event. Runtime inbox contents are local and excluded from Git.
-
-# Supervised Handoff Foundation
-
-Curvature Console includes a backend model for visible, restart-safe
-interdepartmental handoffs. The current B5.5A implementation provides data,
-validation, lifecycle transitions and SQLite persistence only.
-
-There are no B5.5 user controls or automatic department-to-department sends
-yet.
-
-# Bridge Controls
-
-Use the toolbar `Bridge Controls` button to create and supervise handoffs.
-The dialog stores actions and correspondence in SQLite. It does not send
-messages to ChatGPT.
-
-# Controlled Handoff Delivery
-
-In Bridge Controls, an approved handoff exposes `Deliver`. The action requires
-confirmation and sends one message to the target department's active ChatGPT
-conversation. It does not start an automatic dialogue loop.

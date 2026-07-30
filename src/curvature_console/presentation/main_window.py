@@ -60,6 +60,9 @@ from curvature_console.presentation.handoff_controls_dialog import (
 from curvature_console.presentation.package_review_dialog import (
     PackageReviewDialog,
 )
+from curvature_console.presentation.reply_viewer_dialog import (
+    ReplyViewerDialog,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +171,7 @@ class MainWindow(QMainWindow):
             panel.transfer_package_requested.connect(
                 self.prepare_transfer_package
             )
+            panel.replies_view_requested.connect(self.show_reply_viewer)
             panel.workspace_state_changed.connect(self.save_department_state)
             panel.package_review_requested.connect(
                 self.review_generated_package
@@ -748,7 +752,7 @@ class MainWindow(QMainWindow):
                 department_title=panel.title_label.text(),
                 responsibility=panel.responsibility,
                 context=result,
-                conversation_text=panel.conversation_view.toPlainText(),
+                conversation_text=panel.conversation_text(),
                 draft_text=panel.input_editor.toPlainText(),
                 attachments=panel.attachment_list.records,
             )
@@ -802,7 +806,7 @@ class MainWindow(QMainWindow):
         for department_id, panel in self.department_panels.items():
             state = self.state_store.load_department_state(department_id)
             if state is not None:
-                panel.conversation_view.setPlainText(state.conversation_text)
+                panel.restore_conversation_text(state.conversation_text)
                 panel.input_editor.setPlainText(state.draft_text)
 
             panel.attachment_list.restore_records(
@@ -834,7 +838,7 @@ class MainWindow(QMainWindow):
         panel = self.department_panels[department_id]
         self.state_store.save_department_state(
             department_id=department_id,
-            conversation_text=panel.conversation_view.toPlainText(),
+            conversation_text=panel.conversation_text(),
             draft_text=panel.input_editor.toPlainText(),
         )
         self.state_store.replace_attachments(
@@ -848,6 +852,16 @@ class MainWindow(QMainWindow):
         for department_id in self.department_panels:
             self.save_department_state(department_id)
         self._save_layout_state()
+
+    def show_reply_viewer(self, department_id: str) -> None:
+        if department_id not in self.department_panels:
+            raise ValueError(f"Unknown department: {department_id}")
+        panel=self.department_panels[department_id]
+        ReplyViewerDialog(
+            department_title=panel.title_label.text(),
+            transcript=panel.conversation_text(),
+            parent=self,
+        ).exec()
 
     def focus_department(
         self,

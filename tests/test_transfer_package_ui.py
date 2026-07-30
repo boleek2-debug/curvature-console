@@ -116,7 +116,7 @@ def test_browser_success_appends_and_persists_response(tmp_path) -> None:
         (),
     )
 
-    transcript = panel.conversation_view.toPlainText()
+    transcript = panel.conversation_text()
     assert "=== USER TASK ===\n\nExact user task." in transcript
     assert (
         "=== ASSISTANT RESPONSE ===\n\n"
@@ -232,7 +232,7 @@ def test_route_unverified_preserves_response_without_changing_route(
         "Observed response",
     )
 
-    transcript = panel.conversation_view.toPlainText()
+    transcript = panel.conversation_text()
     assert "Diagnostic task" in transcript
     assert "Observed response" in transcript
     unchanged_route = window.state_store.load_chat_route("core")
@@ -247,7 +247,7 @@ def test_stale_request_result_is_ignored(tmp_path) -> None:
         data_directory=tmp_path / "data",
     )
     panel = window.department_panels["core"]
-    before = panel.conversation_view.toPlainText()
+    before = panel.conversation_text()
 
     window._handle_browser_success(
         "unknown-request",
@@ -259,7 +259,7 @@ def test_stale_request_result_is_ignored(tmp_path) -> None:
         (),
     )
 
-    assert panel.conversation_view.toPlainText() == before
+    assert panel.conversation_text() == before
     window.close()
 
 

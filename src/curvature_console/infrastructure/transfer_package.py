@@ -250,7 +250,7 @@ class TransferPackageBuilder:
             "00_CURVATURE_CONSOLE_CURRENT_STATE.md",
             "CURVATURE_CONSOLE_HANDOFF.md",
         )
-        selected = tuple(
+        candidates = tuple(
             document
             for document in context.documents
             if any(
@@ -266,7 +266,7 @@ class TransferPackageBuilder:
             "when this task was prepared.",
         ]
 
-        if not selected:
+        if not candidates:
             parts.extend(
                 [
                     "",
@@ -275,8 +275,18 @@ class TransferPackageBuilder:
             )
             return "\n".join(parts), 0
 
-        for document in selected:
-            parts.extend(
+        # Normal Task packages must stay lightweight. The current-state
+        # document is authoritative and has first priority. Additional
+        # documents are included only while the complete authoritative
+        # section remains within the fixed character budget. Thread Handoff
+        # packages continue to carry the full context through their separate
+        # builder path.
+        character_budget = 12_000
+        included_count = 0
+        used_characters = len("\n".join(parts))
+
+        for document in candidates:
+            document_block = "\n".join(
                 [
                     "",
                     f"### {document.label}",
@@ -285,8 +295,28 @@ class TransferPackageBuilder:
                     document.content.rstrip(),
                 ]
             )
+            if (
+                included_count > 0
+                and used_characters + len(document_block) > character_budget
+            ):
+                parts.extend(
+                    [
+                        "",
+                        (
+                            "[Additional authoritative document omitted from "
+                            "this normal Task package to keep the browser "
+                            "payload bounded. Use Thread Handoff when its full "
+                            "contents are required.]"
+                        ),
+                    ]
+                )
+                continue
 
-        return "\n".join(parts), len(selected)
+            parts.append(document_block)
+            used_characters += len(document_block)
+            included_count += 1
+
+        return "\n".join(parts), included_count
 
     def _context_section(
         self,

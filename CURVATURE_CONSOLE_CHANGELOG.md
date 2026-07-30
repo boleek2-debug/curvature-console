@@ -1,9 +1,9 @@
 # CURVATURE CONSOLE CHANGELOG
 
 Status: Active
-Version: 0.9.0
+Version: 1.0.0
 Owner: Project Curvature
-Last Updated: 2026-07-24
+Last Updated: 2026-07-30
 
 ---
 
@@ -606,12 +606,38 @@ native browser download event.
 - added UI and domain tests;
 - added no automatic sends or interdepartmental loops.
 
-## 2026-07-29 — ASSISTANT-001B5.5C Engage
 
-- added an explicit Deliver control for approved handoffs;
-- added a second user confirmation before browser activity;
-- routed delivery through the target department's active conversation URL;
-- reused the existing single-exchange BrowserBridgeWorker;
-- persisted sent, received and answered transitions;
-- moved failed deliveries to held with an audit message;
-- added no background sends and no autonomous loops.
+## 2026-07-29 — ASSISTANT-001B5.5C Engage Controlled Delivery
+
+- added one-shot browser delivery for explicitly approved handoffs;
+- required a visible user confirmation before delivery;
+- routed only to the target department's persisted active conversation URL;
+- bound delivery to immutable request and handoff identifiers;
+- recorded successful replies in the visible handoff timeline;
+- moved failed deliveries to held with an explicit diagnostic reason;
+- added no autonomous loops or background sends;
+- committed as `10dbf6c`.
+
+## 2026-07-30 — ASSISTANT-001B5.5F Bounded Normal Task Context
+
+- confirmed browser bridge code is unchanged between `2d21958` and `10dbf6c`;
+- bounded normal Task authoritative context at document boundaries;
+- prioritised the current-state document;
+- retained full documents for Thread Handoff mode;
+- added regression tests for both bounded Task and full Thread Handoff paths.
+
+## 2026-07-30 — ASSISTANT-001B5.6A Reply Viewer
+
+- added compact reply receipts;
+- added `View Replies (N)`;
+- added large per-department reply history;
+- preserved transcript persistence and context use.
+
+## 2026-07-30 — B5.5F and B5.6A Closeout
+
+- confirmed 154 automated tests passed;
+- confirmed `git diff --check` passed;
+- manually verified Reply Viewer operation and department reply ordering;
+- corrected canonical documentation so B5.5C remains completed rather than future work;
+- preserved B5.5C controlled delivery as a separate, already committed milestone;
+- closed the current implementation without starting another feature sprint.

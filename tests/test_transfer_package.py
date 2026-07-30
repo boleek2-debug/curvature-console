@@ -278,3 +278,61 @@ def test_task_marks_missing_authoritative_context_explicitly(
         "[No authoritative Console state documents were loaded]"
         in package.text
     )
+
+
+
+def test_task_bounds_authoritative_context_at_document_boundaries(
+    tmp_path: Path,
+) -> None:
+    oversized_handoff = "HANDOFF-START-" + ("h" * 10_000) + "-HANDOFF-END"
+    context = ContextLoadResult(
+        department_id="core",
+        documents=(
+            ContextDocument(
+                label="console:00_CURVATURE_CONSOLE_CURRENT_STATE.md",
+                source_path=Path(
+                    "/console/00_CURVATURE_CONSOLE_CURRENT_STATE.md"
+                ),
+                content="CURRENT-STATE-" + ("s" * 7_000),
+            ),
+            ContextDocument(
+                label="console:CURVATURE_CONSOLE_HANDOFF.md",
+                source_path=Path("/console/CURVATURE_CONSOLE_HANDOFF.md"),
+                content=oversized_handoff,
+            ),
+        ),
+        errors=(),
+    )
+    request = TransferPackageRequest(
+        mode=TransferPackageMode.TASK,
+        department_id="core",
+        department_title="Curvature Core",
+        responsibility="Implementation.",
+        context=context,
+        conversation_text="",
+        draft_text="Run a normal task.",
+        attachments=(),
+    )
+
+    package = TransferPackageBuilder().build(request)
+
+    assert "CURRENT-STATE-" in package.text
+    assert "HANDOFF-START-" not in package.text
+    assert "Additional authoritative document omitted" in package.text
+    assert package.included_document_count == 1
+
+
+def test_thread_handoff_keeps_full_documents_despite_task_budget(
+    tmp_path: Path,
+) -> None:
+    package = TransferPackageBuilder().build(
+        _request(
+            tmp_path,
+            mode=TransferPackageMode.THREAD_HANDOFF,
+            long_document=True,
+        )
+    )
+
+    assert "BEGIN-" in package.text
+    assert "-END" in package.text
+    assert "Additional authoritative document omitted" not in package.text

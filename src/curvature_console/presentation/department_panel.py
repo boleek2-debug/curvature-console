@@ -36,6 +36,7 @@ class DepartmentPanel(QFrame):
     transfer_package_requested = Signal(str, str)
     package_review_requested = Signal(str, str)
     workspace_state_changed = Signal(str)
+    replies_view_requested = Signal(str)
 
     def __init__(
         self,
@@ -143,16 +144,19 @@ class DepartmentPanel(QFrame):
         context_button_layout.addWidget(self.refresh_context_button)
         context_button_layout.addWidget(self.preview_context_button)
 
-        self.conversation_view = QPlainTextEdit()
-        self.conversation_view.setObjectName(f"{department_id}Conversation")
-        self.conversation_view.setReadOnly(True)
-        self.conversation_view.setPlainText(
+        self._conversation_history_text = (
             f"{title} workspace is operational.\n\n"
             f"Responsibility: {responsibility}"
         )
-        self.conversation_view.textChanged.connect(
-            self._update_thread_pressure
-        )
+        self.conversation_view = QPlainTextEdit()
+        self.conversation_view.setObjectName(f"{department_id}Conversation")
+        self.conversation_view.setReadOnly(True)
+        self.conversation_view.setMaximumHeight(72)
+        self.conversation_view.setPlainText("Ready")
+        self.view_replies_button = QPushButton("View Replies")
+        self.view_replies_button.setObjectName(f"{department_id}ViewRepliesButton")
+        self.view_replies_button.setEnabled(False)
+        self.view_replies_button.clicked.connect(self._request_replies_view)
 
         self.input_editor = QPlainTextEdit()
         self.input_editor.setObjectName(f"{department_id}Input")
@@ -239,7 +243,8 @@ class DepartmentPanel(QFrame):
         layout.addWidget(self.context_label)
         layout.addWidget(self.context_files)
         layout.addLayout(context_button_layout)
-        layout.addWidget(self.conversation_view, 1)
+        layout.addWidget(self.conversation_view)
+        layout.addWidget(self.view_replies_button)
         layout.addWidget(self.input_editor)
         layout.addWidget(self.attachment_list)
         layout.addWidget(self.download_label)
@@ -254,7 +259,7 @@ class DepartmentPanel(QFrame):
         """Refresh this department's independent local pressure estimate."""
 
         snapshot = self.thread_pressure_estimator.estimate(
-            conversation_text=self.conversation_view.toPlainText(),
+            conversation_text=self._conversation_history_text,
             draft_text=self.input_editor.toPlainText(),
             attachment_paths=(
                 record.path for record in self.attachment_list.records
@@ -371,42 +376,38 @@ class DepartmentPanel(QFrame):
             "color: #1565c0; font-size: 11px; font-weight: 700;"
         )
 
-    def append_browser_exchange(
-        self,
-        user_task: str,
-        assistant_response: str,
-    ) -> None:
-        """Append one browser-mediated exchange without altering response text."""
+    def conversation_text(self) -> str:
+        return self._conversation_history_text
 
-        existing = self.conversation_view.toPlainText().rstrip()
-        sections = [
-            existing,
-            "=== USER TASK ===",
-            user_task.strip() or "[No current task draft]",
-            "=== ASSISTANT RESPONSE ===",
-            assistant_response,
-        ]
-        self.conversation_view.setPlainText(
-            "\n\n".join(section for section in sections if section != "")
-        )
-        self.conversation_view.moveCursor(QTextCursor.MoveOperation.End)
+    def restore_conversation_text(self, conversation_text: str) -> None:
+        self._conversation_history_text = conversation_text
+        self._show_reply_status(conversation_text.count("=== ASSISTANT RESPONSE ==="))
+        self._update_thread_pressure()
 
-    def start_new_thread_exchange(
-        self,
-        user_task: str,
-        assistant_response: str,
-    ) -> None:
-        """Replace the active transcript after a verified thread handoff."""
+    def append_browser_exchange(self, user_task: str, assistant_response: str) -> None:
+        sections=[self._conversation_history_text.rstrip(),"=== USER TASK ===",
+            user_task.strip() or "[No current task draft]","=== ASSISTANT RESPONSE ===",assistant_response]
+        self._conversation_history_text="\n\n".join(x for x in sections if x!="")
+        self._show_reply_status(self._conversation_history_text.count("=== ASSISTANT RESPONSE ==="))
+        self._update_thread_pressure()
 
-        sections = [
-            "=== NEW THREAD AFTER HANDOFF ===",
-            "=== USER TASK ===",
-            user_task.strip() or "[No current task draft]",
-            "=== ASSISTANT RESPONSE ===",
-            assistant_response,
-        ]
-        self.conversation_view.setPlainText("\n\n".join(sections))
-        self.conversation_view.moveCursor(QTextCursor.MoveOperation.End)
+    def start_new_thread_exchange(self, user_task: str, assistant_response: str) -> None:
+        self._conversation_history_text="\n\n".join(["=== NEW THREAD AFTER HANDOFF ===","=== USER TASK ===",
+            user_task.strip() or "[No current task draft]","=== ASSISTANT RESPONSE ===",assistant_response])
+        self._show_reply_status(1); self._update_thread_pressure()
+
+    def _show_reply_status(self, reply_count: int) -> None:
+        if reply_count <= 0:
+            self.conversation_view.setPlainText("Ready")
+            self.view_replies_button.setText("View Replies")
+            self.view_replies_button.setEnabled(False)
+            return
+        self.conversation_view.setPlainText("Reply received")
+        self.view_replies_button.setText(f"View Replies ({reply_count})")
+        self.view_replies_button.setEnabled(True)
+
+    def _request_replies_view(self) -> None:
+        self.replies_view_requested.emit(self.department_id)
 
 
     def set_generated_downloads(
