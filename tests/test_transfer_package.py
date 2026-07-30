@@ -336,3 +336,15 @@ def test_thread_handoff_keeps_full_documents_despite_task_budget(
     assert "BEGIN-" in package.text
     assert "-END" in package.text
     assert "Additional authoritative document omitted" not in package.text
+
+
+def test_response_instructions_define_supervised_handoff_proposal_envelope(
+    tmp_path: Path,
+) -> None:
+    package = TransferPackageBuilder().build(_request(tmp_path))
+
+    assert "BEGIN_CURVATURE_HANDOFF_PROPOSAL" in package.text
+    assert "END_CURVATURE_HANDOFF_PROPOSAL" in package.text
+    assert '"target_department_id":"project|core|research"' in package.text
+    assert "Console will capture it as a draft for user review" in package.text
+    assert "Do not claim that the handoff was sent" in package.text

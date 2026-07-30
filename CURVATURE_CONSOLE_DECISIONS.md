@@ -1034,3 +1034,22 @@ or truncate the underlying stored conversation.
 - users can inspect current and earlier replies on demand;
 - restart continuity and context construction remain unchanged;
 - reply presentation and transcript persistence remain separate concerns.
+
+# ADR-017 — Department-Generated Handoff Proposals
+
+Status: Accepted for B5.5D1 validation
+Date: 2026-07-30
+
+## Decision
+
+Every Curvature department may propose work for any other department through a
+strict delimited JSON envelope in its normal assistant response. Console binds
+the source to the originating department, validates the proposed target and
+content, and persists the result as a supervised `DRAFT` in the shared
+Communication Hub.
+
+A proposal is not delivery. Console must not automatically request approval,
+approve, deliver, return a response or continue a cross-department loop. The
+user remains the mandatory gate at every department boundary.
+
+Manual draft creation remains a fallback and diagnostic control.

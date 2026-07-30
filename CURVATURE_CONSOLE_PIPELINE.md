@@ -627,3 +627,26 @@ B5.5C controlled delivery remains intact
 ```
 
 Stage intended files explicitly, commit, push and confirm a clean working tree.
+
+# B5.5D1 Validation Gate
+
+Required automated coverage:
+
+- valid and multiple proposal parsing;
+- malformed and self-targeting proposal rejection;
+- proposal instructions in normal transfer packages;
+- automatic DRAFT persistence from a department response;
+- duplicate-safe repeated intake;
+- Communication Hub wording and visibility;
+- all existing handoff, browser, persistence and restart tests remain green.
+
+Required live proof:
+
+1. Send a normal task to any department asking it to delegate a bounded task to
+   another department.
+2. Confirm the response includes a valid proposal envelope.
+3. Open Supervised Communication Hub.
+4. Confirm the draft appears automatically with correct source, target and
+   visible instruction.
+5. Confirm no approval or browser delivery occurred automatically.
+6. Restart Console and confirm the draft remains present.

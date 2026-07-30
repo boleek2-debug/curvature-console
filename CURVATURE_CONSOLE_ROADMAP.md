@@ -136,3 +136,37 @@ Every change must preserve:
 - no automatic commit or push;
 - complete automated tests;
 - clean Git state.
+
+# Active Sprint
+
+## ASSISTANT-001B5.5D1 — Department-Generated Draft Intake
+
+Purpose:
+
+Turn the existing Bridge Controls list into the common supervised intake queue
+for all six interdepartmental directions:
+
+```text
+Project  → Core
+Project  → Research
+Core     → Project
+Core     → Research
+Research → Project
+Research → Core
+```
+
+Deliver in this increment:
+
+- a strict machine-readable handoff proposal envelope;
+- proposal instructions in every department transfer package;
+- parsing and validation of proposals returned in assistant responses;
+- automatic persistence as reviewable `DRAFT` handoffs;
+- duplicate-safe intake for one browser response;
+- shared Communication Hub wording and list visibility;
+- no automatic approval, delivery, return path or conversation loop.
+
+Following increments remain separate:
+
+- user decision inbox and clearer status grouping;
+- supervised response review and return path;
+- multi-step correspondence under explicit approval at every boundary.

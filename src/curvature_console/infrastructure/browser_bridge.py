@@ -65,6 +65,13 @@ MESSAGE_EDITOR_SELECTORS: Final[tuple[str, ...]] = (
     '[contenteditable="true"][data-virtualkeyboard="true"]',
     'textarea[placeholder*="Message"]',
 )
+SEND_BUTTON_SELECTORS: Final[tuple[str, ...]] = (
+    'button[data-testid="send-button"]',
+    'button[aria-label="Send prompt"]',
+    'button[aria-label="Send message"]',
+    'button[aria-label="Wyślij monit"]',
+    'button[aria-label="Wyślij wiadomość"]',
+)
 CONVERSATION_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"/c/([0-9A-Za-z-]+)(?:/|$)"
 )
@@ -490,6 +497,206 @@ class ChatGPTBrowserBridge:
                 "No active conversation URL is stored for this department."
             )
 
+    def _enter_message_text(
+        self,
+        *,
+        page: Page,
+        editor: Locator,
+        message_text: str,
+    ) -> None:
+        """Enter text without using Locator.fill on ChatGPT ProseMirror.
+
+        ChatGPT's contenteditable ProseMirror editor has repeatedly timed out
+        under ``Locator.fill`` for larger transfer packages. This is a verified
+        regression boundary: contenteditable editors must use keyboard text
+        insertion, while ordinary input and textarea controls may still use
+        ``fill``.
+        """
+
+        timeout_ms = int(self.config.editor_timeout_seconds * 1000)
+        contenteditable = editor.get_attribute("contenteditable")
+
+        if contenteditable == "true":
+            self._logger.info(
+                "message_entry_method method=keyboard_insert_text "
+                "contenteditable=true size=%d",
+                len(message_text),
+            )
+            editor.click(timeout=timeout_ms)
+            page.keyboard.press("Control+A")
+            page.keyboard.press("Backspace")
+            page.keyboard.insert_text(message_text)
+            return
+
+        self._logger.info(
+            "message_entry_method method=locator_fill "
+            "contenteditable=%s size=%d",
+            contenteditable,
+            len(message_text),
+        )
+        editor.fill(message_text, timeout=timeout_ms)
+
+    def _submit_message(
+        self,
+        *,
+        page: Page,
+        editor: Locator,
+        baseline_user_count: int,
+    ) -> str:
+        """Submit and verify that the composer reacted to activation.
+
+        ChatGPT can expose an enabled Send button whose click returns without
+        actually submitting the current composer. After clicking, the bridge
+        therefore waits for one of two concrete effects: the composer becomes
+        empty or a new user turn appears. If neither happens, Enter is used as
+        a bounded fallback. Final request-marker confirmation remains
+        authoritative.
+        """
+
+        timeout_seconds = min(self.config.editor_timeout_seconds, 10.0)
+        deadline = time.monotonic() + timeout_seconds
+        last_diagnostics: list[str] = []
+
+        while time.monotonic() < deadline:
+            self._assert_runtime_alive(page)
+            self._raise_for_human_verification(page)
+            diagnostics: list[str] = []
+
+            for selector in SEND_BUTTON_SELECTORS:
+                locator = page.locator(selector)
+                count = locator.count()
+                diagnostics.append(f"{selector}:count={count}")
+                for index in range(count):
+                    candidate = locator.nth(index)
+                    try:
+                        visible = candidate.is_visible()
+                        enabled = candidate.is_enabled()
+                        diagnostics.append(
+                            f"{selector}[{index}]:visible={visible},"
+                            f"enabled={enabled}"
+                        )
+                        if visible and enabled:
+                            candidate.click(
+                                timeout=int(timeout_seconds * 1000)
+                            )
+                            self._logger.info(
+                                "message_submit_method method=send_button "
+                                "selector=%s index=%d",
+                                selector,
+                                index,
+                            )
+                            if self._wait_for_submission_effect(
+                                page=page,
+                                editor=editor,
+                                baseline_user_count=baseline_user_count,
+                            ):
+                                return "send_button"
+
+                            self._logger.warning(
+                                "send_button_no_effect request_id=%s; "
+                                "falling_back_to_enter",
+                                self._active_request.request_id
+                                if self._active_request is not None
+                                else "-",
+                            )
+                            editor.click(
+                                timeout=int(timeout_seconds * 1000)
+                            )
+                            page.keyboard.press("Enter")
+                            self._logger.info(
+                                "message_submit_method "
+                                "method=send_button_then_keyboard_enter"
+                            )
+                            self._wait_for_submission_effect(
+                                page=page,
+                                editor=editor,
+                                baseline_user_count=baseline_user_count,
+                            )
+                            return "send_button_then_keyboard_enter"
+                    except Exception as exc:
+                        diagnostics.append(
+                            f"{selector}[{index}]:error="
+                            f"{type(exc).__name__}"
+                        )
+
+            last_diagnostics = diagnostics
+            time.sleep(0.25)
+
+        self._logger.warning(
+            "send_button_unavailable request_id=%s diagnostics=%s; "
+            "falling_back_to_enter",
+            self._active_request.request_id
+            if self._active_request is not None
+            else "-",
+            " | ".join(last_diagnostics),
+        )
+        editor.click(timeout=int(timeout_seconds * 1000))
+        page.keyboard.press("Enter")
+        self._logger.info("message_submit_method method=keyboard_enter")
+        self._wait_for_submission_effect(
+            page=page,
+            editor=editor,
+            baseline_user_count=baseline_user_count,
+        )
+        return "keyboard_enter"
+
+    def _wait_for_submission_effect(
+        self,
+        *,
+        page: Page,
+        editor: Locator,
+        baseline_user_count: int,
+        timeout_seconds: float = 3.0,
+    ) -> bool:
+        """Return true when submission visibly changed the conversation UI."""
+
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            self._assert_runtime_alive(page)
+            self._raise_for_human_verification(page)
+
+            current_user_count = page.locator(USER_MESSAGE_SELECTOR).count()
+            if current_user_count > baseline_user_count:
+                self._logger.info(
+                    "message_submit_effect effect=new_user_message "
+                    "baseline=%d current=%d",
+                    baseline_user_count,
+                    current_user_count,
+                )
+                return True
+
+            editor_text = self._read_editor_text(editor)
+            if not self._normalize_message_text(editor_text):
+                self._logger.info(
+                    "message_submit_effect effect=composer_cleared "
+                    "baseline=%d current=%d",
+                    baseline_user_count,
+                    current_user_count,
+                )
+                return True
+
+            time.sleep(self.config.response_poll_interval_seconds)
+
+        self._logger.warning(
+            "message_submit_effect_missing request_id=%s editor_excerpt=%r",
+            self._active_request.request_id
+            if self._active_request is not None
+            else "-",
+            self._normalize_message_text(self._read_editor_text(editor))[:160],
+        )
+        return False
+
+    @staticmethod
+    def _read_editor_text(editor: Locator) -> str:
+        """Read either a contenteditable composer or an input/textarea."""
+
+        try:
+            if editor.get_attribute("contenteditable") == "true":
+                return editor.inner_text()
+            return editor.input_value()
+        except Exception:
+            return ""
+
     def _send_and_receive_once(
         self,
         request: BrowserExchangeRequest,
@@ -535,25 +742,36 @@ class ChatGPTBrowserBridge:
         assistant_messages = page.locator(ASSISTANT_MESSAGE_SELECTOR)
         baseline_user_count = user_messages.count()
         baseline_assistant_count = assistant_messages.count()
+        baseline_assistant_signatures = (
+            self._assistant_message_signatures(page)
+        )
         self._logger.info(
-            "message_baseline request_id=%s user_count=%d assistant_count=%d",
+            "message_baseline request_id=%s user_count=%d assistant_count=%d "
+            "assistant_signatures=%d",
             request.request_id,
             baseline_user_count,
             baseline_assistant_count,
+            len(baseline_assistant_signatures),
         )
 
         self._report_stage(BrowserBridgeStage.ENTERING_MESSAGE)
-        editor.fill(
-            request.message_text,
-            timeout=int(self.config.editor_timeout_seconds * 1000),
+        self._enter_message_text(
+            page=page,
+            editor=editor,
+            message_text=request.message_text,
         )
         self._report_stage(BrowserBridgeStage.SENDING)
-        editor.press("Enter")
+        self._submit_message(
+            page=page,
+            editor=editor,
+            baseline_user_count=baseline_user_count,
+        )
 
         self._report_stage(BrowserBridgeStage.VERIFYING_USER_MESSAGE)
         self._wait_for_confirmed_user_message(
             page=page,
             baseline_count=baseline_user_count,
+            baseline_assistant_count=baseline_assistant_count,
             expected_text=request.message_text,
             confirmation_marker=request.confirmation_marker,
         )
@@ -562,6 +780,7 @@ class ChatGPTBrowserBridge:
         response_text = self._wait_for_completed_response(
             page=page,
             baseline_count=baseline_assistant_count,
+            baseline_signatures=baseline_assistant_signatures,
         )
         self._report_stage(BrowserBridgeStage.RECEIVING)
 
@@ -1911,13 +2130,16 @@ class ChatGPTBrowserBridge:
         baseline_count: int,
         expected_text: str,
         confirmation_marker: str | None = None,
+        baseline_assistant_count: int | None = None,
     ) -> None:
-        """Confirm the exact request without comparing rendered Markdown.
+        """Confirm a successful submit despite ChatGPT DOM virtualisation.
 
-        ChatGPT renders a sent message before exposing it through ``inner_text``.
-        Markdown headings, lists and spacing can therefore differ from the raw
-        composer payload even when the correct message was delivered. A unique
-        request marker is the authoritative confirmation when available.
+        ChatGPT may keep the same number of rendered user turns after a new
+        message is sent, replacing an older virtualised turn instead of
+        increasing the locator count. The bridge therefore searches every
+        currently rendered user turn for the unique request marker. A newly
+        rendered assistant turn is also accepted as conclusive evidence that
+        ChatGPT received the request.
         """
 
         deadline = (
@@ -1925,24 +2147,36 @@ class ChatGPTBrowserBridge:
             + self.config.message_confirmation_timeout_seconds
         )
         expected_normalized = self._normalize_message_text(expected_text)
+        last_observed_excerpt = ""
 
         while time.monotonic() < deadline:
             self._assert_runtime_alive(page)
             self._raise_for_human_verification(page)
+            if baseline_assistant_count is not None:
+                current_assistant_count = page.locator(
+                    ASSISTANT_MESSAGE_SELECTOR
+                ).count()
+                if current_assistant_count > baseline_assistant_count:
+                    self._logger.info(
+                        "user_message_confirmed request_id=%s "
+                        "assistant_count=%d method=new_assistant_turn",
+                        self._active_request.request_id
+                        if self._active_request is not None
+                        else "-",
+                        current_assistant_count,
+                    )
+                    return
+
             messages = page.locator(USER_MESSAGE_SELECTOR)
             current_count = messages.count()
 
-            if current_count > baseline_count:
-                observed_text = messages.nth(current_count - 1).inner_text()
-                observed_normalized = self._normalize_message_text(
-                    observed_text
-                )
-
-                if confirmation_marker:
+            if confirmation_marker:
+                for index in range(current_count - 1, -1, -1):
+                    observed_text = messages.nth(index).inner_text()
                     if confirmation_marker in observed_text:
                         self._logger.info(
                             "user_message_confirmed request_id=%s "
-                            "user_count=%d marker=%s",
+                            "user_count=%d marker=%s method=marker_scan",
                             self._active_request.request_id
                             if self._active_request is not None
                             else "-",
@@ -1950,41 +2184,114 @@ class ChatGPTBrowserBridge:
                             confirmation_marker,
                         )
                         return
-                elif observed_normalized == expected_normalized:
+                    if index == current_count - 1:
+                        last_observed_excerpt = (
+                            self._normalize_message_text(observed_text)[:240]
+                        )
+            elif current_count > baseline_count:
+                observed_text = messages.nth(current_count - 1).inner_text()
+                observed_normalized = self._normalize_message_text(
+                    observed_text
+                )
+                last_observed_excerpt = observed_normalized[:240]
+                if observed_normalized == expected_normalized:
+                    self._logger.info(
+                        "user_message_confirmed request_id=%s "
+                        "user_count=%d method=exact_text",
+                        self._active_request.request_id
+                        if self._active_request is not None
+                        else "-",
+                        current_count,
+                    )
                     return
 
-                observed_excerpt = observed_normalized[:240]
-                raise BrowserBridgeMessageNotConfirmed(
-                    "A new user message appeared, but it did not contain the "
-                    "current request marker. Observed message begins with: "
-                    f"{observed_excerpt!r}"
-                )
             time.sleep(self.config.response_poll_interval_seconds)
 
+        if last_observed_excerpt:
+            raise BrowserBridgeMessageNotConfirmed(
+                "A rendered user message did not contain the current request "
+                "marker before the confirmation timeout. Last rendered user "
+                f"message begins with: {last_observed_excerpt!r}"
+            )
         raise BrowserBridgeMessageNotConfirmed(
             "ChatGPT did not confirm the current request as a new user message."
         )
+
+    def _assistant_message_signatures(
+        self,
+        page: Page,
+    ) -> tuple[tuple[str, str], ...]:
+        """Return stable identities for currently rendered assistant messages."""
+
+        messages = page.locator(ASSISTANT_MESSAGE_SELECTOR)
+        signatures: list[tuple[str, str]] = []
+        for index in range(messages.count()):
+            message = messages.nth(index)
+            try:
+                message_id = message.get_attribute("data-message-id") or ""
+            except Exception:
+                message_id = ""
+            try:
+                text = self._normalize_message_text(message.inner_text())
+            except Exception:
+                text = ""
+            signatures.append((message_id, text))
+        return tuple(signatures)
 
     def _wait_for_completed_response(
         self,
         page: Page,
         baseline_count: int,
+        baseline_signatures: tuple[tuple[str, str], ...] | None = None,
     ) -> str:
         deadline = time.monotonic() + self.config.response_timeout_seconds
         stable_started_at: float | None = None
-        previous_text: str | None = None
+        previous_identity: tuple[str, str] | None = None
+        baseline = set(baseline_signatures or ())
+        baseline_ids = {message_id for message_id, _ in baseline if message_id}
+        baseline_texts = {text for _, text in baseline if text}
 
         while time.monotonic() < deadline:
             self._assert_runtime_alive(page)
             self._raise_for_human_verification(page)
             messages = page.locator(ASSISTANT_MESSAGE_SELECTOR)
             current_count = messages.count()
+            candidate: tuple[str, str] | None = None
 
-            if current_count > baseline_count:
-                latest = messages.nth(current_count - 1)
-                text = latest.inner_text()
+            for index in range(current_count - 1, -1, -1):
+                message = messages.nth(index)
+                try:
+                    message_id = (
+                        message.get_attribute("data-message-id") or ""
+                    )
+                except Exception:
+                    message_id = ""
+                try:
+                    text = message.inner_text()
+                except Exception:
+                    continue
+                normalized_text = self._normalize_message_text(text)
+                if not normalized_text:
+                    continue
 
-                if text and text == previous_text:
+                is_new_identity = bool(
+                    message_id and message_id not in baseline_ids
+                )
+                is_new_text = normalized_text not in baseline_texts
+                is_count_growth_candidate = (
+                    current_count > baseline_count
+                    and index == current_count - 1
+                )
+                if (
+                    is_new_identity
+                    or is_new_text
+                    or is_count_growth_candidate
+                ):
+                    candidate = (message_id, normalized_text)
+                    break
+
+            if candidate is not None:
+                if candidate == previous_identity:
                     if stable_started_at is None:
                         stable_started_at = time.monotonic()
                     elif (
@@ -1992,9 +2299,17 @@ class ChatGPTBrowserBridge:
                         >= self.config.stable_response_seconds
                         and not self._generation_is_active(page)
                     ):
-                        return text
+                        self._logger.info(
+                            "assistant_response_confirmed request_id=%s "
+                            "message_id=%s method=identity_scan",
+                            self._active_request.request_id
+                            if self._active_request is not None
+                            else "-",
+                            candidate[0] or "-",
+                        )
+                        return candidate[1]
                 else:
-                    previous_text = text
+                    previous_identity = candidate
                     stable_started_at = None
 
             time.sleep(self.config.response_poll_interval_seconds)

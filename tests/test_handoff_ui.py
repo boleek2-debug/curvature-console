@@ -103,3 +103,103 @@ def test_dialog_exposes_one_explicit_deliver_control(tmp_path) -> None:
     assert "Deliver" in button_texts
     dialog.close()
     store.close()
+
+
+def test_dialog_is_presented_as_supervised_communication_hub(tmp_path) -> None:
+    create_application(["curvature-console-handoff-hub-label-test"])
+    store = SQLiteStateStore(tmp_path / "state.sqlite3")
+    dialog = HandoffControlsDialog(store)
+
+    assert dialog.windowTitle() == "Supervised Communication Hub"
+    labels = [label.text() for label in dialog.findChildren(type(dialog.status_label))]
+    assert any("Department-generated drafts appear here automatically" in text for text in labels)
+
+    dialog.close()
+    store.close()
+
+
+def test_generated_pending_handoff_skips_request_approval_control(
+    tmp_path,
+) -> None:
+    from curvature_console.infrastructure.handoff import create_handoff
+
+    create_application(["curvature-console-generated-pending-test"])
+    store = SQLiteStateStore(tmp_path / "state.sqlite3")
+    record = create_handoff(
+        request_id="proposal-1",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="# Generated proposal\n\nImplement it.",
+    ).transition(HandoffStatus.PENDING_APPROVAL)
+    store.save_handoff(record)
+
+    dialog = HandoffControlsDialog(store)
+
+    assert dialog.selected_record is not None
+    assert dialog.selected_record.status is HandoffStatus.PENDING_APPROVAL
+    assert not dialog.submit_button.isEnabled()
+    assert dialog.approve_button.isEnabled()
+    assert not dialog.deliver_button.isEnabled()
+
+    dialog.close()
+    store.close()
+
+
+def test_delivery_confirmation_is_resizable_and_scrollable() -> None:
+    from PySide6.QtWidgets import QDialogButtonBox, QPlainTextEdit
+
+    from curvature_console.presentation.handoff_controls_dialog import (
+        HandoffDeliveryConfirmationDialog,
+    )
+
+    create_application(["curvature-console-delivery-confirmation-test"])
+    dialog = HandoffDeliveryConfirmationDialog(
+        target_department_id="core",
+        handoff_title="Verify long delivery",
+        handoff_message="\n".join(f"Line {index}" for index in range(300)),
+    )
+
+    details = dialog.findChild(QPlainTextEdit, "handoffDeliveryDetails")
+    buttons = dialog.findChild(QDialogButtonBox, "handoffDeliveryButtons")
+
+    assert dialog.minimumWidth() <= dialog.width()
+    assert dialog.minimumHeight() <= dialog.height()
+    assert dialog.isSizeGripEnabled()
+    assert details is not None
+    assert details.isReadOnly()
+    assert details.verticalScrollBar().maximum() > 0
+    assert buttons is not None
+    assert buttons.button(QDialogButtonBox.StandardButton.Yes) is not None
+    assert buttons.button(QDialogButtonBox.StandardButton.Cancel) is not None
+
+    dialog.close()
+
+
+def test_delivery_progress_dialog_shows_stage_and_elapsed_feedback() -> None:
+    from PySide6.QtWidgets import QLabel, QProgressBar
+
+    from curvature_console.presentation.handoff_controls_dialog import (
+        HandoffDeliveryProgressDialog,
+    )
+
+    create_application(["curvature-console-delivery-progress-test"])
+    dialog = HandoffDeliveryProgressDialog(
+        target_department_id="core",
+        handoff_title="Verify controlled delivery",
+    )
+
+    stage = dialog.findChild(QLabel, "handoffProgressStage")
+    elapsed = dialog.findChild(QLabel, "handoffProgressElapsed")
+    progress = dialog.findChild(QProgressBar, "handoffProgressBar")
+
+    assert stage is not None
+    assert elapsed is not None
+    assert progress is not None
+    assert progress.minimum() == 0
+    assert progress.maximum() == 0
+
+    dialog.set_stage("Waiting for response")
+    assert stage.text() == "Waiting for response…"
+    assert elapsed.text().startswith("Elapsed: ")
+
+    dialog.finish()

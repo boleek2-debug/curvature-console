@@ -465,6 +465,18 @@ class TransferPackageBuilder:
             "Do not guess.",
             "Keep implementation code and project documentation in English.",
             "Development discussion with the user may remain in Polish.",
+            "When another Curvature department must act, include one machine-readable "
+            "handoff proposal block after your normal response. Do not claim that the "
+            "handoff was sent; Console will capture it as a draft for user review.",
+            "Use exactly this envelope, with valid JSON between the markers:",
+            "BEGIN_CURVATURE_HANDOFF_PROPOSAL",
+            '{"schema_version":1,"target_department_id":"project|core|research",'
+            '"title":"...","reason":"...","task":"...",'
+            '"relevant_context":"...","expected_output":"...",'
+            '"acceptance_criteria":["..."]}',
+            "END_CURVATURE_HANDOFF_PROPOSAL",
+            "Never target the department that is producing the response.",
+            "If no other department must act, do not include a proposal block.",
         ]
 
         if request.mode is TransferPackageMode.THREAD_HANDOFF:

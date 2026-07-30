@@ -4,16 +4,18 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QElapsedTimer, QTimer, Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
+    QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QMessageBox,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QSplitter,
     QVBoxLayout,
@@ -37,6 +39,159 @@ _DEPARTMENT_LABELS = {
 }
 
 
+class HandoffDeliveryProgressDialog(QDialog):
+    """Visible stage and elapsed-time feedback for one delivery."""
+
+    def __init__(
+        self,
+        *,
+        target_department_id: str,
+        handoff_title: str,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("handoffDeliveryProgressDialog")
+        self.setWindowTitle("Controlled delivery in progress")
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self.setModal(True)
+        self.setMinimumWidth(520)
+        self.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, False)
+
+        target_label = _DEPARTMENT_LABELS.get(
+            target_department_id,
+            target_department_id.upper(),
+        )
+        self.summary_label = QLabel(
+            f"Delivering to {target_label}: {handoff_title}"
+        )
+        self.summary_label.setObjectName("handoffProgressSummary")
+        self.summary_label.setWordWrap(True)
+
+        self.stage_label = QLabel("Preparing controlled delivery…")
+        self.stage_label.setObjectName("handoffProgressStage")
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setObjectName("handoffProgressBar")
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.setTextVisible(False)
+
+        self.elapsed_label = QLabel("Elapsed: 00:00")
+        self.elapsed_label.setObjectName("handoffProgressElapsed")
+
+        self._elapsed = QElapsedTimer()
+        self._elapsed.start()
+        self._timer = QTimer(self)
+        self._timer.setInterval(1000)
+        self._timer.timeout.connect(self._refresh_elapsed)
+        self._timer.start()
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.summary_label)
+        layout.addWidget(self.stage_label)
+        layout.addWidget(self.progress_bar)
+        layout.addWidget(self.elapsed_label)
+
+    def set_stage(self, stage: str) -> None:
+        self.stage_label.setText(stage + "…")
+
+    def finish(self) -> None:
+        self._timer.stop()
+        self.accept()
+
+    def _refresh_elapsed(self) -> None:
+        total_seconds = max(0, self._elapsed.elapsed() // 1000)
+        minutes, seconds = divmod(total_seconds, 60)
+        self.elapsed_label.setText(
+            f"Elapsed: {minutes:02d}:{seconds:02d}"
+        )
+
+
+class HandoffDeliveryConfirmationDialog(QDialog):
+    """Resizable delivery confirmation with scrollable handoff details."""
+
+    def __init__(
+        self,
+        *,
+        target_department_id: str,
+        handoff_title: str,
+        handoff_message: str,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("handoffDeliveryConfirmationDialog")
+        self.setWindowTitle("Engage controlled delivery?")
+        self.setSizeGripEnabled(True)
+        self.setMinimumSize(520, 360)
+        self.resize(760, 520)
+
+        target_label = _DEPARTMENT_LABELS.get(
+            target_department_id,
+            target_department_id.upper(),
+        )
+        summary = QLabel(
+            "Send this approved handoff exactly once to "
+            f"{target_label}?"
+        )
+        summary.setObjectName("handoffDeliverySummary")
+        summary.setWordWrap(True)
+
+        title_label = QLabel(handoff_title)
+        title_label.setObjectName("handoffDeliveryTitle")
+        title_label.setWordWrap(True)
+        title_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+
+        details = QPlainTextEdit()
+        details.setObjectName("handoffDeliveryDetails")
+        details.setReadOnly(True)
+        details.setPlainText(handoff_message)
+        details.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Yes
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.setObjectName("handoffDeliveryButtons")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        yes_button = buttons.button(QDialogButtonBox.StandardButton.Yes)
+        if yes_button is not None:
+            yes_button.setText("Deliver once")
+            yes_button.setDefault(False)
+        cancel_button = buttons.button(
+            QDialogButtonBox.StandardButton.Cancel
+        )
+        if cancel_button is not None:
+            cancel_button.setDefault(True)
+            cancel_button.setFocus()
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(summary)
+        layout.addWidget(title_label)
+        layout.addWidget(details, 1)
+        layout.addWidget(buttons)
+
+
+def confirm_handoff_delivery(
+    *,
+    parent: QWidget | None,
+    target_department_id: str,
+    handoff_message: str,
+) -> bool:
+    """Return whether the operator explicitly confirmed one delivery."""
+
+    first_line = handoff_message.splitlines()[0] if handoff_message else ""
+    handoff_title = first_line.lstrip("# " ).strip() or "Approved handoff"
+    dialog = HandoffDeliveryConfirmationDialog(
+        target_department_id=target_department_id,
+        handoff_title=handoff_title,
+        handoff_message=handoff_message,
+        parent=parent,
+    )
+    return dialog.exec() == QDialog.DialogCode.Accepted
+
+
 class HandoffControlsDialog(QDialog):
     """Create, supervise and explicitly request one handoff delivery."""
 
@@ -52,7 +207,7 @@ class HandoffControlsDialog(QDialog):
         super().__init__(parent)
         self.state_store = state_store
         self._records: tuple[HandoffRecord, ...] = ()
-        self.setWindowTitle("B5.5B Bridge Controls")
+        self.setWindowTitle("Supervised Communication Hub")
         self.resize(980, 650)
 
         self.handoff_list = QListWidget()
@@ -168,8 +323,9 @@ class HandoffControlsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(
             QLabel(
-                "Supervised controls only — no browser message is sent "
-                "from this dialog."
+                "Department-generated drafts appear here automatically. "
+                "Nothing crosses a department boundary without your explicit "
+                "approval and delivery confirmation."
             )
         )
         layout.addWidget(splitter, 1)
@@ -188,11 +344,13 @@ class HandoffControlsDialog(QDialog):
         self.handoff_list.clear()
         selected_row = -1
         for index, record in enumerate(self._records):
+            first_line = record.user_visible_message.splitlines()[0]
+            summary = first_line.lstrip("# ").strip()
             self.handoff_list.addItem(
                 f"{record.status.value.upper()} · "
                 f"{record.source_department_id} → "
                 f"{record.target_department_id} · "
-                f"{record.user_visible_message[:55]}"
+                f"{summary[:55]}"
             )
             if record.handoff_id == selected_handoff_id:
                 selected_row = index

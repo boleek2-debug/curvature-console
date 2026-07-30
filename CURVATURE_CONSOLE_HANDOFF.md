@@ -313,3 +313,29 @@ department reply ordering manually verified
 Commit and push this closeout with explicit staging, then create a fresh current
 repository snapshot. Use that snapshot to audit how much of supervised
 interdepartmental communication is complete and define only the remaining gap.
+
+# Active Implementation — B5.5D1 Department-Generated Draft Intake
+
+The existing B5.5A–B5.5C record, controls and one-shot delivery remain the
+foundation. B5.5D1 adds only the missing intake path:
+
+```text
+department recognises that another department must act
+→ department emits a structured handoff proposal
+→ Console validates and stores a DRAFT
+→ draft appears in Supervised Communication Hub
+→ user reviews and controls every later transition
+```
+
+Protocol markers:
+
+```text
+BEGIN_CURVATURE_HANDOFF_PROPOSAL
+{ valid schema-version-1 JSON }
+END_CURVATURE_HANDOFF_PROPOSAL
+```
+
+Source identity is never trusted from response JSON; it is bound to the
+originating browser exchange. Target must be a different known department.
+Malformed proposals are ignored with bounded diagnostics and never become
+handoffs. No proposal is approved or delivered automatically.

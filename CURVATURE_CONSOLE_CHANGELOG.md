@@ -641,3 +641,22 @@ native browser download event.
 - corrected canonical documentation so B5.5C remains completed rather than future work;
 - preserved B5.5C controlled delivery as a separate, already committed milestone;
 - closed the current implementation without starting another feature sprint.
+
+## 2026-07-30
+
+### ASSISTANT-001B5.5D1 — Department-Generated Draft Intake Candidate
+
+Prepared for local validation:
+
+- strict schema-version-1 handoff proposal parser;
+- source department bound to the originating response;
+- validated target, title, reason, task, context, expected output and acceptance
+  criteria;
+- automatic persistence as duplicate-safe supervised drafts;
+- department-generated drafts displayed in the shared Communication Hub;
+- transfer-package instructions teaching all departments the proposal envelope;
+- no automatic approval, delivery, return message or autonomous loop;
+- focused pure tests passed in the package-generation environment.
+
+Full repository validation and one live department-response intake test remain
+required before closeout.

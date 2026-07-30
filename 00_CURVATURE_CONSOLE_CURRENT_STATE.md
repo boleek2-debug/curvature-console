@@ -301,3 +301,31 @@ B5.5C remains the committed controlled-delivery baseline
 The next activity is a fresh repository snapshot and an audit of the remaining
 interdepartmental communication scope. No further Console feature is approved by
 this closeout.
+
+# B5.5D1 — Department-Generated Draft Intake
+
+Status: Implementation candidate prepared for local validation.
+
+This increment turns Bridge Controls into the shared supervised communication
+hub for Project, Core and Research. Any department response may include one or
+more validated `BEGIN_CURVATURE_HANDOFF_PROPOSAL` JSON envelopes. Console:
+
+- infers the source from the originating department exchange;
+- validates the target and structured proposal fields;
+- renders the proposal into a complete visible instruction;
+- persists it as a `DRAFT` handoff;
+- adds it to the shared Bridge Controls list;
+- records its origin in the visible timeline;
+- never approves or delivers it automatically.
+
+The user remains the mandatory approval and delivery gate. Manual `Create Draft`
+remains available as a fallback, not the primary workflow.
+
+Exact validation target:
+
+```text
+department response containing one valid proposal
+→ automatic DRAFT in Supervised Communication Hub
+→ user review/edit/approval remains required
+→ no browser delivery occurs automatically
+```

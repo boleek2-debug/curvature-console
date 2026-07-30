@@ -114,3 +114,11 @@ git diff --check: passed
 - no autonomous background department loop;
 - no automatic commit or push;
 - test → verify → document → commit → push.
+
+# Supervised Communication Hub Candidate
+
+B5.5D1 allows Project, Core and Research to prepare structured handoff proposals
+for one another. Valid proposals returned in department responses are captured
+as persistent drafts in the shared Communication Hub. The user still reviews,
+edits, approves and explicitly delivers every handoff; no autonomous
+interdepartmental conversation is introduced.

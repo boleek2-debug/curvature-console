@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from uuid import uuid4
 
@@ -39,7 +40,13 @@ from curvature_console.infrastructure.context_loader import (
     ContextLoadResult,
     WorkspaceContextLoader,
 )
-from curvature_console.infrastructure.handoff import HandoffStatus
+from curvature_console.infrastructure.handoff import (
+    HandoffStatus,
+    create_handoff,
+)
+from curvature_console.infrastructure.handoff_proposal import (
+    parse_handoff_proposals,
+)
 from curvature_console.infrastructure.state_store import SQLiteStateStore
 from curvature_console.infrastructure.transfer_package import (
     TransferPackage,
@@ -56,6 +63,8 @@ from curvature_console.presentation.context_preview_dialog import (
 from curvature_console.presentation.department_panel import DepartmentPanel
 from curvature_console.presentation.handoff_controls_dialog import (
     HandoffControlsDialog,
+    HandoffDeliveryProgressDialog,
+    confirm_handoff_delivery,
 )
 from curvature_console.presentation.package_review_dialog import (
     PackageReviewDialog,
@@ -148,6 +157,10 @@ class MainWindow(QMainWindow):
         self._three_panel_sizes = [500, 500, 500]
         self._browser_worker: BrowserBridgeWorker | None = None
         self._pending_exchanges: dict[str, PendingBrowserExchange] = {}
+        self._handoff_progress_dialog: (
+            HandoffDeliveryProgressDialog | None
+        ) = None
+        self._handoff_progress_request_id: str | None = None
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setObjectName("departmentSplitter")
@@ -196,8 +209,8 @@ class MainWindow(QMainWindow):
             "handoffBridgeControlsButton"
         )
         self.handoff_controls_button.setToolTip(
-            "Create and supervise interdepartmental handoffs. "
-            "This does not send browser messages."
+            "Review department-generated handoff drafts and supervise "
+            "explicit interdepartmental delivery."
         )
         self.handoff_controls_button.clicked.connect(
             self.open_handoff_controls
@@ -224,7 +237,7 @@ class MainWindow(QMainWindow):
         self._restoring_state = False
 
     def open_handoff_controls(self) -> None:
-        """Open supervised handoff controls without browser delivery."""
+        """Open the supervised interdepartmental communication hub."""
 
         dialog = HandoffControlsDialog(
             state_store=self.state_store,
@@ -271,17 +284,11 @@ class MainWindow(QMainWindow):
             )
             return
 
-        answer = QMessageBox.question(
-            self,
-            "Engage controlled delivery?",
-            "Send this approved handoff exactly once to "
-            f"{record.target_department_id.upper()}?\n\n"
-            f"{record.user_visible_message}",
-            QMessageBox.StandardButton.Yes
-            | QMessageBox.StandardButton.Cancel,
-            QMessageBox.StandardButton.Cancel,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
+        if not confirm_handoff_delivery(
+            parent=self,
+            target_department_id=record.target_department_id,
+            handoff_message=record.user_visible_message,
+        ):
             return
 
         message_text = (
@@ -333,10 +340,70 @@ class MainWindow(QMainWindow):
         worker.stage_changed.connect(self._handle_browser_stage)
         worker.finished.connect(self._clear_browser_worker)
         self._browser_worker = worker
+        self._show_handoff_progress(
+            request_id=request_id,
+            target_department_id=record.target_department_id,
+            handoff_message=record.user_visible_message,
+        )
         self.statusBar().showMessage(
             "Controlled handoff delivery engaged..."
         )
         worker.start()
+
+    def _capture_department_handoff_proposals(
+        self,
+        pending: PendingBrowserExchange,
+        response_text: str,
+    ) -> tuple[int, tuple[str, ...]]:
+        """Persist department-generated proposals as supervised draft handoffs."""
+
+        parsed = parse_handoff_proposals(
+            response_text,
+            source_department_id=pending.department_id,
+        )
+        existing_ids = {
+            record.handoff_id for record in self.state_store.load_handoffs()
+        }
+        captured = 0
+
+        for index, proposal in enumerate(parsed.proposals):
+            identity = "|".join(
+                (
+                    pending.request_id,
+                    str(index),
+                    pending.department_id,
+                    proposal.target_department_id,
+                    proposal.title,
+                    proposal.task,
+                )
+            )
+            handoff_id = (
+                "handoff-proposal-"
+                + sha256(identity.encode("utf-8")).hexdigest()[:24]
+            )
+            if handoff_id in existing_ids:
+                continue
+
+            record = create_handoff(
+                handoff_id=handoff_id,
+                request_id=f"proposal-{pending.request_id}-{index + 1}",
+                source_department_id=pending.department_id,
+                target_department_id=proposal.target_department_id,
+                user_visible_message=proposal.render_visible_message(),
+            )
+            record = record.transition(
+                HandoffStatus.PENDING_APPROVAL
+            ).append_message(
+                pending.department_id,
+                "Department-generated proposal captured and queued for "
+                "operator approval: "
+                + proposal.title,
+            )
+            self.state_store.save_handoff(record)
+            existing_ids.add(handoff_id)
+            captured += 1
+
+        return captured, parsed.errors
 
     def _record_handoff_answer(
         self,
@@ -594,10 +661,17 @@ class MainWindow(QMainWindow):
         if pending is None:
             return
 
+        self._finish_handoff_progress(request_id)
         self._pending_exchanges.pop(request_id, None)
         self._record_handoff_answer(pending, response_text)
         panel = self.department_panels[department_id]
         panel.append_browser_exchange(pending.user_task, response_text)
+        captured_handoffs, handoff_errors = (
+            self._capture_department_handoff_proposals(
+                pending,
+                response_text,
+            )
+        )
 
         captured_downloads = tuple(downloaded_files)
         self.state_store.save_generated_downloads(
@@ -625,9 +699,20 @@ class MainWindow(QMainWindow):
             if download_count
             else ""
         )
+        handoff_suffix = (
+            f"; {captured_handoffs} handoff draft(s) awaiting review"
+            if captured_handoffs
+            else ""
+        )
+        error_suffix = (
+            f"; {len(handoff_errors)} invalid handoff proposal(s) ignored"
+            if handoff_errors
+            else ""
+        )
         self.statusBar().showMessage(
             f"ChatGPT response received and saved: "
             f"{panel.title_label.text()}{download_suffix}"
+            f"{handoff_suffix}{error_suffix}"
         )
 
     def _handle_browser_route_unverified(
@@ -643,16 +728,33 @@ class MainWindow(QMainWindow):
         if pending is None:
             return
 
+        self._finish_handoff_progress(request_id)
         self._pending_exchanges.pop(request_id, None)
         self._record_handoff_answer(pending, response_text)
         panel = self.department_panels[department_id]
         panel.append_browser_exchange(pending.user_task, response_text)
+        captured_handoffs, handoff_errors = (
+            self._capture_department_handoff_proposals(
+                pending,
+                response_text,
+            )
+        )
         panel.input_editor.clear()
         self._set_browser_operation_busy(False, department_id)
         self.save_department_state(department_id)
+        handoff_suffix = (
+            f"; {captured_handoffs} handoff draft(s) awaiting review"
+            if captured_handoffs
+            else ""
+        )
+        error_suffix = (
+            f"; {len(handoff_errors)} invalid handoff proposal(s) ignored"
+            if handoff_errors
+            else ""
+        )
         self.statusBar().showMessage(
             f"ChatGPT response saved; route requires verification: "
-            f"{panel.title_label.text()}"
+            f"{panel.title_label.text()}{handoff_suffix}{error_suffix}"
         )
         QMessageBox.warning(
             self,
@@ -672,6 +774,7 @@ class MainWindow(QMainWindow):
         if pending is None:
             return
 
+        self._finish_handoff_progress(request_id)
         self._pending_exchanges.pop(request_id, None)
         self._hold_failed_handoff(pending, error_message)
         panel = self.department_panels[department_id]
@@ -696,9 +799,43 @@ class MainWindow(QMainWindow):
 
         panel = self.department_panels[department_id]
         panel.set_browser_stage(stage)
+        if self._handoff_progress_request_id == request_id:
+            dialog = self._handoff_progress_dialog
+            if dialog is not None:
+                dialog.set_stage(stage)
         self.statusBar().showMessage(
             f"{panel.title_label.text()}: {stage}"
         )
+
+    def _show_handoff_progress(
+        self,
+        *,
+        request_id: str,
+        target_department_id: str,
+        handoff_message: str,
+    ) -> None:
+        first_line = handoff_message.splitlines()[0] if handoff_message else ""
+        title = first_line.lstrip("# ").strip() or "Approved handoff"
+        dialog = HandoffDeliveryProgressDialog(
+            target_department_id=target_department_id,
+            handoff_title=title,
+            parent=self,
+        )
+        self._handoff_progress_request_id = request_id
+        self._handoff_progress_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _finish_handoff_progress(self, request_id: str) -> None:
+        if self._handoff_progress_request_id != request_id:
+            return
+        dialog = self._handoff_progress_dialog
+        self._handoff_progress_request_id = None
+        self._handoff_progress_dialog = None
+        if dialog is not None:
+            dialog.finish()
+            dialog.deleteLater()
 
     def _set_browser_operation_busy(
 

@@ -1015,3 +1015,442 @@ def test_coding_citation_is_not_treated_as_generated_file_candidate(
         "",
         None,
     )
+
+
+def test_contenteditable_editor_uses_keyboard_insert_text(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeKeyboard:
+        def __init__(self) -> None:
+            self.pressed: list[str] = []
+            self.inserted: list[str] = []
+
+        def press(self, key: str) -> None:
+            self.pressed.append(key)
+
+        def insert_text(self, text: str) -> None:
+            self.inserted.append(text)
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.keyboard = FakeKeyboard()
+
+    class FakeEditor:
+        def __init__(self) -> None:
+            self.click_calls: list[int] = []
+            self.fill_calls: list[tuple[str, int]] = []
+
+        def get_attribute(self, name: str) -> str | None:
+            assert name == "contenteditable"
+            return "true"
+
+        def click(self, timeout: int) -> None:
+            self.click_calls.append(timeout)
+
+        def fill(self, text: str, timeout: int) -> None:
+            self.fill_calls.append((text, timeout))
+
+    page = FakePage()
+    editor = FakeEditor()
+
+    bridge._enter_message_text(
+        page=page,
+        editor=editor,
+        message_text="large transfer package",
+    )
+
+    assert editor.fill_calls == []
+    assert editor.click_calls == [
+        int(bridge.config.editor_timeout_seconds * 1000)
+    ]
+    assert page.keyboard.pressed == ["Control+A", "Backspace"]
+    assert page.keyboard.inserted == ["large transfer package"]
+
+
+def test_non_contenteditable_editor_uses_locator_fill(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakePage:
+        keyboard = object()
+
+    class FakeEditor:
+        def __init__(self) -> None:
+            self.fill_calls: list[tuple[str, int]] = []
+
+        def get_attribute(self, name: str) -> str | None:
+            assert name == "contenteditable"
+            return None
+
+        def fill(self, text: str, timeout: int) -> None:
+            self.fill_calls.append((text, timeout))
+
+    editor = FakeEditor()
+
+    bridge._enter_message_text(
+        page=FakePage(),
+        editor=editor,
+        message_text="ordinary textarea message",
+    )
+
+    assert editor.fill_calls == [
+        (
+            "ordinary textarea message",
+            int(bridge.config.editor_timeout_seconds * 1000),
+        )
+    ]
+
+
+def test_submit_message_clicks_enabled_send_button(tmp_path: Path) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeButton:
+        def __init__(self) -> None:
+            self.clicks = 0
+
+        def is_visible(self):
+            return True
+
+        def is_enabled(self):
+            return True
+
+        def click(self, timeout=None):
+            assert timeout == 10000
+            self.clicks += 1
+
+    class FakeLocator:
+        def __init__(self, button=None) -> None:
+            self.button = button
+
+        def count(self):
+            return 1 if self.button is not None else 0
+
+        def nth(self, index):
+            assert index == 0
+            return self.button
+
+    class FakeKeyboard:
+        def press(self, key):
+            raise AssertionError("Enter fallback must not be used")
+
+    class FakePage:
+        def __init__(self, button) -> None:
+            self.button = button
+            self.keyboard = FakeKeyboard()
+
+        def locator(self, selector):
+            if selector == 'button[data-testid="send-button"]':
+                return FakeLocator(self.button)
+            return FakeLocator()
+
+    class FakeEditor:
+        pass
+
+    button = FakeButton()
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+
+    bridge._wait_for_submission_effect = lambda **kwargs: True
+    method = bridge._submit_message(
+        page=FakePage(button),
+        editor=FakeEditor(),
+        baseline_user_count=3,
+    )
+
+    assert method == "send_button"
+    assert button.clicks == 1
+
+
+def test_submit_message_uses_enter_only_when_send_button_is_unavailable(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    bridge = ChatGPTBrowserBridge(
+        BrowserBridgeConfig(
+            chrome_executable=_config(tmp_path).chrome_executable,
+            profile_directory=tmp_path / "profile",
+            editor_timeout_seconds=0.01,
+        )
+    )
+
+    class FakeLocator:
+        def count(self):
+            return 0
+
+    class FakeKeyboard:
+        def __init__(self) -> None:
+            self.keys = []
+
+        def press(self, key):
+            self.keys.append(key)
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.keyboard = FakeKeyboard()
+
+        def locator(self, selector):
+            return FakeLocator()
+
+    class FakeEditor:
+        def __init__(self) -> None:
+            self.clicks = 0
+
+        def click(self, timeout=None):
+            self.clicks += 1
+
+    page = FakePage()
+    editor = FakeEditor()
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+    monkeypatch.setattr(
+        "curvature_console.infrastructure.browser_bridge.time.sleep",
+        lambda seconds: None,
+    )
+
+    bridge._wait_for_submission_effect = lambda **kwargs: True
+    method = bridge._submit_message(
+        page=page,
+        editor=editor,
+        baseline_user_count=2,
+    )
+
+    assert method == "keyboard_enter"
+    assert page.keyboard.keys == ["Enter"]
+    assert editor.clicks == 1
+
+
+def test_submit_message_falls_back_to_enter_when_send_click_has_no_effect(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeButton:
+        def is_visible(self):
+            return True
+
+        def is_enabled(self):
+            return True
+
+        def click(self, timeout=None):
+            return None
+
+    class FakeLocator:
+        def __init__(self, button=None) -> None:
+            self.button = button
+
+        def count(self):
+            return 1 if self.button is not None else 0
+
+        def nth(self, index):
+            return self.button
+
+    class FakeKeyboard:
+        def __init__(self) -> None:
+            self.keys = []
+
+        def press(self, key):
+            self.keys.append(key)
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.keyboard = FakeKeyboard()
+
+        def locator(self, selector):
+            if selector == 'button[data-testid="send-button"]':
+                return FakeLocator(FakeButton())
+            return FakeLocator()
+
+    class FakeEditor:
+        def __init__(self) -> None:
+            self.clicks = 0
+
+        def click(self, timeout=None):
+            self.clicks += 1
+
+    effects = iter((False, True))
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+    bridge._wait_for_submission_effect = lambda **kwargs: next(effects)
+
+    page = FakePage()
+    editor = FakeEditor()
+    method = bridge._submit_message(
+        page=page,
+        editor=editor,
+        baseline_user_count=8,
+    )
+
+    assert method == "send_button_then_keyboard_enter"
+    assert page.keyboard.keys == ["Enter"]
+    assert editor.clicks == 1
+
+
+def test_user_message_confirmation_scans_marker_when_count_is_unchanged(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeMessage:
+        def __init__(self, text: str) -> None:
+            self._text = text
+
+        def inner_text(self):
+            return self._text
+
+    class FakeMessages:
+        def __init__(self) -> None:
+            self._messages = [
+                FakeMessage("older rendered request"),
+                FakeMessage("CURVATURE_REQUEST_ID: request-virtualised"),
+            ]
+
+        def count(self):
+            return 2
+
+        def nth(self, index):
+            return self._messages[index]
+
+    class FakePage:
+        def locator(self, selector):
+            assert selector == '[data-message-author-role="user"]'
+            return FakeMessages()
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+
+    bridge._wait_for_confirmed_user_message(
+        page=FakePage(),
+        baseline_count=2,
+        expected_text="task",
+        confirmation_marker=(
+            "CURVATURE_REQUEST_ID: request-virtualised"
+        ),
+    )
+
+
+def test_user_message_confirmation_accepts_new_assistant_turn(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeMessages:
+        def count(self):
+            return 2
+
+        def nth(self, index):
+            raise AssertionError("No user message scan should be required")
+
+    class FakeAssistantMessages:
+        def count(self):
+            return 4
+
+    class FakePage:
+        def locator(self, selector):
+            if selector == '[data-message-author-role="user"]':
+                return FakeMessages()
+            assert selector == '[data-message-author-role="assistant"]'
+            return FakeAssistantMessages()
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+
+    bridge._wait_for_confirmed_user_message(
+        page=FakePage(),
+        baseline_count=2,
+        baseline_assistant_count=3,
+        expected_text="task",
+        confirmation_marker="CURVATURE_REQUEST_ID: request-assistant-proof",
+    )
+
+
+def test_completed_response_accepts_new_message_id_when_count_is_unchanged(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeMessage:
+        def __init__(self, message_id: str, text: str) -> None:
+            self.message_id = message_id
+            self.text = text
+
+        def get_attribute(self, name):
+            assert name == "data-message-id"
+            return self.message_id
+
+        def inner_text(self):
+            return self.text
+
+    class FakeMessages:
+        def __init__(self) -> None:
+            self.messages = [
+                FakeMessage("assistant-old-1", "Older response"),
+                FakeMessage("assistant-new-2", "B5.5D1-H3 DELIVERY RECEIVED"),
+            ]
+
+        def count(self):
+            return len(self.messages)
+
+        def nth(self, index):
+            return self.messages[index]
+
+    class FakePage:
+        def locator(self, selector):
+            assert selector == '[data-message-author-role="assistant"]'
+            return FakeMessages()
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+    bridge._generation_is_active = lambda page: False
+
+    result = bridge._wait_for_completed_response(
+        page=FakePage(),
+        baseline_count=2,
+        baseline_signatures=(
+            ("assistant-old-1", "Older response"),
+            ("assistant-old-2", "Previous response"),
+        ),
+    )
+
+    assert result == "B5.5D1-H3 DELIVERY RECEIVED"
+
+
+def test_assistant_message_signatures_capture_id_and_normalized_text(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeMessage:
+        def __init__(self, message_id: str, text: str) -> None:
+            self.message_id = message_id
+            self.text = text
+
+        def get_attribute(self, name):
+            assert name == "data-message-id"
+            return self.message_id
+
+        def inner_text(self):
+            return self.text
+
+    class FakeMessages:
+        def count(self):
+            return 2
+
+        def nth(self, index):
+            return (
+                FakeMessage("assistant-1", " First\nresponse ")
+                if index == 0
+                else FakeMessage("assistant-2", "Second   response")
+            )
+
+    class FakePage:
+        def locator(self, selector):
+            assert selector == '[data-message-author-role="assistant"]'
+            return FakeMessages()
+
+    assert bridge._assistant_message_signatures(FakePage()) == (
+        ("assistant-1", "First\nresponse"),
+        ("assistant-2", "Second   response"),
+    )
