@@ -345,3 +345,22 @@ def test_cancelled_apply_does_not_run_callback(
     assert calls == []
     assert dialog.apply_result is None
     dialog.close()
+
+
+def test_default_repository_roots_include_main_curvature_repository(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    create_application(["default-package-targets-test"])
+    monkeypatch.chdir(tmp_path)
+
+    window = MainWindow(
+        state_path=tmp_path / "state.sqlite3",
+        data_directory=tmp_path / "data",
+    )
+
+    assert window.repository_roots == {
+        "curvature-console": tmp_path.resolve(),
+        "Curvature": Path("/home/seb/Curvature").resolve(),
+    }
+    window.close()

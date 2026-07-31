@@ -37,6 +37,7 @@ class DepartmentPanel(QFrame):
     package_review_requested = Signal(str, str)
     workspace_state_changed = Signal(str)
     replies_view_requested = Signal(str)
+    abort_requested = Signal(str)
 
     def __init__(
         self,
@@ -225,6 +226,14 @@ class DepartmentPanel(QFrame):
             self._request_thread_handoff
         )
 
+        self.abort_button = QPushButton("Abort Current Operation")
+        self.abort_button.setObjectName(f"{department_id}AbortButton")
+        self.abort_button.setStyleSheet("font-weight: 700; color: #b00020;")
+        self.abort_button.clicked.connect(
+            lambda: self.abort_requested.emit(self.department_id)
+        )
+        self.abort_button.hide()
+
         transfer_button_layout = QHBoxLayout()
         transfer_button_layout.addWidget(self.task_package_button)
         transfer_button_layout.addWidget(self.thread_handoff_button)
@@ -247,6 +256,7 @@ class DepartmentPanel(QFrame):
         layout.addWidget(self.download_list)
         layout.addWidget(self.package_review_button)
         layout.addLayout(transfer_button_layout)
+        layout.addWidget(self.abort_button)
 
         self._update_thread_pressure()
 
@@ -334,6 +344,8 @@ class DepartmentPanel(QFrame):
         self.task_package_button.setEnabled(not busy)
         self.thread_handoff_button.setEnabled(not busy)
         self.input_editor.setEnabled(not busy)
+        self.abort_button.setVisible(busy)
+        self.abort_button.setEnabled(busy)
 
         if busy:
             self._activity_stage = "Connecting"

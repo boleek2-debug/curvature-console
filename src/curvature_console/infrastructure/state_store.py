@@ -705,6 +705,7 @@ class SQLiteStateStore:
                             'answered',
                             'awaiting_user_decision',
                             'in_progress',
+                            'update_sent',
                             'return_sent',
                             'returned',
                             'closed',
@@ -784,6 +785,7 @@ class SQLiteStateStore:
         required_statuses = (
             "awaiting_user_decision",
             "in_progress",
+            "update_sent",
             "return_sent",
             "returned",
         )
@@ -828,6 +830,7 @@ class SQLiteStateStore:
                                 'answered',
                                 'awaiting_user_decision',
                                 'in_progress',
+                                'update_sent',
                                 'return_sent',
                                 'returned',
                                 'closed',

@@ -6,6 +6,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QMessageBox
 
 from curvature_console.infrastructure.context_loader import ContextLoadResult
@@ -302,6 +303,7 @@ def test_browser_exchange_adds_request_confirmation_marker(
             captured["request"] = request
             self.succeeded = type("Signal", (), {"connect": lambda *_: None})()
             self.failed = type("Signal", (), {"connect": lambda *_: None})()
+            self.cancelled = type("Signal", (), {"connect": lambda *_: None})()
             self.route_unverified = type(
                 "Signal", (), {"connect": lambda *_: None}
             )()
@@ -338,6 +340,67 @@ def test_browser_exchange_adds_request_confirmation_marker(
     window._browser_worker = None
     window.close()
 
+
+
+def test_pasted_screenshot_is_forwarded_to_browser_request(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    application = create_application([
+        "curvature-console-screenshot-request-test"
+    ])
+    window = MainWindow(
+        state_path=tmp_path / "state.sqlite3",
+        data_directory=tmp_path / "data",
+    )
+
+    captured = {}
+
+    class FakeWorker:
+        def __init__(self, config, request):
+            captured["request"] = request
+            self.succeeded = type("Signal", (), {"connect": lambda *_: None})()
+            self.failed = type("Signal", (), {"connect": lambda *_: None})()
+            self.cancelled = type("Signal", (), {"connect": lambda *_: None})()
+            self.route_unverified = type(
+                "Signal", (), {"connect": lambda *_: None}
+            )()
+            self.stage_changed = type(
+                "Signal", (), {"connect": lambda *_: None}
+            )()
+            self.finished = type("Signal", (), {"connect": lambda *_: None})()
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr(
+        "curvature_console.presentation.main_window.BrowserBridgeWorker",
+        FakeWorker,
+    )
+
+    panel = window.department_panels["core"]
+    image = QImage(24, 24, QImage.Format.Format_ARGB32)
+    image.fill(0xFF224466)
+    application.clipboard().setImage(image)
+
+    assert panel.attachment_list.paste_screenshot_from_clipboard() is True
+    assert len(panel.attachment_list.records) == 1
+    screenshot_path = panel.attachment_list.records[0].path
+    assert screenshot_path.suffix == ".png"
+    assert screenshot_path.exists()
+
+    panel.input_editor.setPlainText("Review the attached screenshot")
+    package = window._build_transfer_package(
+        "core",
+        TransferPackageMode.TASK,
+    )
+    window.start_browser_exchange(package)
+
+    request = captured["request"]
+    assert request.attachment_paths == (screenshot_path,)
+
+    window._browser_worker = None
+    window.close()
 
 def test_browser_success_persists_and_displays_generated_files(
     tmp_path,

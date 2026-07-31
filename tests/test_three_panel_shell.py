@@ -146,3 +146,14 @@ def test_busy_panel_shows_live_activity_indicator(window: MainWindow) -> None:
     assert not panel.activity_progress.isVisible()
     assert not panel._activity_timer.isActive()
     assert panel.activity_label.text() == "IDLE"
+
+
+def test_abort_button_only_visible_while_browser_is_busy(window: MainWindow) -> None:
+    panel = window.department_panels["core"]
+
+    assert panel.abort_button.isHidden()
+    panel.set_browser_busy(True)
+    assert not panel.abort_button.isHidden()
+    assert panel.abort_button.isEnabled()
+    panel.set_browser_busy(False)
+    assert panel.abort_button.isHidden()

@@ -12,9 +12,12 @@ from curvature_console.infrastructure.browser_bridge import (
     BOOTSTRAP_CONVERSATION_URLS,
     SHARED_PROJECT_NAME,
     SHARED_PROJECT_URL,
+    BrowserBridgeCancelled,
     BrowserBridgeConfig,
     BrowserBridgeEditorUnavailable,
+    BrowserBridgeError,
     BrowserBridgeMessageNotConfirmed,
+    BrowserBridgeMessageNotReady,
     BrowserBridgeProcessExited,
     BrowserBridgeRouteMismatch,
     BrowserBridgeRouteUnverified,
@@ -1118,7 +1121,7 @@ def test_submit_message_clicks_enabled_send_button(tmp_path: Path) -> None:
             return True
 
         def click(self, timeout=None):
-            assert timeout == 10000
+            assert timeout == int(bridge.config.editor_timeout_seconds * 1000)
             self.clicks += 1
 
     class FakeLocator:
@@ -1454,3 +1457,893 @@ def test_assistant_message_signatures_capture_id_and_normalized_text(
         ("assistant-1", "First\nresponse"),
         ("assistant-2", "Second   response"),
     )
+
+
+def test_large_contenteditable_editor_uses_verified_clipboard_paste(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    message = "large package\n" * 500
+
+    class FakeContext:
+        def __init__(self) -> None:
+            self.permissions = []
+
+        def grant_permissions(self, permissions, origin):
+            self.permissions.append((permissions, origin))
+
+    class FakeKeyboard:
+        def __init__(self, editor) -> None:
+            self.editor = editor
+            self.pressed: list[str] = []
+            self.inserted: list[str] = []
+
+        def press(self, key: str) -> None:
+            self.pressed.append(key)
+            if key == "Control+V":
+                self.editor.text = message
+
+        def insert_text(self, text: str) -> None:
+            self.inserted.append(text)
+
+    class FakeEditor:
+        def __init__(self) -> None:
+            self.text = ""
+
+        def get_attribute(self, name: str) -> str | None:
+            assert name == "contenteditable"
+            return "true"
+
+        def click(self, timeout: int) -> None:
+            return None
+
+        def inner_text(self) -> str:
+            return self.text
+
+    editor = FakeEditor()
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.context = FakeContext()
+            self.keyboard = FakeKeyboard(editor)
+            self.clipboard_text = ""
+
+        def evaluate(self, script: str, text: str) -> bool:
+            assert "navigator.clipboard.writeText" in script
+            self.clipboard_text = text
+            return True
+
+    page = FakePage()
+    bridge._enter_message_text(
+        page=page,
+        editor=editor,
+        message_text=message,
+    )
+
+    assert page.clipboard_text == message
+    assert page.context.permissions == [
+        (["clipboard-read", "clipboard-write"], "https://chatgpt.com")
+    ]
+    assert page.keyboard.inserted == []
+    assert page.keyboard.pressed == ["Control+A", "Backspace", "Control+V"]
+
+
+def test_large_contenteditable_editor_falls_back_when_all_fast_paths_fail(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    message = "large package\n" * 500
+
+    class FakeContext:
+        def grant_permissions(self, permissions, origin):
+            raise RuntimeError("clipboard unavailable")
+
+    class FakeKeyboard:
+        def __init__(self) -> None:
+            self.pressed: list[str] = []
+            self.inserted: list[str] = []
+
+        def press(self, key: str) -> None:
+            self.pressed.append(key)
+
+        def insert_text(self, text: str) -> None:
+            self.inserted.append(text)
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.context = FakeContext()
+            self.keyboard = FakeKeyboard()
+
+    class FakeEditor:
+        def get_attribute(self, name: str) -> str | None:
+            return "true"
+
+        def click(self, timeout: int) -> None:
+            return None
+
+        def evaluate(self, script: str, text: str):
+            raise RuntimeError("dom commit unsupported")
+
+        def inner_text(self) -> str:
+            return ""
+
+    page = FakePage()
+    bridge._enter_message_text(
+        page=page,
+        editor=FakeEditor(),
+        message_text=message,
+    )
+
+    assert page.keyboard.inserted == [message]
+    assert page.keyboard.pressed == [
+        "Control+A",
+        "Backspace",
+        "Control+A",
+        "Backspace",
+        "Control+A",
+        "Backspace",
+    ]
+
+
+def test_large_contenteditable_dom_commit_returns_stage_diagnostics(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    message = "line one\n\nline three\n" * 300
+
+    class FakeContext:
+        def grant_permissions(self, permissions, origin):
+            raise RuntimeError("clipboard unavailable")
+
+    class FakeKeyboard:
+        def __init__(self) -> None:
+            self.pressed: list[str] = []
+            self.inserted: list[str] = []
+
+        def press(self, key: str) -> None:
+            self.pressed.append(key)
+
+        def insert_text(self, text: str) -> None:
+            self.inserted.append(text)
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.context = FakeContext()
+            self.keyboard = FakeKeyboard()
+
+    class FakeEditor:
+        def __init__(self) -> None:
+            self.text = ""
+            self.script = ""
+
+        def get_attribute(self, name: str) -> str | None:
+            return "true"
+
+        def click(self, timeout: int) -> None:
+            return None
+
+        def evaluate(self, script: str, text: str):
+            self.script = script
+            self.text = text
+            return {
+                "ok": True,
+                "stage": "complete",
+                "errorName": "",
+                "errorMessage": "",
+                "insertedLength": len(text),
+            }
+
+        def inner_text(self) -> str:
+            return self.text
+
+    page = FakePage()
+    editor = FakeEditor()
+    bridge._enter_message_text(
+        page=page,
+        editor=editor,
+        message_text=message,
+    )
+
+    assert "replaceChildren" in editor.script
+    assert "result.stage = 'replace_children'" in editor.script
+    assert "result.errorMessage" in editor.script
+    assert page.keyboard.inserted == []
+
+
+def test_completed_response_extends_wait_while_generation_is_active(
+    tmp_path: Path,
+) -> None:
+    base = _config(tmp_path)
+    bridge = ChatGPTBrowserBridge(
+        BrowserBridgeConfig(
+            chrome_executable=base.chrome_executable,
+            profile_directory=base.profile_directory,
+            xvfb_run_executable=base.xvfb_run_executable,
+            response_timeout_seconds=0.002,
+            response_generation_grace_seconds=0.08,
+            response_poll_interval_seconds=0.001,
+            stable_response_seconds=0.001,
+        )
+    )
+
+    class FakeMessage:
+        def get_attribute(self, name: str) -> str:
+            assert name == "data-message-id"
+            return "assistant-new"
+
+        def inner_text(self) -> str:
+            return "Delayed but complete response"
+
+    class FakeMessages:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def count(self) -> int:
+            self.calls += 1
+            return 0 if self.calls < 8 else 1
+
+        def nth(self, index: int):
+            assert index == 0
+            return FakeMessage()
+
+    messages = FakeMessages()
+
+    class FakePage:
+        def locator(self, selector: str):
+            assert selector == '[data-message-author-role="assistant"]'
+            return messages
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+    bridge._generation_is_active = lambda page: messages.calls < 8
+
+    result = bridge._wait_for_completed_response(
+        page=FakePage(),
+        baseline_count=0,
+        baseline_signatures=(),
+    )
+
+    assert result == "Delayed but complete response"
+
+
+def test_polish_download_button_is_generated_file_candidate(tmp_path: Path) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeCandidate:
+        def get_attribute(self, name):
+            if name == "class":
+                return "behavior-btn"
+            return None
+
+        def inner_text(self):
+            return "Pobierz PSKI Foundation Sources 01"
+
+    assert bridge._is_generated_file_candidate(FakeCandidate(), "", None)
+
+
+def test_trigger_candidate_download_uses_open_preview_after_file_card_click(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeDownloadInfo:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            raise PlaywrightTimeoutError("no native download")
+
+    class FakePage:
+        def __init__(self):
+            self.handler = None
+
+        def on(self, name, handler):
+            assert name == "response"
+            self.handler = handler
+
+        def remove_listener(self, name, handler):
+            assert name == "response"
+            assert handler is self.handler
+
+        def expect_download(self, timeout):
+            return FakeDownloadInfo()
+
+        def wait_for_timeout(self, milliseconds):
+            assert milliseconds == 250
+
+    class FakeCandidate:
+        def scroll_into_view_if_needed(self):
+            return None
+
+        def click(self):
+            return None
+
+        def get_attribute(self, name):
+            return None
+
+        def inner_text(self):
+            return "Pobierz PSKI Foundation Sources 01"
+
+        def evaluate(self, script):
+            if script == "(element) => element.tagName":
+                return "BUTTON"
+            raise AssertionError(script)
+
+    expected_download = object()
+    bridge._capture_download_from_open_preview = (
+        lambda **kwargs: expected_download
+    )
+
+    result = bridge._trigger_candidate_download(
+        page=FakePage(),
+        candidate=FakeCandidate(),
+        request=BrowserExchangeRequest(
+            request_id="request",
+            department_id="research",
+            message_text="create file",
+            create_new_thread=False,
+            conversation_url="https://chatgpt.com/c/research",
+        ),
+        candidate_index=0,
+    )
+
+    assert result is expected_download
+
+
+def test_large_contenteditable_clipboard_accepts_prosemirror_whitespace_variation(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    message = ("alpha\nbeta\n\ngamma\n" * 400).strip()
+
+    class FakeContext:
+        def grant_permissions(self, permissions, origin):
+            return None
+
+    class FakeEditor:
+        def __init__(self) -> None:
+            self.text = ""
+
+        def get_attribute(self, name: str) -> str | None:
+            return "true"
+
+        def click(self, timeout: int) -> None:
+            return None
+
+        def inner_text(self) -> str:
+            return self.text
+
+    editor = FakeEditor()
+
+    class FakeKeyboard:
+        def __init__(self) -> None:
+            self.pressed: list[str] = []
+            self.inserted: list[str] = []
+
+        def press(self, key: str) -> None:
+            self.pressed.append(key)
+            if key == "Control+V":
+                editor.text = message.replace("\n", "\n\n").replace(" ", "\u00a0")
+
+        def insert_text(self, text: str) -> None:
+            self.inserted.append(text)
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.context = FakeContext()
+            self.keyboard = FakeKeyboard()
+
+        def evaluate(self, script: str, text: str) -> bool:
+            return True
+
+    page = FakePage()
+    bridge._enter_message_text(
+        page=page,
+        editor=editor,
+        message_text=message,
+    )
+
+    assert page.keyboard.inserted == []
+    assert page.keyboard.pressed == ["Control+A", "Backspace", "Control+V"]
+
+
+def test_behavior_button_without_download_word_is_generated_artifact_candidate(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeCandidate:
+        def get_attribute(self, name):
+            if name == "class":
+                return "behavior-btn entity-underline"
+            return None
+
+        def inner_text(self):
+            return "PSKI Scientific Publications 01"
+
+    assert bridge._is_generated_file_candidate(FakeCandidate(), "", None)
+
+
+def test_request_preserves_attachment_paths(tmp_path: Path) -> None:
+    attachment = tmp_path / "validation.log"
+    attachment.write_text("198 passed", encoding="utf-8")
+
+    request = BrowserExchangeRequest(
+        request_id="request-with-file",
+        department_id="core",
+        message_text="Review attached validation.",
+        create_new_thread=False,
+        conversation_url=BOOTSTRAP_CONVERSATION_URLS["core"],
+        attachment_paths=(attachment,),
+    )
+
+    assert request.attachment_paths == (attachment,)
+
+
+def test_upload_attachments_uses_real_file_input_and_confirms_names(
+    tmp_path: Path,
+) -> None:
+    attachment = tmp_path / "validation.log"
+    attachment.write_text("198 passed", encoding="utf-8")
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    bridge._active_request = BrowserExchangeRequest(
+        request_id="request-upload",
+        department_id="core",
+        message_text="Review attached validation.",
+        create_new_thread=False,
+        conversation_url=BOOTSTRAP_CONVERSATION_URLS["core"],
+        attachment_paths=(attachment,),
+    )
+
+    selected_files = []
+
+    class FakeFileInput:
+        def set_input_files(self, paths, timeout):
+            selected_files.append(paths)
+
+    class FakeFileInputs:
+        def count(self):
+            return 1
+
+        def set_input_files(self, paths, timeout):
+            return FakeFileInput().set_input_files(paths, timeout)
+
+        @property
+        def first(self):
+            return FakeFileInput()
+
+    class FakeBody:
+        def inner_text(self, timeout):
+            return "validation.log.txt"
+
+    class FakeAttachmentTile:
+        @property
+        def last(self):
+            return self
+
+        def count(self):
+            return 1
+
+        def evaluate(self, script):
+            assert "waitingButton" in script
+            return {
+                "waiting": False,
+                "waitingButton": False,
+                "spinning": False,
+                "progress": False,
+                "removeButton": True,
+            }
+
+    class FakePage:
+        def locator(self, selector):
+            if selector == 'input#upload-files':
+                return FakeFileInputs()
+            if selector == "body":
+                return FakeBody()
+            if selector == '[role="group"][aria-label="validation.log.txt"]':
+                return FakeAttachmentTile()
+            raise AssertionError(selector)
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+
+    bridge._upload_attachments(
+        page=FakePage(),
+        attachment_paths=(attachment,),
+    )
+
+    assert len(selected_files) == 1
+    uploaded = Path(selected_files[0])
+    assert uploaded.name == "validation.log.txt"
+    assert uploaded.read_text(encoding="utf-8") == "198 passed"
+
+
+def test_upload_attachments_rejects_missing_local_file(tmp_path: Path) -> None:
+    from curvature_console.infrastructure.browser_bridge import (
+        BrowserBridgeAttachmentUploadError,
+    )
+
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    with pytest.raises(
+        BrowserBridgeAttachmentUploadError,
+        match="Queued attachment is unavailable",
+    ):
+        bridge._upload_attachments(
+            page=object(),
+            attachment_paths=(tmp_path / "missing.log",),
+        )
+
+
+
+def test_large_message_with_attachment_uses_real_keyboard_input(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    message = "line one\nline two\n" * 400
+
+    class FakeContext:
+        def grant_permissions(self, permissions, origin):
+            raise AssertionError("Clipboard must not be used with attachments")
+
+    class FakeKeyboard:
+        def __init__(self) -> None:
+            self.pressed: list[str] = []
+            self.inserted: list[str] = []
+
+        def press(self, key: str) -> None:
+            self.pressed.append(key)
+
+        def insert_text(self, text: str) -> None:
+            self.inserted.append(text)
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.context = FakeContext()
+            self.keyboard = FakeKeyboard()
+
+        def evaluate(self, script: str, text: str):
+            raise AssertionError("Page clipboard evaluate must not be used")
+
+    class FakeEditor:
+        def get_attribute(self, name: str) -> str | None:
+            return "true"
+
+        def click(self, timeout: int) -> None:
+            return None
+
+        def evaluate(self, script: str, text: str):
+            raise AssertionError("DOM commit must not be used with attachments")
+
+    page = FakePage()
+    editor = FakeEditor()
+    bridge._enter_message_text(
+        page=page,
+        editor=editor,
+        message_text=message,
+        has_attachments=True,
+    )
+
+    assert page.keyboard.inserted == [message]
+    assert page.keyboard.pressed == ["Control+A", "Backspace"]
+
+
+def test_submit_message_does_not_press_enter_when_visible_send_stays_disabled(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = BrowserBridgeConfig(
+        chrome_executable=_config(tmp_path).chrome_executable,
+        profile_directory=tmp_path / "profile",
+        editor_timeout_seconds=0.01,
+    )
+    bridge = ChatGPTBrowserBridge(config)
+
+    class FakeButton:
+        def is_visible(self):
+            return True
+
+        def is_enabled(self):
+            return False
+
+    class FakeLocator:
+        def __init__(self, button=None) -> None:
+            self.button = button
+
+        def count(self):
+            return 1 if self.button is not None else 0
+
+        def nth(self, index):
+            assert index == 0
+            return self.button
+
+    class FakeKeyboard:
+        def press(self, key):
+            raise AssertionError("Enter must not be used for a disabled Send button")
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.keyboard = FakeKeyboard()
+            self.button = FakeButton()
+
+        def locator(self, selector):
+            if selector == 'button[data-testid="send-button"]':
+                return FakeLocator(self.button)
+            return FakeLocator()
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+    monkeypatch.setattr(
+        "curvature_console.infrastructure.browser_bridge.time.sleep",
+        lambda seconds: None,
+    )
+
+    with pytest.raises(BrowserBridgeMessageNotReady, match="Send button disabled"):
+        bridge._submit_message(
+            page=FakePage(),
+            editor=object(),
+            baseline_user_count=2,
+        )
+
+
+def test_large_message_with_attachment_keyboard_path_preserves_full_payload(
+    tmp_path: Path,
+) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    message = "alpha\nbeta\n" * 500
+
+    class FakeKeyboard:
+        def __init__(self, editor) -> None:
+            self.editor = editor
+            self.pressed: list[str] = []
+            self.inserted: list[str] = []
+
+        def press(self, key: str) -> None:
+            self.pressed.append(key)
+            if key == "Backspace":
+                self.editor.text = ""
+
+        def insert_text(self, text: str) -> None:
+            self.inserted.append(text)
+            self.editor.text += text
+
+    class FakeEditor:
+        def __init__(self) -> None:
+            self.text = ""
+
+        def get_attribute(self, name: str) -> str | None:
+            return "true"
+
+        def click(self, timeout: int) -> None:
+            return None
+
+        def inner_text(self) -> str:
+            return self.text
+
+    class FakePage:
+        def __init__(self, editor) -> None:
+            self.keyboard = FakeKeyboard(editor)
+
+    editor = FakeEditor()
+    page = FakePage(editor)
+    bridge._enter_message_text(
+        page=page,
+        editor=editor,
+        message_text=message,
+        has_attachments=True,
+    )
+
+    assert editor.text == message
+    assert page.keyboard.inserted == [message]
+    assert page.keyboard.pressed == ["Control+A", "Backspace"]
+
+
+def test_bridge_cancel_sets_cooperative_flag(tmp_path: Path) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    assert bridge.cancellation_requested is False
+    bridge.cancel()
+    assert bridge.cancellation_requested is True
+
+
+def test_log_attachment_normalization_contract_is_present() -> None:
+    source = Path(
+        "src/curvature_console/infrastructure/browser_bridge.py"
+    ).read_text(encoding="utf-8")
+    assert 'source.suffix.casefold() == ".log"' in source
+    assert 'source.name + ".txt"' in source
+    assert "cursor-wait" in source
+
+
+def test_cancelled_exception_is_public_bridge_error() -> None:
+    assert issubclass(BrowserBridgeCancelled, BrowserBridgeError)
+
+def test_upload_attachments_prefers_general_upload_input(tmp_path: Path) -> None:
+    attachment = tmp_path / "snapshot.zip"
+    attachment.write_bytes(b"PK-test")
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    bridge._active_request = BrowserExchangeRequest(
+        request_id="request-general-input",
+        department_id="core",
+        message_text="Review attachment.",
+        create_new_thread=False,
+        conversation_url=BOOTSTRAP_CONVERSATION_URLS["core"],
+        attachment_paths=(attachment,),
+    )
+    selected: list[str] = []
+
+    class Input:
+        def count(self):
+            return 1
+
+        def set_input_files(self, paths, timeout):
+            selected.append(paths)
+
+    class Body:
+        def inner_text(self, timeout):
+            return "snapshot.zip"
+
+    class Tile:
+        @property
+        def last(self):
+            return self
+
+        def count(self):
+            return 1
+
+        def evaluate(self, script):
+            return {
+                "waiting": False,
+                "waitingButton": False,
+                "spinning": False,
+                "progress": False,
+                "removeButton": True,
+            }
+
+    class Page:
+        def locator(self, selector):
+            if selector == 'input#upload-files':
+                return Input()
+            if selector == "body":
+                return Body()
+            if selector == '[role="group"][aria-label="snapshot.zip"]':
+                return Tile()
+            raise AssertionError(selector)
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+    bridge._upload_attachments(page=Page(), attachment_paths=(attachment,))
+    assert selected == [str(attachment.resolve())]
+
+
+def test_attachment_readiness_ignores_hidden_progress_dom(tmp_path: Path) -> None:
+    attachment = tmp_path / "snapshot.zip"
+    attachment.write_bytes(b"PK-test")
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    bridge._active_request = BrowserExchangeRequest(
+        request_id="request-hidden-progress",
+        department_id="core",
+        message_text="Review attachment.",
+        create_new_thread=False,
+        conversation_url=BOOTSTRAP_CONVERSATION_URLS["core"],
+        attachment_paths=(attachment,),
+    )
+
+    class Input:
+        def count(self):
+            return 1
+
+        def set_input_files(self, paths, timeout):
+            return None
+
+    class Body:
+        def inner_text(self, timeout):
+            return "snapshot.zip"
+
+    class Tile:
+        @property
+        def last(self):
+            return self
+
+        def count(self):
+            return 1
+
+        def evaluate(self, script):
+            assert "getComputedStyle" in script
+            return {
+                "waiting": False,
+                "waitingButton": False,
+                "spinning": False,
+                "progress": False,
+                "removeButton": True,
+            }
+
+    class Page:
+        def locator(self, selector):
+            if selector == 'input#upload-files':
+                return Input()
+            if selector == "body":
+                return Body()
+            if selector == '[role="group"][aria-label="snapshot.zip"]':
+                return Tile()
+            raise AssertionError(selector)
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+    bridge._upload_attachments(page=Page(), attachment_paths=(attachment,))
+
+
+def test_multi_attachment_upload_is_sequential_and_waits_for_each_file(
+    tmp_path: Path,
+) -> None:
+    snapshot = tmp_path / "snapshot.zip"
+    snapshot.write_bytes(b"PK-test")
+    validation = tmp_path / "validation.txt"
+    validation.write_text("211 passed", encoding="utf-8")
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+    bridge._active_request = BrowserExchangeRequest(
+        request_id="request-sequential-multi-upload",
+        department_id="core",
+        message_text="Review attachments.",
+        create_new_thread=False,
+        conversation_url=BOOTSTRAP_CONVERSATION_URLS["core"],
+        attachment_paths=(snapshot, validation),
+    )
+
+    selections: list[str] = []
+    polls = {"snapshot.zip": 0, "validation.txt": 0}
+
+    class Input:
+        def count(self):
+            return 1
+
+        def set_input_files(self, path, timeout):
+            selections.append(path)
+
+    class Body:
+        def inner_text(self, timeout):
+            return "snapshot.zip validation.txt"
+
+    class Tile:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        @property
+        def last(self):
+            return self
+
+        def count(self):
+            return 1
+
+        def evaluate(self, script):
+            polls[self.name] += 1
+            waiting = polls[self.name] == 1
+            return {
+                "waiting": waiting,
+                "waitingButton": waiting,
+                "spinning": False,
+                "progress": False,
+                "removeButton": True,
+            }
+
+    class Page:
+        def locator(self, selector):
+            if selector == 'input#upload-files':
+                return Input()
+            if selector == "body":
+                return Body()
+            if selector == '[role="group"][aria-label="snapshot.zip"]':
+                return Tile("snapshot.zip")
+            if selector == '[role="group"][aria-label="validation.txt"]':
+                return Tile("validation.txt")
+            raise AssertionError(selector)
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+    bridge._upload_attachments(
+        page=Page(),
+        attachment_paths=(snapshot, validation),
+    )
+
+    assert selections == [str(snapshot.resolve()), str(validation.resolve())]
+    assert polls["snapshot.zip"] >= 2
+    assert polls["validation.txt"] >= 2

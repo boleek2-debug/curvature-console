@@ -310,3 +310,87 @@ def test_open_hub_refreshes_after_handoff_reply_is_recorded(tmp_path) -> None:
 
     dialog.close()
     window.state_store.close()
+
+
+def test_progress_update_control_is_only_enabled_for_in_progress(tmp_path) -> None:
+    from curvature_console.infrastructure.handoff import create_handoff
+
+    create_application(["curvature-console-progress-update-control-test"])
+    store = SQLiteStateStore(tmp_path / "state.sqlite3")
+    record = create_handoff(
+        handoff_id="handoff-update-ui",
+        request_id="request-update-ui",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="Continue the implementation.",
+    )
+    for status in (
+        HandoffStatus.PENDING_APPROVAL,
+        HandoffStatus.APPROVED,
+        HandoffStatus.SENT,
+        HandoffStatus.RECEIVED,
+        HandoffStatus.AWAITING_USER_DECISION,
+        HandoffStatus.IN_PROGRESS,
+    ):
+        record = record.transition(status)
+    store.save_handoff(record)
+
+    dialog = HandoffControlsDialog(store)
+
+    assert dialog.selected_record is not None
+    assert dialog.selected_record.status is HandoffStatus.IN_PROGRESS
+    assert dialog.update_button.isEnabled()
+    assert not dialog.return_button.isEnabled()
+
+    dialog.close()
+    store.close()
+
+
+def test_progress_update_emits_same_handoff_and_edited_text(
+    tmp_path, monkeypatch
+) -> None:
+    from curvature_console.infrastructure.handoff import create_handoff
+    import curvature_console.presentation.handoff_controls_dialog as module
+
+    create_application(["curvature-console-progress-update-emit-test"])
+    store = SQLiteStateStore(tmp_path / "state.sqlite3")
+    record = create_handoff(
+        handoff_id="handoff-update-emit",
+        request_id="request-update-emit",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="Continue the implementation.",
+    )
+    for status in (
+        HandoffStatus.PENDING_APPROVAL,
+        HandoffStatus.APPROVED,
+        HandoffStatus.SENT,
+        HandoffStatus.RECEIVED,
+        HandoffStatus.AWAITING_USER_DECISION,
+        HandoffStatus.IN_PROGRESS,
+    ):
+        record = record.transition(status)
+    store.save_handoff(record)
+    monkeypatch.setattr(
+        module,
+        "request_handoff_update",
+        lambda **_: "pytest: 184 passed\ngit diff --check: PASS",
+    )
+    dialog = HandoffControlsDialog(store)
+    emitted: list[tuple[str, str]] = []
+    dialog.update_requested.connect(
+        lambda handoff_id, text: emitted.append((handoff_id, text))
+    )
+
+    dialog.update_selected()
+
+    assert emitted == [
+        (
+            "handoff-update-emit",
+            "pytest: 184 passed\ngit diff --check: PASS",
+        )
+    ]
+    assert store.load_handoff("handoff-update-emit").status is HandoffStatus.IN_PROGRESS
+
+    dialog.close()
+    store.close()

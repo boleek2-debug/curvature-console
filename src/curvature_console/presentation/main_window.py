@@ -84,6 +84,7 @@ class PendingBrowserExchange:
     user_task: str
     handoff_id: str | None = None
     handoff_return: bool = False
+    handoff_update: bool = False
 
 
 class MainWindow(QMainWindow):
@@ -139,7 +140,10 @@ class MainWindow(QMainWindow):
             for repository_id, root in (
                 repository_roots
                 if repository_roots is not None
-                else {"curvature-console": Path.cwd()}
+                else {
+                    "curvature-console": Path.cwd(),
+                    "Curvature": Path("/home/seb/Curvature"),
+                }
             ).items()
         }
         self.package_reviewer = PackageReviewer()
@@ -249,6 +253,7 @@ class MainWindow(QMainWindow):
         self._handoff_controls_dialog = dialog
         dialog.deliver_requested.connect(self.deliver_handoff)
         dialog.return_requested.connect(self.return_handoff)
+        dialog.update_requested.connect(self.update_handoff)
         try:
             dialog.exec()
         finally:
@@ -369,6 +374,113 @@ class MainWindow(QMainWindow):
         )
         worker.start()
 
+    def update_handoff(self, handoff_id: str, update_text: str) -> None:
+        """Send one supervised progress update within an open handoff."""
+
+        if self._browser_worker is not None:
+            QMessageBox.information(
+                self,
+                "ChatGPT operation in progress",
+                "Wait for the current ChatGPT exchange before sending "
+                "another progress update.",
+            )
+            return
+
+        record = self.state_store.load_handoff(handoff_id)
+        if record is None:
+            QMessageBox.critical(
+                self, "Handoff unavailable", f"Unknown handoff: {handoff_id}"
+            )
+            return
+        if record.status is not HandoffStatus.IN_PROGRESS:
+            QMessageBox.warning(
+                self,
+                "Handoff not in progress",
+                "Only an in-progress handoff may receive a progress update.",
+            )
+            return
+        clean_update = update_text.strip()
+        if not clean_update:
+            QMessageBox.warning(
+                self,
+                "Progress update required",
+                "Enter the progress update before sending it.",
+            )
+            return
+
+        route = self.state_store.load_chat_route(record.target_department_id)
+        if route is None:
+            QMessageBox.critical(
+                self,
+                "Target route unavailable",
+                "The target department has no active conversation route.",
+            )
+            return
+
+        message_text = (
+            f"CURVATURE_HANDOFF_ID: {record.handoff_id}\n"
+            f"CURVATURE_REQUEST_ID: {record.request_id}\n\n"
+            "# SUPERVISED SAME-HANDOFF PROGRESS UPDATE\n\n"
+            f"Source department: {record.source_department_id}\n"
+            f"Target department: {record.target_department_id}\n\n"
+            "The operator approved this update for the existing open "
+            "handoff. Preserve the same handoff context and respond only "
+            "within the target department's authority.\n\n"
+            f"{clean_update}\n\n"
+            "Return a progress response, blocker, decision request, milestone "
+            "result or final result. Do not create an autonomous loop."
+        )
+        updating = record.transition(
+            HandoffStatus.UPDATE_SENT
+        ).append_message(
+            record.source_department_id,
+            "Operator-approved progress update sent to "
+            + record.target_department_id
+            + ":\n"
+            + clean_update,
+        )
+        self.state_store.save_handoff(updating)
+        self._refresh_handoff_controls(updating.handoff_id)
+
+        request_id = f"handoff-update-{uuid4().hex}"
+        self._pending_exchanges[request_id] = PendingBrowserExchange(
+            request_id=request_id,
+            department_id=record.target_department_id,
+            user_task=message_text,
+            handoff_id=record.handoff_id,
+            handoff_update=True,
+        )
+        self._set_browser_operation_busy(True, record.target_department_id)
+        worker = BrowserBridgeWorker(
+            config=self.browser_config,
+            request=BrowserExchangeRequest(
+                request_id=request_id,
+                department_id=record.target_department_id,
+                message_text=message_text,
+                create_new_thread=False,
+                conversation_url=route.active_conversation_url,
+                confirmation_marker=(
+                    f"CURVATURE_HANDOFF_ID: {record.handoff_id}"
+                ),
+            ),
+        )
+        worker.succeeded.connect(self._handle_browser_success)
+        worker.failed.connect(self._handle_browser_failure)
+        worker.route_unverified.connect(
+            self._handle_browser_route_unverified
+        )
+        worker.stage_changed.connect(self._handle_browser_stage)
+        worker.finished.connect(self._clear_browser_worker)
+        self._browser_worker = worker
+        self._show_handoff_progress(
+            request_id=request_id,
+            target_department_id=record.target_department_id,
+            handoff_message=clean_update,
+        )
+        self.statusBar().showMessage(
+            "Supervised same-handoff update engaged..."
+        )
+        worker.start()
 
     def return_handoff(self, handoff_id: str) -> None:
         """Return the latest captured target reply once to the source route."""
@@ -567,6 +679,18 @@ class MainWindow(QMainWindow):
             self._refresh_handoff_controls(record.handoff_id)
             return
 
+        if pending.handoff_update:
+            if record.status is HandoffStatus.UPDATE_SENT:
+                record = record.transition(
+                    HandoffStatus.AWAITING_USER_DECISION
+                ).append_message(
+                    record.target_department_id,
+                    response_text,
+                )
+            self.state_store.save_handoff(record)
+            self._refresh_handoff_controls(record.handoff_id)
+            return
+
         if record.status is HandoffStatus.SENT:
             record = record.transition(
                 HandoffStatus.RECEIVED
@@ -600,6 +724,13 @@ class MainWindow(QMainWindow):
             held = record.transition(HandoffStatus.HELD).append_message(
                 record.target_department_id,
                 "Controlled return failed and was held: " + error_message,
+            )
+        elif pending.handoff_update:
+            if record.status is not HandoffStatus.UPDATE_SENT:
+                return
+            held = record.transition(HandoffStatus.HELD).append_message(
+                record.source_department_id,
+                "Progress update failed and was held: " + error_message,
             )
         else:
             if record.status is not HandoffStatus.SENT:
@@ -788,6 +919,9 @@ class MainWindow(QMainWindow):
                     else None
                 ),
                 confirmation_marker=confirmation_marker,
+                attachment_paths=tuple(
+                    record.path for record in panel.attachment_list.records
+                ),
             ),
         )
         worker.succeeded.connect(self._handle_browser_success)

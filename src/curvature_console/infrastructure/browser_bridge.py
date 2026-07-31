@@ -9,6 +9,8 @@ import re
 import signal
 import socket
 import subprocess
+import tempfile
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -86,6 +88,7 @@ class BrowserBridgeStage(StrEnum):
     NAVIGATING = "Navigating"
     VERIFYING_ROUTE = "Verifying route"
     LOCATING_EDITOR = "Locating editor"
+    UPLOADING_ATTACHMENTS = "Uploading attachments"
     ENTERING_MESSAGE = "Entering message"
     SENDING = "Sending"
     VERIFYING_USER_MESSAGE = "Verifying user message"
@@ -99,6 +102,10 @@ class BrowserBridgeStage(StrEnum):
 
 class BrowserBridgeError(RuntimeError):
     """Base class for recoverable browser-bridge failures."""
+
+
+class BrowserBridgeCancelled(BrowserBridgeError):
+    """The operator cancelled the current browser exchange."""
 
 
 class BrowserBridgeConnectionError(BrowserBridgeError):
@@ -129,8 +136,16 @@ class BrowserBridgeEditorUnavailable(BrowserBridgeError):
     """The ChatGPT composer did not become available in the current mode."""
 
 
+class BrowserBridgeAttachmentUploadError(BrowserBridgeError):
+    """A queued local attachment was not uploaded to the ChatGPT composer."""
+
+
 class BrowserBridgeRouteMismatch(BrowserBridgeError):
     """The dedicated page does not point to the requested conversation."""
+
+
+class BrowserBridgeMessageNotReady(BrowserBridgeError):
+    """The ChatGPT composer did not become ready for safe submission."""
 
 
 class BrowserBridgeMessageNotConfirmed(BrowserBridgeError):
@@ -165,12 +180,14 @@ class BrowserBridgeConfig:
     editor_timeout_seconds: float = 30.0
     message_confirmation_timeout_seconds: float = 30.0
     response_timeout_seconds: float = 180.0
+    response_generation_grace_seconds: float = 600.0
     response_poll_interval_seconds: float = 0.5
     stable_response_seconds: float = 2.0
     human_action_timeout_seconds: float = 300.0
     process_shutdown_timeout_seconds: float = 5.0
     cdp_release_timeout_seconds: float = 5.0
     download_timeout_seconds: float = 15.0
+    attachment_upload_timeout_seconds: float = 90.0
     download_inbox_directory: Path | None = None
 
     @property
@@ -201,6 +218,8 @@ class BrowserBridgeConfig:
             "Message confirmation timeout":
                 self.message_confirmation_timeout_seconds,
             "Response timeout": self.response_timeout_seconds,
+            "Response generation grace":
+                self.response_generation_grace_seconds,
             "Response poll interval": self.response_poll_interval_seconds,
             "Stable response duration": self.stable_response_seconds,
             "Human action timeout": self.human_action_timeout_seconds,
@@ -208,6 +227,8 @@ class BrowserBridgeConfig:
                 self.process_shutdown_timeout_seconds,
             "CDP release timeout": self.cdp_release_timeout_seconds,
             "Download timeout": self.download_timeout_seconds,
+            "Attachment upload timeout":
+                self.attachment_upload_timeout_seconds,
         }
         for label, value in positive_values.items():
             if value <= 0:
@@ -248,6 +269,7 @@ class BrowserExchangeRequest:
     create_new_thread: bool
     conversation_url: str | None = None
     confirmation_marker: str | None = None
+    attachment_paths: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -335,6 +357,8 @@ class ChatGPTBrowserBridge:
         self._dedicated_page: Page | None = None
         self._logger = get_runtime_logger("browser_bridge")
         self._active_request: BrowserExchangeRequest | None = None
+        self._cancel_event = threading.Event()
+        self._temporary_attachment_directory: tempfile.TemporaryDirectory[str] | None = None
 
     def _report_stage(self, stage: BrowserBridgeStage) -> None:
         request = self._active_request
@@ -387,6 +411,23 @@ class ChatGPTBrowserBridge:
             self._terminate_owned_process()
             raise
 
+    @property
+    def cancellation_requested(self) -> bool:
+        return self._cancel_event.is_set()
+
+    def cancel(self) -> None:
+        """Request cooperative cancellation and close the owned page."""
+
+        self._cancel_event.set()
+        request = self._active_request
+        self._logger.info(
+            "exchange_cancel_requested request_id=%s department_id=%s",
+            request.request_id if request is not None else "-",
+            request.department_id if request is not None else "-",
+        )
+        self._close_dedicated_page()
+        self._terminate_owned_process()
+
     def close(self) -> None:
         """Close only the dedicated page and processes owned by this bridge."""
 
@@ -396,6 +437,10 @@ class ChatGPTBrowserBridge:
             self.disconnect()
         finally:
             self._terminate_owned_process()
+            temporary_directory = self._temporary_attachment_directory
+            self._temporary_attachment_directory = None
+            if temporary_directory is not None:
+                temporary_directory.cleanup()
 
     def disconnect(self) -> None:
         """Detach Playwright without closing externally owned Chrome."""
@@ -475,7 +520,14 @@ class ChatGPTBrowserBridge:
                 len(downloaded_files),
             )
             return result
-        except Exception:
+        except Exception as exc:
+            if self.cancellation_requested:
+                if isinstance(exc, BrowserBridgeCancelled):
+                    raise
+                raise BrowserBridgeCancelled(
+                    "Operation cancelled by the operator. "
+                    "No further browser action was taken."
+                ) from exc
             self._logger.exception(
                 "exchange_failure request_id=%s department_id=%s",
                 request.request_id,
@@ -503,28 +555,269 @@ class ChatGPTBrowserBridge:
         page: Page,
         editor: Locator,
         message_text: str,
+        has_attachments: bool = False,
     ) -> None:
-        """Enter text without using Locator.fill on ChatGPT ProseMirror.
+        """Enter message text with bounded fast paths.
 
-        ChatGPT's contenteditable ProseMirror editor has repeatedly timed out
-        under ``Locator.fill`` for larger transfer packages. This is a verified
-        regression boundary: contenteditable editors must use keyboard text
-        insertion, while ordinary input and textarea controls may still use
-        ``fill``.
+        Clipboard and direct-DOM fast paths are deliberately disabled when
+        real attachments are present. ChatGPT may convert a large clipboard
+        payload into ``Pasted markdown.md``, while direct DOM changes can leave
+        its internal composer state unsynchronised and the Send button disabled.
+        Attachment-bearing messages therefore use genuine keyboard insertion.
+
+        Large ProseMirror payloads without attachments are first pasted
+        through the browser clipboard so ChatGPT receives one normal paste
+        transaction instead of thousands of per-character input operations.
+        Direct DOM commit remains a bounded fallback, followed by keyboard
+        insertion.
         """
 
         timeout_ms = int(self.config.editor_timeout_seconds * 1000)
         contenteditable = editor.get_attribute("contenteditable")
 
         if contenteditable == "true":
+            editor.click(timeout=timeout_ms)
+            page.keyboard.press("Control+A")
+            page.keyboard.press("Backspace")
+
+            if len(message_text) >= 4000:
+                if has_attachments:
+                    self._logger.info(
+                        "message_entry_method "
+                        "method=attachment_safe_keyboard_insert_text "
+                        "contenteditable=true size=%d",
+                        len(message_text),
+                    )
+                    page.keyboard.insert_text(message_text)
+                    return
+
+                expected_equivalent = self._normalize_editor_equivalence(
+                    message_text
+                )
+
+                if not has_attachments:
+                    self._logger.info(
+                        "message_entry_method method=clipboard_paste "
+                        "contenteditable=true size=%d",
+                        len(message_text),
+                    )
+                    try:
+                        page.context.grant_permissions(
+                            ["clipboard-read", "clipboard-write"],
+                            origin="https://chatgpt.com",
+                        )
+                        clipboard_written = page.evaluate(
+                            """
+                            async (text) => {
+                                await navigator.clipboard.writeText(text);
+                                return true;
+                            }
+                            """,
+                            message_text,
+                        )
+                        editor.click(timeout=timeout_ms)
+                        page.keyboard.press("Control+V")
+
+                        deadline = time.monotonic() + 3.0
+                        inserted_raw = ""
+                        while time.monotonic() < deadline:
+                            inserted_raw = self._read_editor_text(editor)
+                            if (
+                                self._normalize_editor_equivalence(inserted_raw)
+                                == expected_equivalent
+                            ):
+                                self._logger.info(
+                                    "message_entry_verified "
+                                    "method=clipboard_paste size=%d "
+                                    "observed_size=%d comparison=whitespace_normalized",
+                                    len(message_text),
+                                    len(self._normalize_message_text(inserted_raw)),
+                                )
+                                return
+                            time.sleep(0.05)
+
+                        self._logger.warning(
+                            "message_entry_fast_path_mismatch "
+                            "method=clipboard_paste clipboard_written=%s "
+                            "expected_equivalent_size=%d "
+                            "observed_equivalent_size=%d; trying_dom_commit",
+                            bool(clipboard_written),
+                            len(expected_equivalent),
+                            len(self._normalize_editor_equivalence(inserted_raw)),
+                        )
+                    except Exception as exc:
+                        self._logger.warning(
+                            "message_entry_fast_path_failed "
+                            "method=clipboard_paste error_type=%s error=%r; "
+                            "trying_dom_commit",
+                            type(exc).__name__,
+                            str(exc),
+                        )
+
+                    editor.click(timeout=timeout_ms)
+                    page.keyboard.press("Control+A")
+                    page.keyboard.press("Backspace")
+
+                self._logger.info(
+                    "message_entry_method method=prosemirror_dom_commit "
+                    "contenteditable=true size=%d",
+                    len(message_text),
+                )
+                try:
+                    result = editor.evaluate(
+                        """
+                        (element, text) => {
+                            const result = {
+                                ok: false,
+                                stage: 'start',
+                                errorName: '',
+                                errorMessage: '',
+                                insertedLength: 0,
+                            };
+                            try {
+                                result.stage = 'focus';
+                                element.focus();
+
+                                result.stage = 'build_fragment';
+                                const fragment = document.createDocumentFragment();
+                                const LF = String.fromCharCode(10);
+                                const CR = String.fromCharCode(13);
+                                const lines = text.split(LF).map((line) =>
+                                    line.endsWith(CR) ? line.slice(0, -1) : line
+                                );
+                                for (const line of lines) {
+                                    const paragraph = document.createElement('p');
+                                    if (line.length === 0) {
+                                        paragraph.appendChild(document.createElement('br'));
+                                    } else {
+                                        paragraph.appendChild(document.createTextNode(line));
+                                    }
+                                    fragment.appendChild(paragraph);
+                                }
+
+                                result.stage = 'replace_children';
+                                element.replaceChildren(fragment);
+                                result.insertedLength = element.innerText.length;
+
+                                result.stage = 'selection';
+                                const selection = window.getSelection();
+                                if (selection) {
+                                    const range = document.createRange();
+                                    range.selectNodeContents(element);
+                                    range.collapse(false);
+                                    selection.removeAllRanges();
+                                    selection.addRange(range);
+                                }
+
+                                result.stage = 'dispatch_input';
+                                element.dispatchEvent(new Event('input', {
+                                    bubbles: true,
+                                    composed: true,
+                                }));
+
+                                result.stage = 'complete';
+                                result.ok = element.isConnected && element.innerText.length > 0;
+                                result.insertedLength = element.innerText.length;
+                                return result;
+                            } catch (error) {
+                                result.errorName = error && error.name ? error.name : 'Error';
+                                result.errorMessage = error && error.message ? error.message : String(error);
+                                try {
+                                    result.insertedLength = element.innerText.length;
+                                } catch (_) {
+                                    result.insertedLength = -1;
+                                }
+                                return result;
+                            }
+                        }
+                        """,
+                        message_text,
+                    )
+                    inserted_raw = self._read_editor_text(editor)
+                    inserted_equivalent = self._normalize_editor_equivalence(
+                        inserted_raw
+                    )
+                    if (
+                        isinstance(result, dict)
+                        and result.get("ok")
+                        and inserted_equivalent == expected_equivalent
+                    ):
+                        if has_attachments:
+                            self._logger.info(
+                                "message_entry_state_sync "
+                                "method=keyboard_sentinel_roundtrip"
+                            )
+                            editor.click(timeout=timeout_ms)
+                            page.keyboard.insert_text(" ")
+                            page.keyboard.press("Backspace")
+                            time.sleep(0.15)
+                            inserted_raw = self._read_editor_text(editor)
+                            inserted_equivalent = (
+                                self._normalize_editor_equivalence(inserted_raw)
+                            )
+                            if inserted_equivalent != expected_equivalent:
+                                self._logger.warning(
+                                    "message_entry_state_sync_mismatch "
+                                    "expected_equivalent_size=%d "
+                                    "observed_equivalent_size=%d; "
+                                    "falling_back_to_keyboard_insert_text",
+                                    len(expected_equivalent),
+                                    len(inserted_equivalent),
+                                )
+                            else:
+                                self._logger.info(
+                                    "message_entry_state_sync_verified "
+                                    "method=keyboard_sentinel_roundtrip"
+                                )
+                                self._logger.info(
+                                    "message_entry_verified "
+                                    "method=prosemirror_dom_commit size=%d "
+                                    "observed_size=%d "
+                                    "comparison=whitespace_normalized",
+                                    len(message_text),
+                                    len(self._normalize_message_text(inserted_raw)),
+                                )
+                                return
+                        else:
+                            self._logger.info(
+                                "message_entry_verified "
+                                "method=prosemirror_dom_commit size=%d "
+                                "observed_size=%d comparison=whitespace_normalized",
+                                len(message_text),
+                                len(self._normalize_message_text(inserted_raw)),
+                            )
+                            return
+                    self._logger.warning(
+                        "message_entry_dom_commit_result ok=%s stage=%s "
+                        "error_name=%s error_message=%r inserted_length=%s "
+                        "expected_equivalent_size=%d observed_equivalent_size=%d; "
+                        "falling_back_to_keyboard_insert_text",
+                        result.get("ok") if isinstance(result, dict) else None,
+                        result.get("stage") if isinstance(result, dict) else None,
+                        result.get("errorName") if isinstance(result, dict) else None,
+                        result.get("errorMessage") if isinstance(result, dict) else repr(result),
+                        result.get("insertedLength") if isinstance(result, dict) else None,
+                        len(expected_equivalent),
+                        len(inserted_equivalent),
+                    )
+                except Exception as exc:
+                    self._logger.warning(
+                        "message_entry_fast_path_failed "
+                        "method=prosemirror_dom_commit error_type=%s error=%r; "
+                        "falling_back_to_keyboard_insert_text",
+                        type(exc).__name__,
+                        str(exc),
+                    )
+
+                editor.click(timeout=timeout_ms)
+                page.keyboard.press("Control+A")
+                page.keyboard.press("Backspace")
+
             self._logger.info(
                 "message_entry_method method=keyboard_insert_text "
                 "contenteditable=true size=%d",
                 len(message_text),
             )
-            editor.click(timeout=timeout_ms)
-            page.keyboard.press("Control+A")
-            page.keyboard.press("Backspace")
             page.keyboard.insert_text(message_text)
             return
 
@@ -553,9 +846,10 @@ class ChatGPTBrowserBridge:
         authoritative.
         """
 
-        timeout_seconds = min(self.config.editor_timeout_seconds, 10.0)
+        timeout_seconds = self.config.editor_timeout_seconds
         deadline = time.monotonic() + timeout_seconds
         last_diagnostics: list[str] = []
+        saw_visible_send_button = False
 
         while time.monotonic() < deadline:
             self._assert_runtime_alive(page)
@@ -575,6 +869,8 @@ class ChatGPTBrowserBridge:
                             f"{selector}[{index}]:visible={visible},"
                             f"enabled={enabled}"
                         )
+                        if visible:
+                            saw_visible_send_button = True
                         if visible and enabled:
                             candidate.click(
                                 timeout=int(timeout_seconds * 1000)
@@ -622,12 +918,27 @@ class ChatGPTBrowserBridge:
             last_diagnostics = diagnostics
             time.sleep(0.25)
 
+        request_id = (
+            self._active_request.request_id
+            if self._active_request is not None
+            else "-"
+        )
+        if saw_visible_send_button:
+            self._logger.error(
+                "send_button_not_ready request_id=%s diagnostics=%s",
+                request_id,
+                " | ".join(last_diagnostics),
+            )
+            raise BrowserBridgeMessageNotReady(
+                "ChatGPT kept the visible Send button disabled after the "
+                "composer and attachments were populated. The message was "
+                "not submitted, so no duplicate task was created."
+            )
+
         self._logger.warning(
             "send_button_unavailable request_id=%s diagnostics=%s; "
             "falling_back_to_enter",
-            self._active_request.request_id
-            if self._active_request is not None
-            else "-",
+            request_id,
             " | ".join(last_diagnostics),
         )
         editor.click(timeout=int(timeout_seconds * 1000))
@@ -697,6 +1008,199 @@ class ChatGPTBrowserBridge:
         except Exception:
             return ""
 
+    def _upload_attachments(
+        self,
+        *,
+        page: Page,
+        attachment_paths: tuple[Path, ...],
+    ) -> None:
+        """Upload files sequentially and wait for each file to become ready."""
+
+        prepared_paths: list[Path] = []
+        for raw_path in attachment_paths:
+            source = Path(raw_path).expanduser().resolve()
+            if not source.is_file():
+                raise BrowserBridgeAttachmentUploadError(
+                    f"Queued attachment is unavailable: {source}"
+                )
+            prepared = source
+            if source.suffix.casefold() == ".log":
+                if self._temporary_attachment_directory is None:
+                    self._temporary_attachment_directory = tempfile.TemporaryDirectory(
+                        prefix="curvature-console-attachments-"
+                    )
+                prepared = Path(self._temporary_attachment_directory.name) / (
+                    source.name + ".txt"
+                )
+                prepared.write_bytes(source.read_bytes())
+                self._logger.info(
+                    "attachment_normalized original=%s upload_name=%s",
+                    source.name,
+                    prepared.name,
+                )
+            prepared_paths.append(prepared)
+
+        if not prepared_paths:
+            return
+
+        request = self._active_request
+        request_id = request.request_id if request is not None else "-"
+        total = len(prepared_paths)
+        ready_names: set[str] = set()
+
+        def general_file_input() -> Locator:
+            file_input = page.locator('input#upload-files')
+            if file_input.count() >= 1:
+                return file_input
+            candidates = page.locator('input[type="file"]:not([accept*="image"])')
+            if candidates.count() < 1:
+                raise BrowserBridgeAttachmentUploadError(
+                    "ChatGPT general file input is unavailable; "
+                    "no attachment was sent."
+                )
+            return candidates.first
+
+        def raise_for_page_upload_error() -> None:
+            body_text = page.locator("body").inner_text(timeout=5000)
+            lowered = body_text.casefold()
+            for marker in (
+                "failed to upload", "upload failed", "couldn't upload",
+                "could not upload", "unsupported file", "file is too large",
+                "nie udało się przesłać", "przesyłanie nie powiodło się",
+            ):
+                if marker in lowered:
+                    raise BrowserBridgeAttachmentUploadError(
+                        "ChatGPT reported an attachment upload failure: " + marker
+                    )
+
+        def tile_state(name: str) -> str:
+            tile = page.locator(f'[role="group"][aria-label="{name}"]').last
+            if tile.count() < 1:
+                return "missing"
+            details = tile.evaluate(
+                """element => {
+                    const visible = node => {
+                        if (!node) return false;
+                        const style = window.getComputedStyle(node);
+                        const rect = node.getBoundingClientRect();
+                        return style.display !== 'none'
+                            && style.visibility !== 'hidden'
+                            && Number(style.opacity || '1') > 0
+                            && rect.width > 0
+                            && rect.height > 0;
+                    };
+                    const waitingButton = Array.from(
+                        element.querySelectorAll('.cursor-wait')
+                    ).some(visible);
+                    const spinning = Array.from(
+                        element.querySelectorAll('.animate-spin')
+                    ).some(visible);
+                    const progress = Array.from(
+                        element.querySelectorAll(
+                            'svg circle[stroke-dashoffset], [role="progressbar"]'
+                        )
+                    ).some(visible);
+                    const removeButton = Array.from(
+                        element.querySelectorAll(
+                            'button[aria-label^="Remove file"], '
+                            + 'button[aria-label^="Usuń plik"]'
+                        )
+                    ).some(visible);
+                    return {
+                        waiting: waitingButton || spinning || progress,
+                        waitingButton,
+                        spinning,
+                        progress,
+                        removeButton,
+                    };
+                }"""
+            )
+            if details["waiting"]:
+                return "waiting"
+            if details["removeButton"]:
+                return "ready"
+            return "unknown"
+
+        self._logger.info(
+            "attachment_upload_started request_id=%s count=%d names=%s",
+            request_id,
+            total,
+            ",".join(path.name for path in prepared_paths),
+        )
+
+        for index, prepared in enumerate(prepared_paths, start=1):
+            self._assert_runtime_alive(page)
+            self._raise_for_human_verification(page)
+            file_input = general_file_input()
+            self._logger.info(
+                "attachment_sequential_upload_started request_id=%s "
+                "index=%d total=%d name=%s",
+                request_id,
+                index,
+                total,
+                prepared.name,
+            )
+            try:
+                file_input.set_input_files(
+                    str(prepared),
+                    timeout=int(
+                        self.config.attachment_upload_timeout_seconds * 1000
+                    ),
+                )
+            except Exception as exc:
+                raise BrowserBridgeAttachmentUploadError(
+                    "ChatGPT rejected the queued attachment selection: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
+
+            deadline = (
+                time.monotonic()
+                + self.config.attachment_upload_timeout_seconds
+            )
+            previous_state: str | None = None
+            while time.monotonic() < deadline:
+                self._assert_runtime_alive(page)
+                self._raise_for_human_verification(page)
+                raise_for_page_upload_error()
+                state = tile_state(prepared.name)
+                if state != previous_state:
+                    self._logger.info(
+                        "attachment_state_transition request_id=%s "
+                        "name=%s previous=%s current=%s",
+                        request_id,
+                        prepared.name,
+                        previous_state or "none",
+                        state,
+                    )
+                    previous_state = state
+                if state == "ready":
+                    ready_names.add(prepared.name)
+                    self._logger.info(
+                        "attachment_sequential_upload_ready request_id=%s "
+                        "index=%d total=%d name=%s",
+                        request_id,
+                        index,
+                        total,
+                        prepared.name,
+                    )
+                    break
+                time.sleep(0.25)
+            else:
+                raise BrowserBridgeAttachmentUploadError(
+                    "ChatGPT did not finish preparing the queued attachment "
+                    "before timeout. "
+                    f"State: {prepared.name}={previous_state or 'missing'}. "
+                    "Nothing was sent."
+                )
+
+        self._logger.info(
+            "attachment_upload_confirmed request_id=%s count=%d names=%s",
+            request_id,
+            total,
+            ",".join(sorted(ready_names)),
+        )
+
+
     def _send_and_receive_once(
         self,
         request: BrowserExchangeRequest,
@@ -754,11 +1258,19 @@ class ChatGPTBrowserBridge:
             len(baseline_assistant_signatures),
         )
 
+        if request.attachment_paths:
+            self._report_stage(BrowserBridgeStage.UPLOADING_ATTACHMENTS)
+            self._upload_attachments(
+                page=page,
+                attachment_paths=request.attachment_paths,
+            )
+
         self._report_stage(BrowserBridgeStage.ENTERING_MESSAGE)
         self._enter_message_text(
             page=page,
             editor=editor,
             message_text=request.message_text,
+            has_attachments=bool(request.attachment_paths),
         )
         self._report_stage(BrowserBridgeStage.SENDING)
         self._submit_message(
@@ -1291,6 +1803,25 @@ class ChatGPTBrowserBridge:
                     candidate_index,
                     activation_name,
                 )
+                if (
+                    activation_name == "locator_click"
+                    and candidate_filename == "generated-file"
+                ):
+                    preview_download = self._capture_download_from_open_preview(
+                        page=page,
+                        request=request,
+                        candidate_index=candidate_index,
+                    )
+                    if preview_download is not None:
+                        self._logger.info(
+                            "download_activation_success request_id=%s "
+                            "index=%d method=%s "
+                            "channel=open_preview",
+                            request.request_id,
+                            candidate_index,
+                            activation_name,
+                        )
+                        return preview_download
             except Exception:
                 self._logger.exception(
                     "download_activation_failure request_id=%s index=%d "
@@ -1584,6 +2115,18 @@ class ChatGPTBrowserBridge:
     ):
         """Find and activate the real Download control after a file-card click."""
 
+        # File cards open an artifact preview asynchronously. Give the
+        # preview a bounded moment to render, then inspect both semantic
+        # Download controls and visible buttons whose text is Download/Pobierz.
+        page.wait_for_timeout(1500)
+        preview_snapshot = self._capture_interaction_snapshot(page)
+        self._logger.info(
+            "download_preview_state request_id=%s source_index=%d data=%s",
+            request.request_id,
+            candidate_index,
+            json.dumps(preview_snapshot, ensure_ascii=False, sort_keys=True),
+        )
+
         preview_candidates = page.locator(
             "a[download], "
             "a[href*='/backend-api/files/'], "
@@ -1591,7 +2134,8 @@ class ChatGPTBrowserBridge:
             "button[aria-label*='download' i], "
             "[role='button'][aria-label*='download' i], "
             "[data-testid*='download' i], "
-            "[title*='download' i]"
+            "[title*='download' i], "
+            "button, [role='button']"
         )
 
         descriptions: list[str] = []
@@ -1600,6 +2144,35 @@ class ChatGPTBrowserBridge:
             preview_candidate = preview_candidates.nth(index)
             try:
                 if not preview_candidate.is_visible():
+                    continue
+                description_text = (
+                    preview_candidate.inner_text().strip().lower()
+                )
+                aria_label = (
+                    preview_candidate.get_attribute("aria-label") or ""
+                ).lower()
+                title = (
+                    preview_candidate.get_attribute("title") or ""
+                ).lower()
+                testid = (
+                    preview_candidate.get_attribute("data-testid") or ""
+                ).lower()
+                href = preview_candidate.get_attribute("href") or ""
+                download_attribute = preview_candidate.get_attribute(
+                    "download"
+                )
+                is_download_control = bool(
+                    download_attribute is not None
+                    or "/backend-api/files/" in href
+                    or "files.oaiusercontent.com" in href
+                    or "download" in aria_label
+                    or "download" in title
+                    or "download" in testid
+                    or description_text in {"download", "pobierz"}
+                    or description_text.startswith("download ")
+                    or description_text.startswith("pobierz ")
+                )
+                if not is_download_control:
                     continue
                 visible_candidates.append(preview_candidate)
                 descriptions.append(
@@ -1707,8 +2280,23 @@ class ChatGPTBrowserBridge:
             )
         ).lower()
         text = candidate.inner_text().strip().lower()
+        class_name = (candidate.get_attribute("class") or "").lower()
 
-        if "download" in attributes or "download" in text:
+        # ChatGPT generated artifacts are currently rendered as a button with
+        # the ``behavior-btn`` class and a human title, but no href, download
+        # attribute, filename extension, or Download label. This is distinct
+        # from ordinary response-action buttons and must be treated as a file
+        # card so the bridge can open its preview and activate the real
+        # download control.
+        if "behavior-btn" in class_name and text:
+            return True
+
+        if (
+            "download" in attributes
+            or "download" in text
+            or "pobierz" in attributes
+            or text.startswith("pobierz ")
+        ):
             return True
 
         if "coding citation" in attributes:
@@ -1737,7 +2325,7 @@ class ChatGPTBrowserBridge:
                 continue
 
             cleaned_value = re.sub(
-                r"^\s*(?:download|open|save|file)\s*[:\-–—]?\s*",
+                r"^\s*(?:download|open|save|file|pobierz)\s*[:\-–—]?\s*",
                 "",
                 value,
                 flags=re.IGNORECASE,
@@ -1924,6 +2512,10 @@ class ChatGPTBrowserBridge:
             )
 
     def _assert_runtime_alive(self, page: Page) -> None:
+        if self._cancel_event.is_set():
+            raise BrowserBridgeCancelled(
+                "Operation cancelled by the operator. No further browser action was taken."
+            )
         self._assert_browser_alive()
         if page.is_closed():
             raise BrowserBridgeProcessExited(
@@ -2244,14 +2836,19 @@ class ChatGPTBrowserBridge:
         baseline_count: int,
         baseline_signatures: tuple[tuple[str, str], ...] | None = None,
     ) -> str:
-        deadline = time.monotonic() + self.config.response_timeout_seconds
+        started_at = time.monotonic()
+        deadline = started_at + self.config.response_timeout_seconds
+        hard_deadline = (
+            deadline + self.config.response_generation_grace_seconds
+        )
+        wait_extended = False
         stable_started_at: float | None = None
         previous_identity: tuple[str, str] | None = None
         baseline = set(baseline_signatures or ())
         baseline_ids = {message_id for message_id, _ in baseline if message_id}
         baseline_texts = {text for _, text in baseline if text}
 
-        while time.monotonic() < deadline:
+        while time.monotonic() < hard_deadline:
             self._assert_runtime_alive(page)
             self._raise_for_human_verification(page)
             messages = page.locator(ASSISTANT_MESSAGE_SELECTOR)
@@ -2312,10 +2909,33 @@ class ChatGPTBrowserBridge:
                     previous_identity = candidate
                     stable_started_at = None
 
+            now = time.monotonic()
+            if now >= deadline and not wait_extended:
+                generation_active = self._generation_is_active(page)
+                if generation_active or candidate is not None:
+                    self._logger.info(
+                        "assistant_response_wait_extended request_id=%s "
+                        "reason=%s soft_timeout=%.1f hard_timeout=%.1f",
+                        self._active_request.request_id
+                        if self._active_request is not None
+                        else "-",
+                        "generation_active"
+                        if generation_active
+                        else "candidate_incomplete",
+                        self.config.response_timeout_seconds,
+                        self.config.response_timeout_seconds
+                        + self.config.response_generation_grace_seconds,
+                    )
+                    wait_extended = True
+                else:
+                    break
+
             time.sleep(self.config.response_poll_interval_seconds)
 
+        generation_active = self._generation_is_active(page)
         raise BrowserBridgeTimeout(
-            "ChatGPT did not produce a completed assistant response in time."
+            "ChatGPT did not produce a completed assistant response in time. "
+            f"Generation active at timeout: {generation_active}."
         )
 
     def _generation_is_active(self, page: Page) -> bool:
@@ -2388,6 +3008,19 @@ class ChatGPTBrowserBridge:
 
     def _is_conversation_url(self, value: str) -> bool:
         return self._conversation_id(value) is not None
+
+    @staticmethod
+    def _normalize_editor_equivalence(value: str) -> str:
+        """Canonicalise editor text for semantic equality checks.
+
+        ProseMirror may expose paragraph boundaries as additional newlines or
+        non-breaking spaces even when the submitted text is unchanged. Raw
+        character counts therefore produce false mismatches. Collapsing all
+        Unicode whitespace preserves the exact token sequence while ignoring
+        DOM-only paragraph formatting.
+        """
+
+        return " ".join(value.replace("\u00a0", " ").split())
 
     def _normalize_message_text(self, value: str) -> str:
         return "\n".join(line.rstrip() for line in value.strip().splitlines())

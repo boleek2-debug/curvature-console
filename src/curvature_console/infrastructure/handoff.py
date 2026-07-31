@@ -23,6 +23,7 @@ class HandoffStatus(str, Enum):
     ANSWERED = "answered"
     AWAITING_USER_DECISION = "awaiting_user_decision"
     IN_PROGRESS = "in_progress"
+    UPDATE_SENT = "update_sent"
     RETURN_SENT = "return_sent"
     RETURNED = "returned"
     CLOSED = "closed"
@@ -99,8 +100,16 @@ _ALLOWED_TRANSITIONS = {
     ),
     HandoffStatus.IN_PROGRESS: frozenset(
         {
+            HandoffStatus.UPDATE_SENT,
             HandoffStatus.RETURN_SENT,
             HandoffStatus.CLOSED,
+            HandoffStatus.HELD,
+            HandoffStatus.STOPPED,
+        }
+    ),
+    HandoffStatus.UPDATE_SENT: frozenset(
+        {
+            HandoffStatus.AWAITING_USER_DECISION,
             HandoffStatus.HELD,
             HandoffStatus.STOPPED,
         }
@@ -128,6 +137,7 @@ _ALLOWED_TRANSITIONS = {
             HandoffStatus.ANSWERED,
             HandoffStatus.AWAITING_USER_DECISION,
             HandoffStatus.IN_PROGRESS,
+            HandoffStatus.UPDATE_SENT,
             HandoffStatus.RETURN_SENT,
             HandoffStatus.RETURNED,
             HandoffStatus.REJECTED,

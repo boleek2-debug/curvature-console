@@ -202,6 +202,98 @@ def confirm_handoff_return(
             yes_button.setText("Return once")
     return dialog.exec() == QDialog.DialogCode.Accepted
 
+class HandoffUpdateDialog(QDialog):
+    """Edit and explicitly approve one same-handoff progress update."""
+
+    def __init__(
+        self,
+        *,
+        target_department_id: str,
+        handoff_title: str,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("handoffUpdateDialog")
+        self.setWindowTitle("Send same-handoff progress update?")
+        self.setSizeGripEnabled(True)
+        self.setMinimumSize(560, 420)
+        self.resize(780, 560)
+
+        target_label = _DEPARTMENT_LABELS.get(
+            target_department_id, target_department_id.upper()
+        )
+        summary = QLabel(
+            "Send one operator-approved progress update to "
+            f"{target_label} while preserving the current handoff?"
+        )
+        summary.setWordWrap(True)
+
+        title = QLabel(handoff_title)
+        title.setObjectName("handoffUpdateTitle")
+        title.setWordWrap(True)
+
+        self.update_editor = QPlainTextEdit()
+        self.update_editor.setObjectName("handoffUpdateEditor")
+        self.update_editor.setPlaceholderText(
+            "Enter evidence, decisions, blockers or instructions for the "
+            "next target-department step..."
+        )
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Yes
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.setObjectName("handoffUpdateButtons")
+        buttons.accepted.connect(self._accept_non_empty)
+        buttons.rejected.connect(self.reject)
+        send_button = buttons.button(QDialogButtonBox.StandardButton.Yes)
+        if send_button is not None:
+            send_button.setText("Send update once")
+            send_button.setDefault(False)
+        cancel_button = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_button is not None:
+            cancel_button.setDefault(True)
+            cancel_button.setFocus()
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(summary)
+        layout.addWidget(title)
+        layout.addWidget(self.update_editor, 1)
+        layout.addWidget(buttons)
+
+    @property
+    def update_text(self) -> str:
+        return self.update_editor.toPlainText().strip()
+
+    def _accept_non_empty(self) -> None:
+        if not self.update_text:
+            QMessageBox.warning(
+                self,
+                "Progress update required",
+                "Enter the progress update before sending it.",
+            )
+            return
+        self.accept()
+
+
+def request_handoff_update(
+    *,
+    parent: QWidget | None,
+    target_department_id: str,
+    handoff_message: str,
+) -> str | None:
+    """Return one explicitly approved update, or None when cancelled."""
+
+    first_line = handoff_message.splitlines()[0] if handoff_message else ""
+    title = first_line.lstrip("# ").strip() or "Open handoff"
+    dialog = HandoffUpdateDialog(
+        target_department_id=target_department_id,
+        handoff_title=title,
+        parent=parent,
+    )
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    return dialog.update_text
 
 def confirm_handoff_delivery(
     *,
@@ -227,6 +319,7 @@ class HandoffControlsDialog(QDialog):
 
     deliver_requested = Signal(str)
     return_requested = Signal(str)
+    update_requested = Signal(str, str)
 
     """Create and supervise handoffs without sending browser messages."""
 
@@ -322,6 +415,14 @@ class HandoffControlsDialog(QDialog):
             lambda: self._transition_selected(HandoffStatus.IN_PROGRESS)
         )
 
+        self.update_button = QPushButton("Send Update to Target")
+        self.update_button.setObjectName("updateHandoffButton")
+        self.update_button.setToolTip(
+            "Send one supervised progress update to the target while "
+            "keeping the same handoff open."
+        )
+        self.update_button.clicked.connect(self.update_selected)
+
         self.return_button = QPushButton("Return to Source")
         self.return_button.setObjectName("returnHandoffButton")
         self.return_button.setToolTip(
@@ -364,6 +465,7 @@ class HandoffControlsDialog(QDialog):
         for button in (
             self.deliver_button,
             self.continue_button,
+            self.update_button,
             self.return_button,
             self.hold_button,
             self.close_button,
@@ -488,6 +590,26 @@ class HandoffControlsDialog(QDialog):
             return
         self.deliver_requested.emit(record.handoff_id)
 
+    def update_selected(self) -> None:
+        """Request one same-handoff progress update to the target."""
+
+        record = self.selected_record
+        if record is None:
+            return
+        if record.status is not HandoffStatus.IN_PROGRESS:
+            self._show_error(
+                "Only an in-progress handoff may receive a progress update."
+            )
+            return
+        update_text = request_handoff_update(
+            parent=self,
+            target_department_id=record.target_department_id,
+            handoff_message=record.user_visible_message,
+        )
+        if update_text is None:
+            return
+        self.update_requested.emit(record.handoff_id, update_text)
+
     def return_selected(self) -> None:
         """Request one supervised return of the latest target reply."""
 
@@ -570,6 +692,7 @@ class HandoffControlsDialog(QDialog):
                 HandoffStatus.ANSWERED,
                 HandoffStatus.AWAITING_USER_DECISION,
                 HandoffStatus.IN_PROGRESS,
+                HandoffStatus.UPDATE_SENT,
                 HandoffStatus.RETURN_SENT,
                 HandoffStatus.RETURNED,
             }
@@ -592,6 +715,9 @@ class HandoffControlsDialog(QDialog):
                 HandoffStatus.ANSWERED,
                 HandoffStatus.RETURNED,
             }
+        )
+        self.update_button.setEnabled(
+            status is HandoffStatus.IN_PROGRESS
         )
         self.return_button.setEnabled(
             status

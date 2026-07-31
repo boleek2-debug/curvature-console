@@ -429,3 +429,33 @@ def test_legacy_department_state_gains_reply_read_column(tmp_path: Path) -> None
     )
     assert store.load_department_state("project").last_read_reply_count == 2
     store.close()
+
+
+def test_update_sent_handoff_status_persists(tmp_path) -> None:
+    from curvature_console.infrastructure.handoff import HandoffStatus, create_handoff
+
+    store = SQLiteStateStore(tmp_path / "state.sqlite3")
+    record = create_handoff(
+        handoff_id="handoff-update-status",
+        request_id="request-update-status",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="Continue this handoff.",
+    )
+    for status in (
+        HandoffStatus.PENDING_APPROVAL,
+        HandoffStatus.APPROVED,
+        HandoffStatus.SENT,
+        HandoffStatus.RECEIVED,
+        HandoffStatus.AWAITING_USER_DECISION,
+        HandoffStatus.IN_PROGRESS,
+        HandoffStatus.UPDATE_SENT,
+    ):
+        record = record.transition(status)
+    store.save_handoff(record)
+
+    restored = store.load_handoff(record.handoff_id)
+
+    assert restored is not None
+    assert restored.status is HandoffStatus.UPDATE_SENT
+    store.close()

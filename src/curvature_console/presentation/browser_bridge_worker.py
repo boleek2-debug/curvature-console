@@ -8,6 +8,7 @@ from curvature_console.infrastructure.runtime_logging import (
     get_runtime_logger,
 )
 from curvature_console.infrastructure.browser_bridge import (
+    BrowserBridgeCancelled,
     BrowserBridgeConfig,
     BrowserBridgeRouteUnverified,
     BrowserBridgeStage,
@@ -23,6 +24,7 @@ class BrowserBridgeWorker(QThread):
     failed = Signal(str, str, str)
     route_unverified = Signal(str, str, str, str)
     stage_changed = Signal(str, str, str)
+    cancelled = Signal(str, str, bool)
 
     def __init__(
         self,
@@ -32,6 +34,15 @@ class BrowserBridgeWorker(QThread):
         super().__init__()
         self.config = config
         self.request = request
+        self._bridge: ChatGPTBrowserBridge | None = None
+        self._submitted = False
+
+    def request_cancel(self) -> None:
+        bridge = self._bridge
+        if bridge is not None:
+            bridge.cancel()
+        else:
+            self.requestInterruption()
 
     def run(self) -> None:
         logger = get_runtime_logger("browser_bridge_worker")
@@ -40,23 +51,52 @@ class BrowserBridgeWorker(QThread):
             self.request.request_id,
             self.request.department_id,
         )
-        bridge = ChatGPTBrowserBridge(
-            self.config,
-            stage_callback=lambda stage: self.stage_changed.emit(
+        def report_stage(stage: BrowserBridgeStage) -> None:
+            if stage in {
+                BrowserBridgeStage.SENDING,
+                BrowserBridgeStage.VERIFYING_USER_MESSAGE,
+                BrowserBridgeStage.WAITING_FOR_RESPONSE,
+                BrowserBridgeStage.RECEIVING,
+            }:
+                self._submitted = True
+            self.stage_changed.emit(
                 self.request.request_id,
                 self.request.department_id,
                 stage.value,
-            ),
+            )
+
+        bridge = ChatGPTBrowserBridge(
+            self.config,
+            stage_callback=report_stage,
         )
+        self._bridge = bridge
         result = None
         failure: Exception | None = None
         route_failure: BrowserBridgeRouteUnverified | None = None
 
         try:
             result = bridge.send_and_receive_hybrid(self.request)
+        except BrowserBridgeCancelled:
+            logger.info(
+                "exchange_cancelled request_id=%s department_id=%s submitted=%s",
+                self.request.request_id, self.request.department_id, self._submitted,
+            )
+            self.cancelled.emit(
+                self.request.request_id, self.request.department_id, self._submitted
+            )
+            return
         except BrowserBridgeRouteUnverified as exc:
             route_failure = exc
         except Exception as exc:
+            if bridge.cancellation_requested:
+                logger.info(
+                    "exchange_cancelled request_id=%s department_id=%s submitted=%s",
+                    self.request.request_id, self.request.department_id, self._submitted,
+                )
+                self.cancelled.emit(
+                    self.request.request_id, self.request.department_id, self._submitted
+                )
+                return
             failure = exc
             logger.exception(
                 "worker_failure request_id=%s department_id=%s",
@@ -65,6 +105,7 @@ class BrowserBridgeWorker(QThread):
             )
         finally:
             bridge.close()
+            self._bridge = None
 
         if route_failure is not None:
             self.route_unverified.emit(

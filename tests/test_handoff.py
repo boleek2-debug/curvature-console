@@ -221,3 +221,24 @@ def test_reply_decision_and_return_lifecycle_remains_open_until_close() -> None:
     )
     assert not returned.is_terminal
     assert returned.transition(HandoffStatus.IN_PROGRESS).status is HandoffStatus.IN_PROGRESS
+
+
+def test_in_progress_handoff_can_send_one_progress_update() -> None:
+    handoff = create_handoff(
+        request_id="request-progress-update",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="Implement the approved work package.",
+    )
+    handoff = handoff.transition(HandoffStatus.PENDING_APPROVAL)
+    handoff = handoff.transition(HandoffStatus.APPROVED)
+    handoff = handoff.transition(HandoffStatus.SENT)
+    handoff = handoff.transition(HandoffStatus.RECEIVED)
+    handoff = handoff.transition(HandoffStatus.AWAITING_USER_DECISION)
+    handoff = handoff.transition(HandoffStatus.IN_PROGRESS)
+
+    updating = handoff.transition(HandoffStatus.UPDATE_SENT)
+    answered = updating.transition(HandoffStatus.AWAITING_USER_DECISION)
+
+    assert updating.status is HandoffStatus.UPDATE_SENT
+    assert answered.status is HandoffStatus.AWAITING_USER_DECISION

@@ -204,3 +204,84 @@ def test_return_failure_moves_return_sent_handoff_to_held(tmp_path) -> None:
     assert restored.status is HandoffStatus.HELD
     assert "Controlled return failed" in restored.timeline[-1].body
     window.close()
+
+
+def test_progress_update_reply_returns_same_handoff_to_user_decision(tmp_path) -> None:
+    create_application(["handoff-progress-update-success-test"])
+    window = MainWindow(
+        state_path=tmp_path / "state.sqlite3",
+        data_directory=tmp_path / "data",
+    )
+    record = create_handoff(
+        handoff_id="handoff-progress-1",
+        request_id="request-progress-1",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="Implement a multi-sprint task.",
+    )
+    record = record.transition(HandoffStatus.PENDING_APPROVAL)
+    record = record.transition(HandoffStatus.APPROVED)
+    record = record.transition(HandoffStatus.SENT)
+    record = record.transition(HandoffStatus.RECEIVED)
+    record = record.transition(HandoffStatus.AWAITING_USER_DECISION)
+    record = record.transition(HandoffStatus.IN_PROGRESS)
+    record = record.transition(HandoffStatus.UPDATE_SENT)
+    record = record.append_message("project", "Evidence attached.")
+    window.state_store.save_handoff(record)
+    pending = PendingBrowserExchange(
+        request_id="browser-progress-1",
+        department_id="core",
+        user_task="progress update",
+        handoff_id=record.handoff_id,
+        handoff_update=True,
+    )
+
+    window._record_handoff_answer(pending, "Evidence accepted.")
+
+    restored = window.state_store.load_handoff(record.handoff_id)
+    assert restored is not None
+    assert restored.status is HandoffStatus.AWAITING_USER_DECISION
+    assert restored.timeline[-1].author_department_id == "core"
+    assert restored.timeline[-1].body == "Evidence accepted."
+    window.close()
+
+
+def test_progress_update_failure_moves_update_sent_to_held(tmp_path) -> None:
+    create_application(["handoff-progress-update-failure-test"])
+    window = MainWindow(
+        state_path=tmp_path / "state.sqlite3",
+        data_directory=tmp_path / "data",
+    )
+    record = create_handoff(
+        handoff_id="handoff-progress-failure",
+        request_id="request-progress-failure",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="Continue the task.",
+    )
+    for status in (
+        HandoffStatus.PENDING_APPROVAL,
+        HandoffStatus.APPROVED,
+        HandoffStatus.SENT,
+        HandoffStatus.RECEIVED,
+        HandoffStatus.AWAITING_USER_DECISION,
+        HandoffStatus.IN_PROGRESS,
+        HandoffStatus.UPDATE_SENT,
+    ):
+        record = record.transition(status)
+    window.state_store.save_handoff(record)
+    pending = PendingBrowserExchange(
+        request_id="browser-progress-failure",
+        department_id="core",
+        user_task="progress update",
+        handoff_id=record.handoff_id,
+        handoff_update=True,
+    )
+
+    window._hold_failed_handoff(pending, "Browser unavailable.")
+
+    restored = window.state_store.load_handoff(record.handoff_id)
+    assert restored is not None
+    assert restored.status is HandoffStatus.HELD
+    assert "Progress update failed" in restored.timeline[-1].body
+    window.close()
