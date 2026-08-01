@@ -73,6 +73,9 @@ from curvature_console.presentation.package_review_dialog import (
 from curvature_console.presentation.reply_viewer_dialog import (
     ReplyViewerDialog,
 )
+from curvature_console.presentation.support_unit_dialog import (
+    SupportUnitDialog,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,12 +226,21 @@ class MainWindow(QMainWindow):
             self.open_handoff_controls
         )
 
+        self.support_unit_button = QPushButton("Support Unit")
+        self.support_unit_button.setObjectName("supportUnitButton")
+        self.support_unit_button.setToolTip(
+            "Inspect repository state, latest bridge log and diagnostic "
+            "artifacts."
+        )
+        self.support_unit_button.clicked.connect(self.open_support_unit)
+
         toolbar = QToolBar("Workspace")
         toolbar.setObjectName("workspaceToolbar")
         toolbar.setMovable(False)
         toolbar.addWidget(self.restore_button)
         toolbar.addWidget(self.refresh_all_button)
         toolbar.addWidget(self.handoff_controls_button)
+        toolbar.addWidget(self.support_unit_button)
         self.addToolBar(toolbar)
 
         status_bar = QStatusBar()
@@ -242,6 +254,16 @@ class MainWindow(QMainWindow):
         self.refresh_all_contexts()
         self.restore_persisted_state()
         self._restoring_state = False
+
+    def open_support_unit(self) -> None:
+        """Open the cross-cutting operational diagnostics hub."""
+
+        dialog = SupportUnitDialog(
+            repository_roots=self.repository_roots,
+            data_directory=self.data_directory,
+            parent=self,
+        )
+        dialog.exec()
 
     def open_handoff_controls(self) -> None:
         """Open the supervised interdepartmental communication hub."""
