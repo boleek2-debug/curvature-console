@@ -88,6 +88,7 @@ class PendingBrowserExchange:
     handoff_id: str | None = None
     handoff_return: bool = False
     handoff_update: bool = False
+    support_unit: bool = False
 
 
 class MainWindow(QMainWindow):
@@ -171,6 +172,7 @@ class MainWindow(QMainWindow):
         ) = None
         self._handoff_progress_request_id: str | None = None
         self._handoff_controls_dialog: HandoffControlsDialog | None = None
+        self._support_unit_dialog: SupportUnitDialog | None = None
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setObjectName("departmentSplitter")
@@ -256,14 +258,82 @@ class MainWindow(QMainWindow):
         self._restoring_state = False
 
     def open_support_unit(self) -> None:
-        """Open the cross-cutting operational diagnostics hub."""
+        """Open diagnostics and the dedicated browser-mediated Support chat."""
 
+        persisted = self.state_store.load_department_state("support")
         dialog = SupportUnitDialog(
             repository_roots=self.repository_roots,
             data_directory=self.data_directory,
+            conversation_text=(persisted.conversation_text if persisted else ""),
+            draft_text=(persisted.draft_text if persisted else ""),
+            attachment_records=self.state_store.load_attachments("support"),
+            download_records=self.state_store.load_generated_downloads("support"),
             parent=self,
         )
-        dialog.exec()
+        self._support_unit_dialog = dialog
+        dialog.send_requested.connect(self.start_support_exchange)
+        try:
+            dialog.exec()
+        finally:
+            self.state_store.save_department_state(
+                "support", dialog.conversation_text(), dialog.draft_text()
+            )
+            self.state_store.replace_attachments(
+                "support", dialog.attachment_records()
+            )
+            self._support_unit_dialog = None
+
+    def start_support_exchange(
+        self, message_text: str, attachment_paths: object
+    ) -> None:
+        """Send one operator-approved message to the dedicated Support route."""
+
+        dialog = self._support_unit_dialog
+        if dialog is None:
+            return
+        if self._browser_worker is not None:
+            QMessageBox.information(
+                self, "ChatGPT operation in progress",
+                "Wait for the current ChatGPT exchange before sending Support."
+            )
+            return
+
+        request_id = f"support-{uuid4().hex}"
+        support_case_id = f"support-case-{uuid4().hex[:16]}"
+        payload = (
+            f"CURVATURE_REQUEST_ID: {request_id}\n"
+            f"SUPPORT_CASE_ID: {support_case_id}\n\n"
+            "# CURVATURE SUPPORT UNIT REQUEST\n\n"
+            "Act as the cross-cutting Curvature Console support and diagnostic "
+            "assistant. Diagnose accurately, do not invent missing state, and "
+            "preserve Project/Core authority boundaries.\n\n"
+            f"Operator request:\n{message_text.strip()}"
+        )
+        route = self.state_store.load_chat_route("support")
+        pending = PendingBrowserExchange(
+            request_id=request_id, department_id="support",
+            user_task=message_text.strip(), support_unit=True
+        )
+        self._pending_exchanges[request_id] = pending
+        dialog.set_busy(True, "Preparing request")
+        worker = BrowserBridgeWorker(
+            config=self.browser_config,
+            request=BrowserExchangeRequest(
+                request_id=request_id, department_id="support",
+                message_text=payload, create_new_thread=route is None,
+                conversation_url=(route.active_conversation_url if route else None),
+                confirmation_marker=f"CURVATURE_REQUEST_ID: {request_id}",
+                attachment_paths=tuple(Path(path) for path in attachment_paths),
+            ),
+        )
+        worker.succeeded.connect(self._handle_browser_success)
+        worker.failed.connect(self._handle_browser_failure)
+        worker.route_unverified.connect(self._handle_browser_route_unverified)
+        worker.stage_changed.connect(self._handle_browser_stage)
+        worker.finished.connect(self._clear_browser_worker)
+        self._browser_worker = worker
+        self.statusBar().showMessage("Sending request to Curvature Support Unit...")
+        worker.start()
 
     def open_handoff_controls(self) -> None:
         """Open the supervised interdepartmental communication hub."""
@@ -983,6 +1053,30 @@ class MainWindow(QMainWindow):
         self._finish_handoff_progress(request_id)
         self._pending_exchanges.pop(request_id, None)
         self._record_handoff_answer(pending, response_text)
+        if pending.support_unit:
+            dialog = self._support_unit_dialog
+            if dialog is not None:
+                dialog.append_exchange(pending.user_task, response_text)
+                dialog.set_busy(False)
+                self.state_store.save_department_state(
+                    "support", dialog.conversation_text(), dialog.draft_text()
+                )
+            self.state_store.save_chat_route(
+                department_id="support", project_name=project_name,
+                project_url=project_url, active_conversation_url=conversation_url
+            )
+            self.state_store.save_generated_downloads(
+                request_id=request_id, department_id="support",
+                conversation_url=conversation_url, downloads=tuple(downloaded_files)
+            )
+            if dialog is not None:
+                dialog.set_generated_downloads(
+                    self.state_store.load_generated_downloads("support")
+                )
+                dialog.clear_sent_attachments()
+                self.state_store.replace_attachments("support", ())
+            self.statusBar().showMessage("Curvature Support response received and saved")
+            return
         panel = self.department_panels[department_id]
         panel.append_browser_exchange(pending.user_task, response_text)
         captured_handoffs, handoff_errors = (
@@ -1050,6 +1144,22 @@ class MainWindow(QMainWindow):
         self._finish_handoff_progress(request_id)
         self._pending_exchanges.pop(request_id, None)
         self._record_handoff_answer(pending, response_text)
+        if pending.support_unit:
+            dialog = self._support_unit_dialog
+            if dialog is not None:
+                dialog.append_exchange(pending.user_task, response_text)
+                dialog.set_busy(False)
+                self.state_store.save_department_state(
+                    "support", dialog.conversation_text(), dialog.draft_text()
+                )
+            self.statusBar().showMessage(
+                "Support response saved; conversation route requires verification"
+            )
+            QMessageBox.warning(
+                self, "Support route requires verification",
+                f"Response was captured, but the observed route was:\n{observed_url}"
+            )
+            return
         panel = self.department_panels[department_id]
         panel.append_browser_exchange(pending.user_task, response_text)
         captured_handoffs, handoff_errors = (
@@ -1096,6 +1206,13 @@ class MainWindow(QMainWindow):
         self._finish_handoff_progress(request_id)
         self._pending_exchanges.pop(request_id, None)
         self._hold_failed_handoff(pending, error_message)
+        if pending.support_unit:
+            dialog = self._support_unit_dialog
+            if dialog is not None:
+                dialog.set_busy(False)
+            self.statusBar().showMessage("Curvature Support browser operation failed")
+            QMessageBox.critical(self, "ChatGPT browser bridge failed", error_message)
+            return
         panel = self.department_panels[department_id]
         self._set_browser_operation_busy(False, department_id)
         self.statusBar().showMessage(
@@ -1116,6 +1233,13 @@ class MainWindow(QMainWindow):
         if self._pending_exchange(request_id, department_id) is None:
             return
 
+        if pending := self._pending_exchange(request_id, department_id):
+            if pending.support_unit:
+                dialog = self._support_unit_dialog
+                if dialog is not None:
+                    dialog.set_stage(stage)
+                self.statusBar().showMessage(f"Curvature Support: {stage}")
+                return
         panel = self.department_panels[department_id]
         panel.set_browser_stage(stage)
         if self._handoff_progress_request_id == request_id:
@@ -1167,6 +1291,11 @@ class MainWindow(QMainWindow):
         if active_department_id is None:
             return
 
+        if active_department_id == "support":
+            dialog = self._support_unit_dialog
+            if dialog is not None:
+                dialog.set_busy(busy)
+            return
         panel = self.department_panels[active_department_id]
         panel.set_browser_busy(busy)
 

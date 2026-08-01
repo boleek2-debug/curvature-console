@@ -38,3 +38,5 @@ data/test-results/
 *.key
 data/snapshots/
 data/package-backups/
+data/support-reports/
+data/attachments/
