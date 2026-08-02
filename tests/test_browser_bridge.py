@@ -2347,3 +2347,166 @@ def test_multi_attachment_upload_is_sequential_and_waits_for_each_file(
     assert selections == [str(snapshot.resolve()), str(validation.resolve())]
     assert polls["snapshot.zip"] >= 2
     assert polls["validation.txt"] >= 2
+
+
+def test_attachment_readiness_accepts_stable_unknown_after_waiting(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    attachment = tmp_path / "runtime.log"
+    attachment.write_text("runtime", encoding="utf-8")
+    config = BrowserBridgeConfig(
+        chrome_executable=_config(tmp_path).chrome_executable,
+        profile_directory=tmp_path / "profile",
+        attachment_upload_timeout_seconds=10.0,
+    )
+    bridge = ChatGPTBrowserBridge(config)
+    bridge._active_request = BrowserExchangeRequest(
+        request_id="request-stable-unknown",
+        department_id="console-development",
+        message_text="Review attachment.",
+        create_new_thread=False,
+        conversation_url=BOOTSTRAP_CONVERSATION_URLS["core"],
+        attachment_paths=(attachment,),
+    )
+
+    clock = {"value": 0.0}
+    polls = {"count": 0}
+
+    def monotonic() -> float:
+        return clock["value"]
+
+    def sleep(seconds: float) -> None:
+        clock["value"] += seconds
+
+    class Input:
+        def count(self):
+            return 1
+
+        def set_input_files(self, paths, timeout):
+            return None
+
+    class Body:
+        def inner_text(self, timeout):
+            return "runtime.log.txt"
+
+    class Tile:
+        @property
+        def last(self):
+            return self
+
+        def count(self):
+            return 1
+
+        def evaluate(self, script):
+            polls["count"] += 1
+            waiting = polls["count"] == 1
+            return {
+                "waiting": waiting,
+                "waitingButton": waiting,
+                "spinning": False,
+                "progress": False,
+                "removeButton": False,
+            }
+
+    class Page:
+        def locator(self, selector):
+            if selector == 'input#upload-files':
+                return Input()
+            if selector == "body":
+                return Body()
+            if selector == '[role="group"][aria-label="runtime.log.txt"]':
+                return Tile()
+            raise AssertionError(selector)
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+    monkeypatch.setattr(
+        "curvature_console.infrastructure.browser_bridge.time.monotonic",
+        monotonic,
+    )
+    monkeypatch.setattr(
+        "curvature_console.infrastructure.browser_bridge.time.sleep",
+        sleep,
+    )
+
+    bridge._upload_attachments(page=Page(), attachment_paths=(attachment,))
+
+    assert polls["count"] >= 5
+
+
+def test_attachment_readiness_does_not_accept_brief_unknown_state(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    attachment = tmp_path / "validation.txt"
+    attachment.write_text("224 passed", encoding="utf-8")
+    config = BrowserBridgeConfig(
+        chrome_executable=_config(tmp_path).chrome_executable,
+        profile_directory=tmp_path / "profile",
+        attachment_upload_timeout_seconds=10.0,
+    )
+    bridge = ChatGPTBrowserBridge(config)
+
+    clock = {"value": 0.0}
+    states = iter(["waiting", "unknown", "unknown", "ready"])
+
+    def monotonic() -> float:
+        return clock["value"]
+
+    def sleep(seconds: float) -> None:
+        clock["value"] += seconds
+
+    class Input:
+        def count(self):
+            return 1
+
+        def set_input_files(self, paths, timeout):
+            return None
+
+    class Body:
+        def inner_text(self, timeout):
+            return "validation.txt"
+
+    class Tile:
+        @property
+        def last(self):
+            return self
+
+        def count(self):
+            return 1
+
+        def evaluate(self, script):
+            state = next(states)
+            return {
+                "waiting": state == "waiting",
+                "waitingButton": state == "waiting",
+                "spinning": False,
+                "progress": False,
+                "removeButton": state == "ready",
+            }
+
+    class Page:
+        def locator(self, selector):
+            if selector == 'input#upload-files':
+                return Input()
+            if selector == "body":
+                return Body()
+            if selector == '[role="group"][aria-label="validation.txt"]':
+                return Tile()
+            raise AssertionError(selector)
+
+    bridge._assert_runtime_alive = lambda page: None
+    bridge._raise_for_human_verification = lambda page: None
+    monkeypatch.setattr(
+        "curvature_console.infrastructure.browser_bridge.time.monotonic",
+        monotonic,
+    )
+    monkeypatch.setattr(
+        "curvature_console.infrastructure.browser_bridge.time.sleep",
+        sleep,
+    )
+
+    bridge._upload_attachments(page=Page(), attachment_paths=(attachment,))
+
+    assert clock["value"] == pytest.approx(0.75)

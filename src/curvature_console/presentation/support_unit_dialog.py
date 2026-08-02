@@ -1,4 +1,4 @@
-"""Operational diagnostics and browser-mediated chat for Support Unit."""
+"""Operational diagnostics and browser-mediated chat for Console Development Unit."""
 
 from __future__ import annotations
 
@@ -34,8 +34,8 @@ from curvature_console.infrastructure.support_diagnostics import (
 )
 
 
-class SupportUnitDialog(QDialog):
-    """Cross-cutting diagnostics hub with a dedicated Support chat route."""
+class ConsoleDevelopmentUnitDialog(QDialog):
+    """Console development workspace with diagnostics and a dedicated chat route."""
 
     send_requested = Signal(str, object)
 
@@ -51,8 +51,8 @@ class SupportUnitDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Curvature Support Unit")
-        self.setObjectName("supportUnitDialog")
+        self.setWindowTitle("Curvature Console Development Unit")
+        self.setObjectName("consoleDevelopmentUnitDialog")
         self.resize(1100, 860)
 
         self.collector = SupportDiagnosticsCollector(
@@ -61,20 +61,20 @@ class SupportUnitDialog(QDialog):
         )
         self.current_report: SupportDiagnosticReport | None = None
 
-        heading = QLabel("Curvature Support Unit")
-        heading.setObjectName("supportUnitHeading")
+        heading = QLabel("Curvature Console Development Unit")
+        heading.setObjectName("consoleDevelopmentUnitHeading")
         heading.setStyleSheet("font-size: 18px; font-weight: 600;")
 
         description = QLabel(
-            "Operational diagnostics and a dedicated ChatGPT support route. "
+            "Development, integration and operational diagnostics for Curvature Console. "
             "Messages are sent only after an explicit operator action."
         )
         description.setWordWrap(True)
 
         self.tabs = QTabWidget()
-        self.tabs.setObjectName("supportUnitTabs")
+        self.tabs.setObjectName("consoleDevelopmentUnitTabs")
         self.tabs.addTab(self._build_diagnostics_tab(), "Diagnostics")
-        self.tabs.addTab(self._build_chat_tab(conversation_text, draft_text), "Support Chat")
+        self.tabs.addTab(self._build_chat_tab(conversation_text, draft_text), "Console Development Chat")
         self.attachment_list.restore_records(attachment_records)
         self.set_generated_downloads(download_records)
 
@@ -143,9 +143,9 @@ class SupportUnitDialog(QDialog):
         self.chat_input.setMaximumHeight(130)
 
         self.attachment_list = AttachmentList(
-            department_id="support",
+            department_id="console-development",
             attachment_storage_dir=(
-                self.collector.data_directory / "attachments" / "support"
+                self.collector.data_directory / "attachments" / "console-development"
             ),
         )
         self.attachment_list.setObjectName("supportAttachmentArea")
@@ -171,7 +171,7 @@ class SupportUnitDialog(QDialog):
         self.attach_log_checkbox.setObjectName("supportAttachLogCheckbox")
         self.attach_log_checkbox.setChecked(True)
 
-        self.send_button = QPushButton("Send to Support")
+        self.send_button = QPushButton("Send to Console Development")
         self.send_button.setObjectName("supportUnitSendButton")
         self.send_button.clicked.connect(self._emit_send_request)
 
@@ -191,7 +191,7 @@ class SupportUnitDialog(QDialog):
         lower_panel = QWidget()
         lower_layout = QVBoxLayout(lower_panel)
         lower_layout.setContentsMargins(0, 0, 0, 0)
-        lower_layout.addWidget(QLabel("Message to Support"))
+        lower_layout.addWidget(QLabel("Message to Console Development Unit"))
         lower_layout.addWidget(self.chat_input)
         lower_layout.addWidget(self.attachment_list)
         lower_layout.addLayout(options)
@@ -211,14 +211,14 @@ class SupportUnitDialog(QDialog):
         self.chat_splitter.setSizes([520, 300])
 
         layout = QVBoxLayout(page)
-        layout.addWidget(QLabel("Dedicated Support conversation"))
+        layout.addWidget(QLabel("Dedicated Console Development conversation"))
         layout.addWidget(self.chat_splitter, 1)
         return page
 
     def _emit_send_request(self) -> None:
         message = self.chat_input.toPlainText().strip()
         if not message:
-            QMessageBox.information(self, "Support message required", "Enter a message first.")
+            QMessageBox.information(self, "Console Development message required", "Enter a message first.")
             return
 
         attachments: list[Path] = [
@@ -248,7 +248,10 @@ class SupportUnitDialog(QDialog):
 
     def append_exchange(self, user_text: str, response_text: str) -> None:
         existing = self.chat_view.toPlainText().rstrip()
-        block = f"YOU\n{user_text.strip()}\n\nSUPPORT\n{response_text.strip()}"
+        block = (
+            f"YOU\n{user_text.strip()}\n\n"
+            f"CONSOLE DEVELOPMENT\n{response_text.strip()}"
+        )
         self.chat_view.setPlainText(f"{existing}\n\n{block}".strip())
         self.chat_view.verticalScrollBar().setValue(self.chat_view.verticalScrollBar().maximum())
         self.chat_input.clear()
@@ -297,7 +300,7 @@ class SupportUnitDialog(QDialog):
 
     def open_downloads_folder(self) -> None:
         path = self._selected_download_path()
-        folder = path.parent if path is not None else self.collector.data_directory / "inbox" / "support"
+        folder = path.parent if path is not None else self.collector.data_directory / "inbox" / "console-development"
         folder.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
@@ -328,3 +331,7 @@ class SupportUnitDialog(QDialog):
             QMessageBox.critical(self, "Diagnostic report failed", f"Could not write diagnostic report:\n{exc}")
             return
         QMessageBox.information(self, "Diagnostic report created", f"Saved to:\n{output_path}")
+
+
+# Backward-compatible import alias for older callers and saved tests.
+SupportUnitDialog = ConsoleDevelopmentUnitDialog

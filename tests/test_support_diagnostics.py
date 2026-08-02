@@ -1,7 +1,8 @@
-"""Tests for Curvature Support Unit diagnostics."""
+"""Tests for Curvature Console Development Unit diagnostics."""
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -46,7 +47,8 @@ def test_collects_clean_synced_repository_and_latest_artifacts(
     latest_log = log_directory / "console-latest.log"
     older_log.write_text("old", encoding="utf-8")
     latest_log.write_text("new", encoding="utf-8")
-    latest_log.touch()
+    os.utime(older_log, (1, 1))
+    os.utime(latest_log, (2, 2))
     snapshot = snapshot_directory / "snapshot.zip"
     snapshot.write_bytes(b"zip")
 
@@ -62,7 +64,7 @@ def test_collects_clean_synced_repository_and_latest_artifacts(
     assert diagnostic.is_synced
     assert report.latest_runtime_log == latest_log
     assert report.latest_snapshot == snapshot
-    assert "CURVATURE SUPPORT UNIT" in report.as_text()
+    assert "CURVATURE CONSOLE DEVELOPMENT UNIT" in report.as_text()
 
 
 def test_dirty_repository_is_reported(tmp_path: Path) -> None:
@@ -88,7 +90,7 @@ def test_write_report_uses_runtime_data_directory(tmp_path: Path) -> None:
 
     output_path = collector.write_report(collector.collect())
 
-    assert output_path.parent == tmp_path / "data" / "support-reports"
+    assert output_path.parent == tmp_path / "data" / "console-development/reports"
     assert output_path.read_text(encoding="utf-8").startswith(
-        "CURVATURE SUPPORT UNIT"
+        "CURVATURE CONSOLE DEVELOPMENT UNIT"
     )

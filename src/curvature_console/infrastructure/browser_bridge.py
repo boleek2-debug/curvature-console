@@ -1153,16 +1153,21 @@ class ChatGPTBrowserBridge:
                     f"{type(exc).__name__}: {exc}"
                 ) from exc
 
+            upload_started_at = time.monotonic()
             deadline = (
-                time.monotonic()
+                upload_started_at
                 + self.config.attachment_upload_timeout_seconds
             )
             previous_state: str | None = None
+            observed_waiting = False
+            unknown_since: float | None = None
+            unknown_polls = 0
             while time.monotonic() < deadline:
                 self._assert_runtime_alive(page)
                 self._raise_for_human_verification(page)
                 raise_for_page_upload_error()
                 state = tile_state(prepared.name)
+                now = time.monotonic()
                 if state != previous_state:
                     self._logger.info(
                         "attachment_state_transition request_id=%s "
@@ -1173,6 +1178,46 @@ class ChatGPTBrowserBridge:
                         state,
                     )
                     previous_state = state
+
+                if state == "waiting":
+                    observed_waiting = True
+                    unknown_since = None
+                    unknown_polls = 0
+                elif state == "unknown":
+                    if unknown_since is None:
+                        unknown_since = now
+                        unknown_polls = 1
+                    else:
+                        unknown_polls += 1
+
+                    # ChatGPT sometimes removes its visible progress marker before
+                    # exposing a Remove button. The attachment tile is still
+                    # present, no upload error is visible, and the file is already
+                    # usable. Require a stable quiet tile before accepting this
+                    # UI variant so a momentary DOM transition cannot be mistaken
+                    # for readiness.
+                    quiet_seconds = now - unknown_since
+                    minimum_quiet_seconds = 1.5 if observed_waiting else 2.5
+                    minimum_quiet_polls = 4 if observed_waiting else 6
+                    if (
+                        quiet_seconds >= minimum_quiet_seconds
+                        and unknown_polls >= minimum_quiet_polls
+                    ):
+                        self._logger.warning(
+                            "attachment_readiness_fallback request_id=%s "
+                            "name=%s observed_waiting=%s quiet_seconds=%.2f "
+                            "polls=%d",
+                            request_id,
+                            prepared.name,
+                            observed_waiting,
+                            quiet_seconds,
+                            unknown_polls,
+                        )
+                        state = "ready"
+                else:
+                    unknown_since = None
+                    unknown_polls = 0
+
                 if state == "ready":
                     ready_names.add(prepared.name)
                     self._logger.info(

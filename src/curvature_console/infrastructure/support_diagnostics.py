@@ -1,4 +1,4 @@
-"""Read-only operational diagnostics for Curvature Support Unit."""
+"""Read-only operational diagnostics for Curvature Console Development Unit."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ class RepositoryDiagnostic:
 
 @dataclass(frozen=True, slots=True)
 class SupportDiagnosticReport:
-    """Read-only operational snapshot for the Support Unit UI."""
+    """Read-only operational snapshot for the Console Development Unit UI."""
 
     created_at: datetime
     repositories: tuple[RepositoryDiagnostic, ...]
@@ -47,7 +47,7 @@ class SupportDiagnosticReport:
         """Render a stable plain-text report suitable for attachment."""
 
         lines = [
-            "CURVATURE SUPPORT UNIT — DIAGNOSTIC REPORT",
+            "CURVATURE CONSOLE DEVELOPMENT UNIT — DIAGNOSTIC REPORT",
             f"Created: {self.created_at.isoformat(timespec='seconds')}",
             "",
         ]
@@ -121,10 +121,10 @@ class SupportDiagnosticsCollector:
     def write_report(self, report: SupportDiagnosticReport) -> Path:
         """Persist one diagnostic report outside the source tree."""
 
-        output_directory = self.data_directory / "support-reports"
+        output_directory = self.data_directory / "console-development" / "reports"
         output_directory.mkdir(parents=True, exist_ok=True)
         output_path = output_directory / (
-            "support-diagnostic-"
+            "console-development-diagnostic-"
             f"{report.created_at.strftime('%Y%m%d-%H%M%S')}.txt"
         )
         output_path.write_text(report.as_text(), encoding="utf-8")
