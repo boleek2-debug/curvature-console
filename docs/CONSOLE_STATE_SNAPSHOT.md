@@ -10,7 +10,7 @@ Last Updated: 2026-08-04
 ```text
 Repository: ~/curvature-console
 Branch: main
-Verified commit: 2aad8a866ef78660d1c5369d88334bac49611016
+Verified commit: 155bf1866ef78660d1c5369d88334bac49611016
 origin/main: same
 Working tree at supplied snapshot: clean
 ```
@@ -28,7 +28,7 @@ Working tree at supplied snapshot: clean
 
 ## Current milestone
 
-CDU-001B — Authoritative CDU documentation suite.
+CDU-002A — Authoritative CDU documentation suite.
 
 ## Immediate next step
 
@@ -37,3 +37,8 @@ Apply and validate this documentation package. After live review and push, begin
 ## Known follow-up
 
 Generated-file cards can expose multiple equivalent controls, causing duplicate captures. Collision handling is safe, but candidate de-duplication remains a future optimisation rather than a current blocker.
+
+
+## CDU-002A implementation
+
+Shared in-memory sequential queue foundation for normal Project/Core/Research and Console Development chat requests. One Browser Bridge worker is active at a time; additional requests remain queued and start automatically in FIFO order. Handoff deliveries remain guarded until CDU-002B integrates their progress and cancellation semantics.

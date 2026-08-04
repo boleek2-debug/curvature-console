@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -10,6 +11,7 @@ from uuid import uuid4
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
+    QLabel,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -166,6 +168,7 @@ class MainWindow(QMainWindow):
         self._focused_department_id: str | None = None
         self._three_panel_sizes = [500, 500, 500]
         self._browser_worker: BrowserBridgeWorker | None = None
+        self._browser_queue: deque[BrowserBridgeWorker] = deque()
         self._pending_exchanges: dict[str, PendingBrowserExchange] = {}
         self._handoff_progress_dialog: (
             HandoffDeliveryProgressDialog | None
@@ -243,6 +246,9 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.refresh_all_button)
         toolbar.addWidget(self.handoff_controls_button)
         toolbar.addWidget(self.support_unit_button)
+        self.browser_queue_label = QLabel("Bridge queue: idle")
+        self.browser_queue_label.setObjectName("browserBridgeQueueLabel")
+        toolbar.addWidget(self.browser_queue_label)
         self.addToolBar(toolbar)
 
         status_bar = QStatusBar()
@@ -300,13 +306,6 @@ class MainWindow(QMainWindow):
         dialog = self._support_unit_dialog
         if dialog is None:
             return
-        if self._browser_worker is not None:
-            QMessageBox.information(
-                self, "ChatGPT operation in progress",
-                "Wait for the current ChatGPT exchange before sending Console Development."
-            )
-            return
-
         request_id = f"console-dev-{uuid4().hex}"
         console_dev_case_id = f"console-dev-case-{uuid4().hex[:16]}"
         payload = (
@@ -346,9 +345,8 @@ class MainWindow(QMainWindow):
         worker.route_unverified.connect(self._handle_browser_route_unverified)
         worker.stage_changed.connect(self._handle_browser_stage)
         worker.finished.connect(self._clear_browser_worker)
-        self._browser_worker = worker
-        self.statusBar().showMessage("Sending request to Curvature Console Development Unit...")
-        worker.start()
+        self.statusBar().showMessage("Queueing request to Curvature Console Development Unit...")
+        self._enqueue_browser_worker(worker)
 
     def open_handoff_controls(self) -> None:
         """Open the supervised interdepartmental communication hub."""
@@ -955,15 +953,6 @@ class MainWindow(QMainWindow):
     ) -> None:
         """Build and send a task, confirming only a new-thread handoff."""
 
-        if self._browser_worker is not None:
-            QMessageBox.information(
-                self,
-                "ChatGPT operation in progress",
-                "Wait for the current ChatGPT response before sending another "
-                "package.",
-            )
-            return
-
         package = self._build_transfer_package(department_id, mode_value)
         if package is None:
             return
@@ -1038,8 +1027,7 @@ class MainWindow(QMainWindow):
         )
         worker.stage_changed.connect(self._handle_browser_stage)
         worker.finished.connect(self._clear_browser_worker)
-        self._browser_worker = worker
-        worker.start()
+        self._enqueue_browser_worker(worker)
 
     def _pending_exchange(
         self,
@@ -1314,11 +1302,40 @@ class MainWindow(QMainWindow):
         panel = self.department_panels[active_department_id]
         panel.set_browser_busy(busy)
 
+    def _enqueue_browser_worker(self, worker: BrowserBridgeWorker) -> None:
+        """Queue one browser exchange and start it when the bridge is free."""
+
+        self._browser_queue.append(worker)
+        self._refresh_browser_queue_status()
+        if self._browser_worker is None:
+            self._start_next_browser_worker()
+
+    def _start_next_browser_worker(self) -> None:
+        if self._browser_worker is not None or not self._browser_queue:
+            self._refresh_browser_queue_status()
+            return
+        worker = self._browser_queue.popleft()
+        self._browser_worker = worker
+        self._refresh_browser_queue_status()
+        worker.start()
+
+    def _refresh_browser_queue_status(self) -> None:
+        active = self._browser_worker
+        waiting = len(self._browser_queue)
+        if active is None:
+            text = f"Bridge queue: {waiting} waiting" if waiting else "Bridge queue: idle"
+        else:
+            request = getattr(active, "request", None)
+            department_id = getattr(request, "department_id", "unknown")
+            text = f"Bridge active: {department_id} · {waiting} waiting"
+        self.browser_queue_label.setText(text)
+
     def _clear_browser_worker(self) -> None:
         worker = self._browser_worker
         self._browser_worker = None
         if worker is not None:
             worker.deleteLater()
+        self._start_next_browser_worker()
 
     def _build_transfer_package(
         self,
@@ -1509,11 +1526,11 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:
         """Persist operational state before closing."""
 
-        if self._browser_worker is not None:
+        if self._browser_worker is not None or self._browser_queue:
             QMessageBox.information(
                 self,
                 "ChatGPT operation in progress",
-                "Wait for the current ChatGPT response before closing "
+                "Wait for the active and queued ChatGPT exchanges before closing "
                 "Curvature Console.",
             )
             event.ignore()

@@ -25,3 +25,12 @@ Prepared authoritative CDU documentation suite and root documentation references
 ## Historical record
 
 Earlier detailed milestone history remains available in Git history and prior snapshots. New CDU documentation is authoritative for current Console direction.
+
+
+## 2026-08-04 — CDU-002A Shared Browser Bridge Queue Foundation
+
+- Added FIFO sequential queue for normal department and Console Development exchanges.
+- Added toolbar queue status showing active department and waiting count.
+- Preserved one active Browser Bridge worker at a time.
+- Added regression tests for queue ordering and automatic continuation.
+- Deferred supervised handoff queue integration to CDU-002B.
