@@ -34,3 +34,10 @@ Earlier detailed milestone history remains available in Git history and prior sn
 - Preserved one active Browser Bridge worker at a time.
 - Added regression tests for queue ordering and automatic continuation.
 - Deferred supervised handoff queue integration to CDU-002B.
+
+## CDU-002B — Shared queue for supervised handoffs
+
+- Routed approved handoff delivery, same-handoff progress updates and supervised returns through the shared sequential Browser Bridge queue.
+- Deferred modal handoff progress display until the queued exchange actually becomes active.
+- Added operator cancellation handling for active and queued department exchanges.
+- Preserved the single-active-exchange invariant and failure-to-held handoff safety behavior.

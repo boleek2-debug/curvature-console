@@ -68,3 +68,52 @@ def test_idle_queue_status_is_explicit(tmp_path: Path) -> None:
     window._refresh_browser_queue_status()
     assert window.browser_queue_label.text() == "Bridge queue: idle"
     window.close()
+
+
+def test_handoff_progress_opens_only_when_queued_worker_becomes_active(
+    tmp_path: Path,
+) -> None:
+    window = _window(tmp_path)
+    active = _worker("project")
+    active.request.request_id = "active-1"
+    queued = _worker("core")
+    queued.request.request_id = "handoff-queued-1"
+    window._browser_worker = active
+    window._handoff_progress_specs["handoff-queued-1"] = (
+        "core",
+        "# Queued handoff",
+    )
+    window._browser_queue.append(queued)
+
+    window._clear_browser_worker()
+
+    assert window._browser_worker is queued
+    assert window._handoff_progress_request_id == "handoff-queued-1"
+    assert window._handoff_progress_dialog is not None
+    window._finish_handoff_progress("handoff-queued-1")
+    window._browser_worker = None
+    window.close()
+
+
+def test_abort_removes_oldest_queued_request_for_department(
+    tmp_path: Path,
+) -> None:
+    window = _window(tmp_path)
+    active = _worker("project")
+    active.request.request_id = "active-1"
+    queued = _worker("core")
+    queued.request.request_id = "queued-core-1"
+    window._browser_worker = active
+    window._browser_queue.append(queued)
+    window._handoff_progress_specs["queued-core-1"] = (
+        "core",
+        "# Queued operation",
+    )
+
+    window.abort_browser_operation("core")
+
+    assert not window._browser_queue
+    assert "queued-core-1" not in window._handoff_progress_specs
+    queued.deleteLater.assert_called_once_with()
+    window._browser_worker = None
+    window.close()

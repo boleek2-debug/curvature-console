@@ -10,7 +10,7 @@ Last Updated: 2026-08-04
 ```text
 Repository: ~/curvature-console
 Branch: main
-Verified commit: 155bf1866ef78660d1c5369d88334bac49611016
+Verified commit: 97c9ab966ef78660d1c5369d88334bac49611016
 origin/main: same
 Working tree at supplied snapshot: clean
 ```
@@ -42,3 +42,8 @@ Generated-file cards can expose multiple equivalent controls, causing duplicate 
 ## CDU-002A implementation
 
 Shared in-memory sequential queue foundation for normal Project/Core/Research and Console Development chat requests. One Browser Bridge worker is active at a time; additional requests remain queued and start automatically in FIFO order. Handoff deliveries remain guarded until CDU-002B integrates their progress and cancellation semantics.
+
+
+## CDU-002B prepared
+
+The next package extends the shared Browser Bridge queue to supervised handoff delivery, progress updates and return-path exchanges. Handoff progress UI is activated only when its queued exchange starts. Active and queued department operations can be cancelled without starting another concurrent worker.

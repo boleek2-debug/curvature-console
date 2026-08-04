@@ -174,6 +174,7 @@ class MainWindow(QMainWindow):
             HandoffDeliveryProgressDialog | None
         ) = None
         self._handoff_progress_request_id: str | None = None
+        self._handoff_progress_specs: dict[str, tuple[str, str]] = {}
         self._handoff_controls_dialog: HandoffControlsDialog | None = None
         self._support_unit_dialog: ConsoleDevelopmentUnitDialog | None = None
 
@@ -204,6 +205,7 @@ class MainWindow(QMainWindow):
             panel.package_review_requested.connect(
                 self.review_generated_package
             )
+            panel.abort_requested.connect(self.abort_browser_operation)
             self.department_panels[department_id] = panel
             self.splitter.addWidget(panel)
 
@@ -342,6 +344,7 @@ class MainWindow(QMainWindow):
         )
         worker.succeeded.connect(self._handle_browser_success)
         worker.failed.connect(self._handle_browser_failure)
+        worker.cancelled.connect(self._handle_browser_cancelled)
         worker.route_unverified.connect(self._handle_browser_route_unverified)
         worker.stage_changed.connect(self._handle_browser_stage)
         worker.finished.connect(self._clear_browser_worker)
@@ -376,14 +379,6 @@ class MainWindow(QMainWindow):
 
     def deliver_handoff(self, handoff_id: str) -> None:
         """Deliver one approved handoff to its persisted target route."""
-
-        if self._browser_worker is not None:
-            QMessageBox.information(
-                self,
-                "ChatGPT operation in progress",
-                "Wait for the current ChatGPT exchange before delivery.",
-            )
-            return
 
         record = self.state_store.load_handoff(handoff_id)
         if record is None:
@@ -463,33 +458,23 @@ class MainWindow(QMainWindow):
         )
         worker.succeeded.connect(self._handle_browser_success)
         worker.failed.connect(self._handle_browser_failure)
+        worker.cancelled.connect(self._handle_browser_cancelled)
         worker.route_unverified.connect(
             self._handle_browser_route_unverified
         )
         worker.stage_changed.connect(self._handle_browser_stage)
         worker.finished.connect(self._clear_browser_worker)
-        self._browser_worker = worker
-        self._show_handoff_progress(
-            request_id=request_id,
-            target_department_id=record.target_department_id,
-            handoff_message=record.user_visible_message,
+        self._handoff_progress_specs[request_id] = (
+            record.target_department_id,
+            record.user_visible_message,
         )
         self.statusBar().showMessage(
-            "Controlled handoff delivery engaged..."
+            "Controlled handoff delivery queued..."
         )
-        worker.start()
+        self._enqueue_browser_worker(worker)
 
     def update_handoff(self, handoff_id: str, update_text: str) -> None:
         """Send one supervised progress update within an open handoff."""
-
-        if self._browser_worker is not None:
-            QMessageBox.information(
-                self,
-                "ChatGPT operation in progress",
-                "Wait for the current ChatGPT exchange before sending "
-                "another progress update.",
-            )
-            return
 
         record = self.state_store.load_handoff(handoff_id)
         if record is None:
@@ -571,32 +556,23 @@ class MainWindow(QMainWindow):
         )
         worker.succeeded.connect(self._handle_browser_success)
         worker.failed.connect(self._handle_browser_failure)
+        worker.cancelled.connect(self._handle_browser_cancelled)
         worker.route_unverified.connect(
             self._handle_browser_route_unverified
         )
         worker.stage_changed.connect(self._handle_browser_stage)
         worker.finished.connect(self._clear_browser_worker)
-        self._browser_worker = worker
-        self._show_handoff_progress(
-            request_id=request_id,
-            target_department_id=record.target_department_id,
-            handoff_message=clean_update,
+        self._handoff_progress_specs[request_id] = (
+            record.target_department_id,
+            clean_update,
         )
         self.statusBar().showMessage(
-            "Supervised same-handoff update engaged..."
+            "Supervised same-handoff update queued..."
         )
-        worker.start()
+        self._enqueue_browser_worker(worker)
 
     def return_handoff(self, handoff_id: str) -> None:
         """Return the latest captured target reply once to the source route."""
-
-        if self._browser_worker is not None:
-            QMessageBox.information(
-                self,
-                "ChatGPT operation in progress",
-                "Wait for the current ChatGPT exchange before returning a reply.",
-            )
-            return
 
         record = self.state_store.load_handoff(handoff_id)
         if record is None:
@@ -692,17 +668,16 @@ class MainWindow(QMainWindow):
         )
         worker.succeeded.connect(self._handle_browser_success)
         worker.failed.connect(self._handle_browser_failure)
+        worker.cancelled.connect(self._handle_browser_cancelled)
         worker.route_unverified.connect(self._handle_browser_route_unverified)
         worker.stage_changed.connect(self._handle_browser_stage)
         worker.finished.connect(self._clear_browser_worker)
-        self._browser_worker = worker
-        self._show_handoff_progress(
-            request_id=request_id,
-            target_department_id=record.source_department_id,
-            handoff_message="# Return captured reply to source",
+        self._handoff_progress_specs[request_id] = (
+            record.source_department_id,
+            "# Return captured reply to source",
         )
-        self.statusBar().showMessage("Controlled handoff return engaged...")
-        worker.start()
+        self.statusBar().showMessage("Controlled handoff return queued...")
+        self._enqueue_browser_worker(worker)
 
     def _capture_department_handoff_proposals(
         self,
@@ -1022,6 +997,7 @@ class MainWindow(QMainWindow):
         )
         worker.succeeded.connect(self._handle_browser_success)
         worker.failed.connect(self._handle_browser_failure)
+        worker.cancelled.connect(self._handle_browser_cancelled)
         worker.route_unverified.connect(
             self._handle_browser_route_unverified
         )
@@ -1196,6 +1172,31 @@ class MainWindow(QMainWindow):
             f"Observed page URL:\n{observed_url}",
         )
 
+    def _handle_browser_cancelled(
+        self,
+        request_id: str,
+        department_id: str,
+        submitted: bool,
+    ) -> None:
+        pending = self._pending_exchange(request_id, department_id)
+        if pending is None:
+            return
+
+        self._finish_handoff_progress(request_id)
+        self._pending_exchanges.pop(request_id, None)
+        message = (
+            "Browser request cancelled after submission."
+            if submitted
+            else "Browser request cancelled before submission."
+        )
+        self._hold_failed_handoff(pending, message)
+        self._set_browser_operation_busy(False, department_id)
+        if pending.support_unit:
+            dialog = self._support_unit_dialog
+            if dialog is not None:
+                dialog.set_busy(False)
+        self.statusBar().showMessage(message)
+
     def _handle_browser_failure(
         self,
         request_id: str,
@@ -1274,6 +1275,7 @@ class MainWindow(QMainWindow):
         dialog.activateWindow()
 
     def _finish_handoff_progress(self, request_id: str) -> None:
+        self._handoff_progress_specs.pop(request_id, None)
         if self._handoff_progress_request_id != request_id:
             return
         dialog = self._handoff_progress_dialog
@@ -1316,8 +1318,47 @@ class MainWindow(QMainWindow):
             return
         worker = self._browser_queue.popleft()
         self._browser_worker = worker
+        request = getattr(worker, "request", None)
+        request_id = getattr(request, "request_id", "")
+        spec = self._handoff_progress_specs.get(request_id)
+        if spec is not None:
+            self._show_handoff_progress(
+                request_id=request_id,
+                target_department_id=spec[0],
+                handoff_message=spec[1],
+            )
         self._refresh_browser_queue_status()
         worker.start()
+
+    def abort_browser_operation(self, department_id: str) -> None:
+        """Abort the active exchange or remove the oldest queued one for a department."""
+
+        active = self._browser_worker
+        active_request = getattr(active, "request", None)
+        if active is not None and getattr(active_request, "department_id", None) == department_id:
+            active.request_cancel()
+            self.statusBar().showMessage(
+                f"Cancelling active Browser Bridge request: {department_id}"
+            )
+            return
+
+        for worker in tuple(self._browser_queue):
+            request = getattr(worker, "request", None)
+            if getattr(request, "department_id", None) != department_id:
+                continue
+            self._browser_queue.remove(worker)
+            request_id = getattr(request, "request_id", "")
+            pending = self._pending_exchanges.pop(request_id, None)
+            self._handoff_progress_specs.pop(request_id, None)
+            if pending is not None:
+                self._hold_failed_handoff(pending, "Queued request cancelled by operator.")
+            self._set_browser_operation_busy(False, department_id)
+            worker.deleteLater()
+            self._refresh_browser_queue_status()
+            self.statusBar().showMessage(
+                f"Cancelled queued Browser Bridge request: {department_id}"
+            )
+            return
 
     def _refresh_browser_queue_status(self) -> None:
         active = self._browser_worker
