@@ -47,3 +47,25 @@ Owner: Curvature Console Development Unit
 - Chronicle implementation contracts go to Core;
 - source, evidence and licensing questions go to Research;
 - Console architecture, integration and workflow execution remain with CDU.
+
+## Machine-readable automatic request envelope
+
+Required fields:
+
+- `schema_version`: `1`
+- `request_type`
+- `title`
+- `problem_or_need`
+- `required_output`
+- `constraints`
+- `acceptance_criteria`
+
+Allowed request types:
+
+- `CONSOLE_TOOL_REQUEST`
+- `CONSOLE_INTEGRATION_REQUEST`
+- `CONSOLE_WORKFLOW_REQUEST`
+- `CONSOLE_DEFECT`
+- `CONSOLE_DECISION_REQUEST`
+
+Valid requests are routed automatically. Invalid blocks are ignored with bounded diagnostics. Departments must not claim delivery; Console owns transport and return.

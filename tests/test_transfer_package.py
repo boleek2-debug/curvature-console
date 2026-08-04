@@ -387,3 +387,14 @@ def test_every_department_package_contains_shared_authority_and_console_routing(
     assert "CONSOLE_DEFECT" in package.text
     assert "CONSOLE_DECISION_REQUEST" in package.text
     assert "Do not claim that a handoff or Console request was delivered" in package.text
+
+
+def test_package_instructs_department_to_escalate_missing_console_capability(
+    tmp_path: Path,
+) -> None:
+    package = TransferPackageBuilder().build(_request(tmp_path))
+
+    assert "BEGIN_CURVATURE_CONSOLE_REQUEST" in package.text
+    assert "END_CURVATURE_CONSOLE_REQUEST" in package.text
+    assert "Console will route it automatically to CDU" in package.text
+    assert "do not ask the operator to copy it" in package.text

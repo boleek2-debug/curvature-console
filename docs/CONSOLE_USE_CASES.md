@@ -40,3 +40,14 @@ Console invokes an approved headless script for import, inspection, conversion o
 ### Research source intake
 
 Console acquires permitted sources, records access classification and checksums, extracts usable content and hands it to Research without deciding conclusions.
+
+## Use case: Core lacks a Console tool
+
+1. Project assigns an implementation task to Core.
+2. Core determines that a required Console capability does not exist.
+3. Core emits a structured Console request in its normal response.
+4. Console validates and queues the request to CDU automatically.
+5. CDU implements or assesses the capability and reports required approvals.
+6. Console captures generated artifacts and returns the CDU result to Core.
+7. Core resumes the original task without operator copy/paste.
+8. The workflow closes only after tests, live validation and documentation are current.

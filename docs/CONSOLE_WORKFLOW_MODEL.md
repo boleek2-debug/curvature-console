@@ -60,3 +60,9 @@ QUEUED
 ## Cross-department result return
 
 The result is returned to the requesting department through a structured handoff with the same request identity, artifact references, validation evidence and unresolved blockers.
+
+## Automatic Console capability escalation
+
+A production department must not ask the operator to manually reproduce a missing-tool request. When it cannot continue because Console lacks a tool, integration or workflow, it emits `BEGIN_CURVATURE_CONSOLE_REQUEST` / `END_CURVATURE_CONSOLE_REQUEST` with schema version 1. Console validates the envelope, queues a CDU exchange, captures the CDU result and artifacts, then queues a continuation message back to the originating department.
+
+This transport does not grant CDU authority over Chronicle direction, implementation or research conclusions. Repository writes, installation, new cost, security-sensitive execution and scope changes remain explicit operator approval gates.

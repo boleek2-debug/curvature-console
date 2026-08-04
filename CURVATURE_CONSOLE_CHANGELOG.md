@@ -55,3 +55,14 @@ Earlier detailed milestone history remains available in Git history and prior sn
 - Added one shared cross-department authority and Console-routing section to every normal Task Package and Thread Handoff Package.
 - Project, Core and Research now receive the same explicit ownership boundaries and the five formal Console request types.
 - Added regression coverage for all three departments in both transfer-package modes.
+
+## 2026-08-04 — CDU-004 Automatic Tool Escalation and Return
+
+Prepared:
+
+- machine-readable Console request envelope for Project, Core and Research;
+- automatic routing of missing-tool, integration, workflow, defect and decision requests to Console Development Unit;
+- automatic return of the CDU response and captured artifact paths to the originating department;
+- source-task continuation without operator copy/paste;
+- documentation-closure requirement included in automatic CDU requests;
+- parser and transfer-package regression tests.

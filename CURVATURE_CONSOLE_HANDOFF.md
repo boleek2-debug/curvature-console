@@ -42,3 +42,13 @@ The queue will accept independent Project, Core, Research and CDU requests while
 ## Authority
 
 CDU owns Console development and integration. It does not decide Chronicle direction, implementation or research conclusions.
+
+## CDU-004 current implementation unit
+
+Automatic Tool Escalation and Return is prepared for validation.
+
+Expected live flow:
+
+Project/Core/Research task → department emits structured Console request → shared Browser Bridge queue sends it to CDU → CDU result and captured artifact paths return automatically to the source department → source department resumes its original task.
+
+Closure requires automated tests, live verification, current documentation, clean repository state and confirmed source-department continuation.

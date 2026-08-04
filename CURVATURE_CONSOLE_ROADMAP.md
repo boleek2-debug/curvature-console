@@ -28,3 +28,17 @@ Create and adopt the CDU documentation suite under `docs/`.
 9. CDU-010 — Composite Workflow Orchestration
 
 Detailed milestone definitions live in `docs/CONSOLE_ROADMAP.md` and backlog entries in `docs/CONSOLE_BACKLOG.md`.
+
+## CDU-004 — Automatic Tool Escalation, Return and Documentation Closure
+
+Deliver:
+
+- structured missing-capability requests emitted by Project, Core and Research;
+- automatic routing to Console Development Unit;
+- shared-queue serialization;
+- automatic result return to the source department;
+- original-request linkage;
+- captured artifact path reporting;
+- operator approval gates for writes, installs, cost, security and scope;
+- documentation updates as a mandatory completion condition;
+- automated and live end-to-end verification.

@@ -27,3 +27,9 @@ Accepted on 2026-08-04:
 - shared sequential Bridge execution before true parallelism;
 - adapter-based tool integration;
 - explicit operator approval for controlled actions.
+
+## CDU-004 — Automatic escalation is the default routing model
+
+Accepted: 2026-08-04
+
+When Project, Core or Research is blocked by a missing Console capability, the department emits a structured Console request. Curvature Console routes it to CDU and returns the result to the originating department automatically. The operator is not responsible for copying request templates between workspaces. Operator approval remains required for repository writes, installation, cost, security-sensitive actions and scope changes. Documentation updates are part of completion, not a deferred follow-up.

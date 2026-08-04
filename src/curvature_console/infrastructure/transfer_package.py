@@ -503,6 +503,18 @@ class TransferPackageBuilder:
             "END_CURVATURE_HANDOFF_PROPOSAL",
             "Never target the department that is producing the response.",
             "If no other department must act, do not include a proposal block.",
+            "When your current task is blocked because Curvature Console lacks a "
+            "tool, integration or workflow, emit one machine-readable Console "
+            "request block. Console will route it automatically to CDU and return "
+            "the result to this same department; do not ask the operator to copy it.",
+            "Use exactly this envelope, with valid JSON between the markers:",
+            "BEGIN_CURVATURE_CONSOLE_REQUEST",
+            '{"schema_version":1,"request_type":"CONSOLE_TOOL_REQUEST|CONSOLE_INTEGRATION_REQUEST|CONSOLE_WORKFLOW_REQUEST|CONSOLE_DEFECT|CONSOLE_DECISION_REQUEST",'
+            '"title":"...","problem_or_need":"...","required_output":"...",'
+            '"constraints":["..."],"acceptance_criteria":["..."]}',
+            "END_CURVATURE_CONSOLE_REQUEST",
+            "Emit this block only when CDU action is genuinely required to "
+            "continue. Do not claim delivery; Console performs the routing.",
         ]
 
         if request.mode is TransferPackageMode.THREAD_HANDOFF:

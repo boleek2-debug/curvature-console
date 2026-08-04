@@ -49,3 +49,9 @@ Generated-file cards can expose multiple equivalent controls, causing duplicate 
 ## CDU-003A prepared
 
 Shared authority boundaries and formal Console request routing are now propagated into every Project, Core and Research Task Package and Thread Handoff Package. Local validation and live package inspection remain required before commit.
+
+## 2026-08-04 — CDU-004 prepared
+
+Baseline commit: `bf3fc85`.
+
+Prepared changes add automatic department-to-CDU escalation and automatic CDU-to-source return. Targeted parser and transfer-package tests: 23 passed. Full project validation and live end-to-end verification remain required before commit and push.

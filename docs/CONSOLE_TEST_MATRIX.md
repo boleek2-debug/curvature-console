@@ -36,3 +36,15 @@ Every adapter requires:
 ## Release gate
 
 A milestone closes only when automated validation, `git diff --check`, expected file scope and required live workflow evidence all pass.
+
+## CDU-004 automatic escalation
+
+- valid Console request envelope parses;
+- unsupported request type is rejected;
+- every department package includes automatic escalation instructions;
+- automatic CDU request preserves source department and source request ID;
+- CDU result is queued back to the source department;
+- captured artifact paths are included in the return;
+- shared queue prevents parallel Browser Bridge workers;
+- operator approval remains required for controlled actions;
+- documentation closure is present in the CDU execution prompt.

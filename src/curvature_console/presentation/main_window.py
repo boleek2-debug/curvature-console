@@ -38,6 +38,10 @@ from curvature_console.infrastructure.package_review import (
     PackageReviewError,
     PackageReviewer,
 )
+from curvature_console.infrastructure.console_request import (
+    ConsoleRequest,
+    parse_console_requests,
+)
 from curvature_console.infrastructure.context_loader import (
     ContextLoadResult,
     WorkspaceContextLoader,
@@ -91,6 +95,9 @@ class PendingBrowserExchange:
     handoff_return: bool = False
     handoff_update: bool = False
     support_unit: bool = False
+    automatic_console_request: bool = False
+    source_department_id: str | None = None
+    source_request_id: str | None = None
 
 
 class MainWindow(QMainWindow):
@@ -707,6 +714,161 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Controlled handoff return queued...")
         self._enqueue_browser_worker(worker)
 
+
+    def _queue_automatic_console_request(
+        self,
+        *,
+        source_pending: PendingBrowserExchange,
+        request: ConsoleRequest,
+        request_index: int,
+    ) -> None:
+        """Route a department-declared missing capability directly to CDU."""
+
+        request_id = f"console-auto-{uuid4().hex}"
+        case_id = f"console-dev-case-{uuid4().hex[:16]}"
+        body = request.render_request_body()
+        payload = (
+            f"CURVATURE_REQUEST_ID: {request_id}\n"
+            f"CONSOLE_DEV_CASE_ID: {case_id}\n"
+            f"CONSOLE_REQUEST_TYPE: {request.request_type}\n"
+            f"REQUESTING_DEPARTMENT: {source_pending.department_id}\n"
+            f"SOURCE_REQUEST_ID: {source_pending.request_id}\n\n"
+            "# AUTOMATIC CONSOLE DEVELOPMENT ESCALATION\n\n"
+            "The source department detected that it lacks a Console tool, "
+            "integration or workflow required to continue its current task. "
+            "Assess and fulfil this request within CDU authority. Do not make "
+            "Project, Chronicle implementation or Research decisions.\n\n"
+            "Completion rule: implementation is not complete until relevant "
+            "tests and Console documentation are updated. Report any operator "
+            "approval required for repository writes, installation, cost, "
+            "security-sensitive actions or scope changes.\n\n"
+            f"{body}"
+        )
+        route = (
+            self.state_store.load_chat_route("console-development")
+            or self.state_store.load_chat_route("support")
+        )
+        pending = PendingBrowserExchange(
+            request_id=request_id,
+            department_id="console-development",
+            user_task=body,
+            support_unit=True,
+            automatic_console_request=True,
+            source_department_id=source_pending.department_id,
+            source_request_id=source_pending.request_id,
+        )
+        self._pending_exchanges[request_id] = pending
+        worker = BrowserBridgeWorker(
+            config=self.browser_config,
+            request=BrowserExchangeRequest(
+                request_id=request_id,
+                department_id="console-development",
+                message_text=payload,
+                create_new_thread=route is None,
+                conversation_url=(
+                    route.active_conversation_url if route else None
+                ),
+                confirmation_marker=f"CURVATURE_REQUEST_ID: {request_id}",
+            ),
+        )
+        worker.succeeded.connect(self._handle_browser_success)
+        worker.failed.connect(self._handle_browser_failure)
+        worker.cancelled.connect(self._handle_browser_cancelled)
+        worker.route_unverified.connect(
+            self._handle_browser_route_unverified
+        )
+        worker.stage_changed.connect(self._handle_browser_stage)
+        worker.finished.connect(self._clear_browser_worker)
+        self.statusBar().showMessage(
+            f"Automatic {source_pending.department_id} → CDU request queued: "
+            f"{request.title}"
+        )
+        self._enqueue_browser_worker(worker)
+
+    def _capture_and_queue_console_requests(
+        self,
+        pending: PendingBrowserExchange,
+        response_text: str,
+    ) -> tuple[int, tuple[str, ...]]:
+        """Capture machine-readable CDU requests and queue them automatically."""
+
+        parsed = parse_console_requests(response_text)
+        for index, request in enumerate(parsed.requests, start=1):
+            self._queue_automatic_console_request(
+                source_pending=pending,
+                request=request,
+                request_index=index,
+            )
+        return len(parsed.requests), parsed.errors
+
+    def _queue_console_result_return(
+        self,
+        *,
+        pending: PendingBrowserExchange,
+        response_text: str,
+        downloaded_files: tuple[object, ...],
+    ) -> None:
+        """Return CDU output to the originating department and resume its task."""
+
+        source_department_id = pending.source_department_id
+        if not source_department_id:
+            return
+        route = self.state_store.load_chat_route(source_department_id)
+        if route is None:
+            self.statusBar().showMessage(
+                "CDU result captured, but source route is unavailable: "
+                + source_department_id
+            )
+            return
+        filenames = []
+        for item in downloaded_files:
+            path = getattr(item, "saved_path", None)
+            filenames.append(str(path or item))
+        artifacts = "\n".join(f"- {name}" for name in filenames) or "- none"
+        request_id = f"console-return-{uuid4().hex}"
+        message_text = (
+            f"CURVATURE_REQUEST_ID: {request_id}\n"
+            f"SOURCE_REQUEST_ID: {pending.source_request_id or ''}\n\n"
+            "# AUTOMATIC CONSOLE DEVELOPMENT RESULT RETURN\n\n"
+            "Console Development Unit completed or assessed the automatically "
+            "escalated request. Continue the original task within your own "
+            "department authority. Do not repeat the CDU work. If an operator "
+            "approval is still required, state exactly what must be approved.\n\n"
+            f"## CDU response\n{response_text}\n\n"
+            f"## Captured artifacts\n{artifacts}"
+        )
+        source_pending = PendingBrowserExchange(
+            request_id=request_id,
+            department_id=source_department_id,
+            user_task=message_text,
+            source_request_id=pending.source_request_id,
+        )
+        self._pending_exchanges[request_id] = source_pending
+        self._set_browser_operation_busy(True, source_department_id)
+        worker = BrowserBridgeWorker(
+            config=self.browser_config,
+            request=BrowserExchangeRequest(
+                request_id=request_id,
+                department_id=source_department_id,
+                message_text=message_text,
+                create_new_thread=False,
+                conversation_url=route.active_conversation_url,
+                confirmation_marker=f"CURVATURE_REQUEST_ID: {request_id}",
+            ),
+        )
+        worker.succeeded.connect(self._handle_browser_success)
+        worker.failed.connect(self._handle_browser_failure)
+        worker.cancelled.connect(self._handle_browser_cancelled)
+        worker.route_unverified.connect(
+            self._handle_browser_route_unverified
+        )
+        worker.stage_changed.connect(self._handle_browser_stage)
+        worker.finished.connect(self._clear_browser_worker)
+        self.statusBar().showMessage(
+            f"CDU result queued for automatic return to {source_department_id}"
+        )
+        self._enqueue_browser_worker(worker)
+
     def _capture_department_handoff_proposals(
         self,
         pending: PendingBrowserExchange,
@@ -1083,11 +1245,23 @@ class MainWindow(QMainWindow):
                 dialog.clear_sent_attachments()
                 self.state_store.replace_attachments("console-development", ())
             self.statusBar().showMessage("Console Development response received and saved")
+            if pending.automatic_console_request:
+                self._queue_console_result_return(
+                    pending=pending,
+                    response_text=response_text,
+                    downloaded_files=tuple(downloaded_files),
+                )
             return
         panel = self.department_panels[department_id]
         panel.append_browser_exchange(pending.user_task, response_text)
         captured_handoffs, handoff_errors = (
             self._capture_department_handoff_proposals(
+                pending,
+                response_text,
+            )
+        )
+        captured_console_requests, console_request_errors = (
+            self._capture_and_queue_console_requests(
                 pending,
                 response_text,
             )
@@ -1129,10 +1303,21 @@ class MainWindow(QMainWindow):
             if handoff_errors
             else ""
         )
+        console_suffix = (
+            f"; {captured_console_requests} automatic CDU request(s) queued"
+            if captured_console_requests
+            else ""
+        )
+        console_error_suffix = (
+            f"; {len(console_request_errors)} invalid CDU request(s) ignored"
+            if console_request_errors
+            else ""
+        )
         self.statusBar().showMessage(
             f"ChatGPT response received and saved: "
             f"{panel.title_label.text()}{download_suffix}"
-            f"{handoff_suffix}{error_suffix}"
+            f"{handoff_suffix}{console_suffix}{error_suffix}"
+            f"{console_error_suffix}"
         )
 
     def _handle_browser_route_unverified(
