@@ -348,3 +348,42 @@ def test_response_instructions_define_supervised_handoff_proposal_envelope(
     assert '"target_department_id":"project|core|research"' in package.text
     assert "Console will capture it as a draft for user review" in package.text
     assert "Do not claim that the handoff was sent" in package.text
+
+@pytest.mark.parametrize(
+    ("department_id", "department_title"),
+    (
+        ("project", "Curvature Project"),
+        ("core", "Curvature Core"),
+        ("research", "Curvature Research"),
+    ),
+)
+@pytest.mark.parametrize(
+    "mode",
+    (TransferPackageMode.TASK, TransferPackageMode.THREAD_HANDOFF),
+)
+def test_every_department_package_contains_shared_authority_and_console_routing(
+    tmp_path: Path,
+    department_id: str,
+    department_title: str,
+    mode: TransferPackageMode,
+) -> None:
+    package = TransferPackageBuilder().build(
+        _request(
+            tmp_path,
+            mode=mode,
+            department_id=department_id,
+            department_title=department_title,
+        )
+    )
+
+    assert "CROSS-DEPARTMENT AUTHORITY AND CONSOLE ROUTING" in package.text
+    assert "Project owns Chronicle direction" in package.text
+    assert "Core owns Chronicle architecture" in package.text
+    assert "Research owns evidence" in package.text
+    assert "Console Development Unit owns Curvature Console" in package.text
+    assert "CONSOLE_TOOL_REQUEST" in package.text
+    assert "CONSOLE_INTEGRATION_REQUEST" in package.text
+    assert "CONSOLE_WORKFLOW_REQUEST" in package.text
+    assert "CONSOLE_DEFECT" in package.text
+    assert "CONSOLE_DECISION_REQUEST" in package.text
+    assert "Do not claim that a handoff or Console request was delivered" in package.text

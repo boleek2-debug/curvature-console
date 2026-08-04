@@ -301,7 +301,11 @@ class MainWindow(QMainWindow):
             self._support_unit_dialog = None
 
     def start_support_exchange(
-        self, message_text: str, attachment_paths: object
+        self,
+        message_text: str,
+        attachment_paths: object,
+        request_type: str = "CONSOLE_TOOL_REQUEST",
+        requesting_department: str = "operator",
     ) -> None:
         """Send one operator-approved message to Console Development Unit."""
 
@@ -310,9 +314,26 @@ class MainWindow(QMainWindow):
             return
         request_id = f"console-dev-{uuid4().hex}"
         console_dev_case_id = f"console-dev-case-{uuid4().hex[:16]}"
+        allowed_request_types = {
+            "CONSOLE_TOOL_REQUEST",
+            "CONSOLE_INTEGRATION_REQUEST",
+            "CONSOLE_WORKFLOW_REQUEST",
+            "CONSOLE_DEFECT",
+            "CONSOLE_DECISION_REQUEST",
+        }
+        if request_type not in allowed_request_types:
+            request_type = "CONSOLE_TOOL_REQUEST"
+        allowed_departments = {
+            "operator", "project", "core", "research", "console-development"
+        }
+        if requesting_department not in allowed_departments:
+            requesting_department = "operator"
+
         payload = (
             f"CURVATURE_REQUEST_ID: {request_id}\n"
-            f"CONSOLE_DEV_CASE_ID: {console_dev_case_id}\n\n"
+            f"CONSOLE_DEV_CASE_ID: {console_dev_case_id}\n"
+            f"CONSOLE_REQUEST_TYPE: {request_type}\n"
+            f"REQUESTING_DEPARTMENT: {requesting_department}\n\n"
             "# CURVATURE CONSOLE DEVELOPMENT UNIT REQUEST\n\n"
             "Act as the Curvature Console Development Unit. Own development, "
             "integration, diagnostics, workflows and validation for Curvature "
@@ -320,7 +341,14 @@ class MainWindow(QMainWindow):
             "direction or research conclusions. Diagnose accurately, do not "
             "invent missing state, and preserve Project/Core/Research authority "
             "boundaries.\n\n"
-            f"Operator request:\n{message_text.strip()}"
+            "Routing rule: scope and priority decisions belong to Project; "
+            "Chronicle implementation belongs to Core; evidence and licensing "
+            "questions belong to Research; Console architecture, integrations "
+            "and workflows belong to CDU. Identify a required handoff instead of "
+            "silently performing another department's work.\n\n"
+            f"Formal request type: {request_type}\n"
+            f"Requesting department: {requesting_department}\n\n"
+            f"Request body:\n{message_text.strip()}"
         )
         route = (
             self.state_store.load_chat_route("console-development")

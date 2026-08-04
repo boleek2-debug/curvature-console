@@ -1,7 +1,7 @@
 # Console Development Unit State Snapshot
 
 Status: Operational
-Version: 1.0.0
+Version: 1.1.0
 Owner: Curvature Console Development Unit
 Last Updated: 2026-08-04
 
@@ -10,40 +10,42 @@ Last Updated: 2026-08-04
 ```text
 Repository: ~/curvature-console
 Branch: main
-Verified commit: 97c9ab966ef78660d1c5369d88334bac49611016
+Verified commit: 0abfee2da345effa4e8293478abbcfcc11b72772
 origin/main: same
 Working tree at supplied snapshot: clean
 ```
 
 ## Verified baseline
 
-- 226 automated tests passed before the CDU identity migration push;
+- 231 automated tests passed after CDU-002B;
 - `git diff --check` passed;
-- CDU identity migration live PASS;
-- same conversation route preserved;
-- screenshot and attachments live PASS;
-- automatic diagnostic and runtime-log upload live PASS after resilient readiness repair;
-- generated TXT download live PASS;
-- downloads stored under `data/inbox/console-development/`.
+- CDU identity migration and resilient attachments live PASS;
+- generated downloads live PASS;
+- normal department and CDU requests share one FIFO Browser Bridge queue;
+- supervised handoff delivery, progress update and return path use the same queue;
+- active and queued operations have controlled cancellation semantics.
 
 ## Current milestone
 
-CDU-002A — Authoritative CDU documentation suite.
+CDU-003 — Formal Console requests and authority routing.
+
+## CDU-003 package scope
+
+- approved request types: `CONSOLE_TOOL_REQUEST`, `CONSOLE_INTEGRATION_REQUEST`, `CONSOLE_WORKFLOW_REQUEST`, `CONSOLE_DEFECT`, `CONSOLE_DECISION_REQUEST`;
+- requesting department metadata for Operator, Project, Core, Research and CDU;
+- formal request template using the fields from `CONSOLE_TOOL_REQUEST_PROTOCOL.md`;
+- explicit routing boundary included in every formal CDU transfer package;
+- no autonomous cross-department execution: required work outside CDU authority must be identified as a handoff.
 
 ## Immediate next step
 
-Apply and validate this documentation package. After live review and push, begin CDU-002 Shared Sequential Browser Bridge Queue.
+Apply, validate and live-test one formal request from a production department to CDU. Then execute the Console-first migration workflow test before declaring the browser chat fallback-only.
 
 ## Known follow-up
 
 Generated-file cards can expose multiple equivalent controls, causing duplicate captures. Collision handling is safe, but candidate de-duplication remains a future optimisation rather than a current blocker.
 
 
-## CDU-002A implementation
+## CDU-003A prepared
 
-Shared in-memory sequential queue foundation for normal Project/Core/Research and Console Development chat requests. One Browser Bridge worker is active at a time; additional requests remain queued and start automatically in FIFO order. Handoff deliveries remain guarded until CDU-002B integrates their progress and cancellation semantics.
-
-
-## CDU-002B prepared
-
-The next package extends the shared Browser Bridge queue to supervised handoff delivery, progress updates and return-path exchanges. Handoff progress UI is activated only when its queued exchange starts. Active and queued department operations can be cancelled without starting another concurrent worker.
+Shared authority boundaries and formal Console request routing are now propagated into every Project, Core and Research Task Package and Thread Handoff Package. Local validation and live package inspection remain required before commit.

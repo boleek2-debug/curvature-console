@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QGroupBox,
@@ -37,7 +38,7 @@ from curvature_console.infrastructure.support_diagnostics import (
 class ConsoleDevelopmentUnitDialog(QDialog):
     """Console development workspace with diagnostics and a dedicated chat route."""
 
-    send_requested = Signal(str, object)
+    send_requested = Signal(str, object, str, str)
 
     def __init__(
         self,
@@ -135,12 +136,41 @@ class ConsoleDevelopmentUnitDialog(QDialog):
         self.chat_view.setReadOnly(True)
         self.chat_view.setPlainText(conversation_text)
 
+        self.request_type_combo = QComboBox()
+        self.request_type_combo.setObjectName("consoleDevelopmentRequestType")
+        self.request_type_combo.addItems((
+            "CONSOLE_TOOL_REQUEST",
+            "CONSOLE_INTEGRATION_REQUEST",
+            "CONSOLE_WORKFLOW_REQUEST",
+            "CONSOLE_DEFECT",
+            "CONSOLE_DECISION_REQUEST",
+        ))
+
+        self.requesting_department_combo = QComboBox()
+        self.requesting_department_combo.setObjectName("consoleDevelopmentRequestingDepartment")
+        self.requesting_department_combo.addItem("Operator", "operator")
+        self.requesting_department_combo.addItem("Project", "project")
+        self.requesting_department_combo.addItem("Core", "core")
+        self.requesting_department_combo.addItem("Research", "research")
+        self.requesting_department_combo.addItem("Console Development Unit", "console-development")
+
+        self.insert_template_button = QPushButton("Insert formal request template")
+        self.insert_template_button.setObjectName("consoleDevelopmentInsertTemplateButton")
+        self.insert_template_button.clicked.connect(self.insert_formal_request_template)
+
+        request_meta = QHBoxLayout()
+        request_meta.addWidget(QLabel("Request type"))
+        request_meta.addWidget(self.request_type_combo)
+        request_meta.addWidget(QLabel("Requesting department"))
+        request_meta.addWidget(self.requesting_department_combo)
+        request_meta.addWidget(self.insert_template_button)
+
         self.chat_input = QPlainTextEdit()
         self.chat_input.setObjectName("supportUnitChatInput")
         self.chat_input.setPlaceholderText("Describe the issue or next Console task...")
         self.chat_input.setPlainText(draft_text)
         self.chat_input.setMinimumHeight(90)
-        self.chat_input.setMaximumHeight(130)
+        self.chat_input.setMaximumHeight(220)
 
         self.attachment_list = AttachmentList(
             department_id="console-development",
@@ -192,6 +222,7 @@ class ConsoleDevelopmentUnitDialog(QDialog):
         lower_layout = QVBoxLayout(lower_panel)
         lower_layout.setContentsMargins(0, 0, 0, 0)
         lower_layout.addWidget(QLabel("Message to Console Development Unit"))
+        lower_layout.addLayout(request_meta)
         lower_layout.addWidget(self.chat_input)
         lower_layout.addWidget(self.attachment_list)
         lower_layout.addLayout(options)
@@ -215,6 +246,28 @@ class ConsoleDevelopmentUnitDialog(QDialog):
         layout.addWidget(self.chat_splitter, 1)
         return page
 
+
+    def insert_formal_request_template(self) -> None:
+        """Insert the approved Console request fields without overwriting a draft."""
+
+        if self.chat_input.toPlainText().strip():
+            return
+        self.chat_input.setPlainText(
+            "Problem or development need:\n\n"
+            "Required input:\n\n"
+            "Required output:\n\n"
+            "Expected formats:\n\n"
+            "Validation requirements:\n\n"
+            "Priority:\n\n"
+            "Constraints:\n\n"
+            "Local execution requirement:\n\n"
+            "Network permission:\n\n"
+            "Licence and cost restrictions:\n\n"
+            "Hardware assumptions:\n\n"
+            "Security considerations:\n\n"
+            "Acceptance criteria:\n"
+        )
+
     def _emit_send_request(self) -> None:
         message = self.chat_input.toPlainText().strip()
         if not message:
@@ -234,7 +287,12 @@ class ConsoleDevelopmentUnitDialog(QDialog):
         if self.attach_log_checkbox.isChecked() and report.latest_runtime_log is not None:
             attachments.append(report.latest_runtime_log)
 
-        self.send_requested.emit(message, tuple(dict.fromkeys(attachments)))
+        self.send_requested.emit(
+            message,
+            tuple(dict.fromkeys(attachments)),
+            self.request_type_combo.currentText(),
+            str(self.requesting_department_combo.currentData()),
+        )
 
     def set_busy(self, busy: bool, stage: str = "") -> None:
         self.send_button.setEnabled(not busy)

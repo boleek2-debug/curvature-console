@@ -41,3 +41,17 @@ Earlier detailed milestone history remains available in Git history and prior sn
 - Deferred modal handoff progress display until the queued exchange actually becomes active.
 - Added operator cancellation handling for active and queued department exchanges.
 - Preserved the single-active-exchange invariant and failure-to-held handoff safety behavior.
+
+## CDU-003 — Formal Console requests and authority routing
+
+- added approved Console request types to the Console Development workspace;
+- added requesting-department metadata for Operator, Project, Core, Research and CDU;
+- added an insertable formal request template covering the approved protocol fields;
+- added explicit authority-routing instructions to Console Development requests;
+- preserved the shared Browser Bridge queue and the dedicated CDU conversation route.
+
+## 2026-08-04 — CDU-003A shared authority and routing propagation
+
+- Added one shared cross-department authority and Console-routing section to every normal Task Package and Thread Handoff Package.
+- Project, Core and Research now receive the same explicit ownership boundaries and the five formal Console request types.
+- Added regression coverage for all three departments in both transfer-package modes.

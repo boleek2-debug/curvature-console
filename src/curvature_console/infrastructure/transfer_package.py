@@ -107,6 +107,7 @@ class TransferPackageBuilder:
         sections = [
             self._header(request),
             self._authority_section(request),
+            self._cross_department_routing_section(),
             self._task_context_rule_section(),
             authoritative_context,
             self._draft_section(request.draft_text),
@@ -147,6 +148,7 @@ class TransferPackageBuilder:
         sections = [
             self._header(request),
             self._authority_section(request),
+            self._cross_department_routing_section(),
             context_text,
             self._conversation_section(
                 conversation,
@@ -212,6 +214,30 @@ class TransferPackageBuilder:
                 "Work strictly within this department's authority.",
                 "Do not silently perform another department's work.",
                 "When another department must act, identify the required handoff.",
+            ]
+        )
+
+    def _cross_department_routing_section(self) -> str:
+        return "\n".join(
+            [
+                "## CROSS-DEPARTMENT AUTHORITY AND CONSOLE ROUTING",
+                "",
+                "Project owns Chronicle direction, scope, priorities and product decisions.",
+                "Core owns Chronicle architecture, implementation, validation, persistence and tests.",
+                "Research owns evidence, source acquisition, provenance and research conclusions.",
+                "Console Development Unit owns Curvature Console, Browser Bridge, routing, handoff tooling, workflows, integrations, diagnostics, packages, artifacts and Console validation.",
+                "",
+                "Do not decide or implement work outside the current department's authority.",
+                "When another production department must act, identify the required supervised handoff to Project, Core or Research.",
+                "When Console capability or Console repair is required, identify one formal Console request instead of silently implementing Console changes.",
+                "Use the most specific Console request type:",
+                "- CONSOLE_TOOL_REQUEST — missing or changed Console capability.",
+                "- CONSOLE_INTEGRATION_REQUEST — connection to a tool, service, repository or runtime.",
+                "- CONSOLE_WORKFLOW_REQUEST — orchestration, routing or repeated operational flow.",
+                "- CONSOLE_DEFECT — reproducible Console or Browser Bridge failure.",
+                "- CONSOLE_DECISION_REQUEST — a Console architecture, policy or implementation decision requiring CDU authority.",
+                "State the requesting department, problem or need, required input/output, constraints and acceptance criteria.",
+                "Do not claim that a handoff or Console request was delivered unless Console confirms delivery.",
             ]
         )
 

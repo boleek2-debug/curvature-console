@@ -106,7 +106,7 @@ def test_support_unit_dialog_has_dedicated_chat_controls(tmp_path: Path) -> None
     assert not dialog.chat_splitter.childrenCollapsible()
     assert dialog.chat_splitter.orientation().name == "Vertical"
     assert dialog.chat_input.minimumHeight() == 90
-    assert dialog.chat_input.maximumHeight() == 130
+    assert dialog.chat_input.maximumHeight() == 220
     dialog.close()
 
 
@@ -121,7 +121,7 @@ def test_support_unit_chat_emits_message_and_diagnostic_attachment(
     )
     captured: list[tuple[str, tuple[Path, ...]]] = []
     dialog.send_requested.connect(
-        lambda message, paths: captured.append((message, tuple(paths)))
+        lambda message, paths, _request_type, _department: captured.append((message, tuple(paths)))
     )
     dialog.attach_log_checkbox.setChecked(False)
     dialog.chat_input.setPlainText("Diagnose the bridge failure")
@@ -166,7 +166,7 @@ def test_support_unit_chat_includes_manual_attachments(tmp_path: Path) -> None:
     )
     captured: list[tuple[str, tuple[Path, ...]]] = []
     dialog.send_requested.connect(
-        lambda message, paths: captured.append((message, tuple(paths)))
+        lambda message, paths, _request_type, _department: captured.append((message, tuple(paths)))
     )
     dialog.attach_report_checkbox.setChecked(False)
     dialog.attach_log_checkbox.setChecked(False)
@@ -233,3 +233,45 @@ def test_console_development_unit_restores_legacy_support_state(tmp_path: Path) 
     assert persisted.conversation_text == "Legacy support conversation"
     assert persisted.draft_text == "Legacy draft"
     window.close()
+
+
+def test_console_development_formal_request_controls_and_template(tmp_path: Path) -> None:
+    create_application(["curvature-console-cdu-formal-request-test"])
+    console = _repository(tmp_path, "console")
+    dialog = ConsoleDevelopmentUnitDialog(
+        repository_roots={"curvature-console": console},
+        data_directory=tmp_path / "data",
+    )
+
+    assert dialog.request_type_combo.count() == 5
+    assert dialog.request_type_combo.itemText(0) == "CONSOLE_TOOL_REQUEST"
+    assert dialog.requesting_department_combo.currentData() == "operator"
+
+    dialog.insert_formal_request_template()
+    draft = dialog.chat_input.toPlainText()
+    assert "Problem or development need:" in draft
+    assert "Acceptance criteria:" in draft
+    dialog.close()
+
+
+def test_console_development_request_emits_type_and_department(tmp_path: Path) -> None:
+    create_application(["curvature-console-cdu-routing-test"])
+    console = _repository(tmp_path, "console")
+    dialog = ConsoleDevelopmentUnitDialog(
+        repository_roots={"curvature-console": console},
+        data_directory=tmp_path / "data",
+    )
+    captured = []
+    dialog.send_requested.connect(lambda *args: captured.append(args))
+    dialog.attach_report_checkbox.setChecked(False)
+    dialog.attach_log_checkbox.setChecked(False)
+    dialog.request_type_combo.setCurrentText("CONSOLE_DEFECT")
+    dialog.requesting_department_combo.setCurrentIndex(2)
+    dialog.chat_input.setPlainText("Bridge queue is stuck")
+
+    dialog._emit_send_request()
+
+    assert captured[0][0] == "Bridge queue is stuck"
+    assert captured[0][2] == "CONSOLE_DEFECT"
+    assert captured[0][3] == "core"
+    dialog.close()
