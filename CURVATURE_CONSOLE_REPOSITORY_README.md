@@ -1,167 +1,57 @@
 # Curvature Console Repository
 
-Curvature Console is the operational local development control plane for
-Project Curvature.
+Curvature Console is the local development control plane and orchestration platform for Project Curvature.
 
-It provides three permanent and equal departmental workspaces:
+It contains three permanent Chronicle department workspaces:
 
 - Curvature Project;
 - Curvature Core;
 - Curvature Research.
 
-The application is separate from Curvature Platform, World Core, Chronicle
-Client and gameplay.
+It also contains the Curvature Console Development Unit, which owns Console development, diagnostics, integrations and workflow tooling without taking over Chronicle department authority.
 
-# Current Release
+## Current verified base
 
 ```text
-Status: Operational
-Commit: 070eecd
-Automated tests: 118 passed
+Repository: ~/curvature-console
 Branch: main
-Remote: origin/main
+Commit: 2aad8a866ef78660d1c5369d88334bac49611016
+Remote: origin/main at the same commit
+Working tree: clean in the supplied snapshot
 ```
 
-# Product Model
+## Core capabilities
 
-One shared official ChatGPT Project named `Curvature` contains successive
-department conversations.
-
-```text
-department_id
-→ persisted active_conversation_url
-```
-
-Titles and sidebar order are never routing keys.
-
-Console builds bounded Task or Thread Handoff packages, sends them through the
-user's logged-in ChatGPT Plus browser session, captures completed responses and
-persists them only in the originating department.
-
-# Implemented Capabilities
-
-## Workspace
-
-- simultaneous three-panel layout;
-- Focus mode;
-- isolated roles and context;
-- independent drafts, transcripts and attachments;
-- dual-repository context loading;
-- restart persistence.
-
-## Browser Workflow
-
-- Playwright automation;
-- dedicated local browser profile;
-- deterministic request markers;
-- URL-only department routing;
-- automated send and response capture;
-- visible Chrome fallback and observation;
-- explicit lifecycle failures.
-
-## Files and Packages
-
+- independent department state, context, drafts and attachments;
+- deterministic ChatGPT Plus Browser Bridge;
 - generated-file capture;
-- persistent Download Inbox;
-- collision-safe filenames;
-- Package Review;
-- CREATE / REPLACE / SKIP / CONFLICT classification;
-- traversal and unsafe-entry rejection;
-- explicit Apply approval;
-- re-review before write;
-- backup, atomic writes and rollback;
-- `APPLY_RESULT.json`;
-- Git status and diff;
-- no automatic commit or push.
+- supervised handoffs and return path;
+- package review, safe apply, backup and rollback;
+- Console Development Chat with diagnostics, screenshots and downloads;
+- validation logs and repository snapshots;
+- no mandatory paid API and no automatic Git push.
 
-## Thread Continuity
+## Authoritative CDU documentation
 
-- advisory per-department Thread Pressure;
-- GREEN / AMBER / RED states;
-- pressure-aware controls;
-- functional new-chat Thread Handoff;
-- wait for a real `/c/...` route;
-- persist the new route only after verified completion;
-- reset transcript and pressure after success;
-- preserve the previous verified state after failure.
+The Console Development Unit documentation lives under `docs/`:
 
-# Hybrid Browser Model
+- role and authority;
+- product vision;
+- architecture and workflow;
+- integration registry and tool request protocol;
+- backlog and roadmap;
+- decisions, test matrix, UI actions and use cases;
+- security/cost policy and current state snapshot.
 
-Automation remains the default. Ordinary Chrome may be shown when browser work
-is slow, observable or needs user intervention.
-
-Creating a new ChatGPT conversation can take noticeably longer than sending a
-task to an existing conversation. Console waits while verified progress
-continues instead of treating ordinary slowness as an immediate failure.
-
-# Environment
-
-```text
-Python 3.11
-PySide6
-PyYAML
-pytest
-Playwright
-Google Chrome Stable
-SQLite
-```
-
-Create or repair the environment:
+## Run and validate
 
 ```bash
 cd ~/curvature-console
 conda activate curvature-console
-python -m pip install -e .
-```
-
-Run:
-
-```bash
 python -m curvature_console.main
+./scripts/validate_current.sh
 ```
 
-Test:
+## Governing rule
 
-```bash
-python -m pytest -q
-```
-
-# Cost Rule
-
-Normal operation uses the existing ChatGPT Plus subscription.
-
-- no mandatory OpenAI API;
-- no API key;
-- no automatic paid model, tool or search request;
-- any future paid integration requires a separate decision and must be optional.
-
-# Repository Safety
-
-Console repository:
-
-```text
-~/curvature-console
-```
-
-Project repository:
-
-```text
-~/Curvature
-```
-
-Repository writes require an eligible reviewed package and explicit approval.
-Console does not commit or push.
-
-# Development Status
-
-Broad Console feature development is paused. Future features are promoted only
-when actual Curvature work demonstrates an operational need.
-
-The exact current state is recorded in:
-
-- `00_CURVATURE_CONSOLE_CURRENT_STATE.md`;
-- `CURVATURE_CONSOLE_HANDOFF.md`;
-- `CURVATURE_CONSOLE_ROADMAP.md`;
-- `CURVATURE_CONSOLE_CHANGELOG.md`;
-- `CURVATURE_CONSOLE_DECISIONS.md`;
-- `CURVATURE_CONSOLE_PIPELINE.md`.
+Project, Core and Research define Chronicle work. CDU ensures that Console can support, automate, route, record, validate and operate the approved process.

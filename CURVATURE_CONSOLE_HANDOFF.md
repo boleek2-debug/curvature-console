@@ -1,400 +1,44 @@
-# CURVATURE CONSOLE HANDOFF
+# Curvature Console Handoff
 
-Status: B5.5D2A implemented and automated-verified; live workflow pending
-Version: 2.3.0
-Owner: Curvature Core
-Last Updated: 2026-07-30
+Status: Active
+Version: 3.0.0
+Owner: Curvature Console Development Unit
+Last Updated: 2026-08-04
 
-# 1. Mission
-
-Curvature Console is the local development control plane for Project Curvature.
-It coordinates Curvature Project, Curvature Core and Curvature Research through
-the user's existing ChatGPT Plus session without a mandatory paid API.
-
-# 2. Repository Boundaries
+## Current verified base
 
 ```text
-Console repository: ~/curvature-console
-Project repository: ~/Curvature
-```
-
-Console may read both repositories. Repository writes require Package Review
-and explicit user approval. Console never commits or pushes automatically.
-
-# 3. Current Repository State
-
-```text
+Repository: ~/curvature-console
 Branch: main
-Base commit: ec2067eb064f4f2bf3c879b361f8e75c0a39df3b
-B5.2R changes: verified and pending commit
-Automated tests: 111 passed
-git diff --check: passed
+HEAD: 2aad8a866ef78660d1c5369d88334bac49611016
+origin/main: same
+Working tree: clean in supplied snapshot
 ```
 
-# 4. Completed B5.2R Workflow
+## Closed milestones
+
+- Support Unit chat, attachments, screenshot paste and downloads;
+- Support Unit to Console Development Unit identity migration;
+- preserved conversation route and legacy state compatibility;
+- resilient automatic attachment readiness;
+- 226 automated tests and live end-to-end CDU verification before push.
+
+## Active milestone
 
 ```text
-user-triggered department task
-→ lightweight transfer package
-→ immutable request_id
-→ exact persisted department conversation URL
-→ Console-owned Chrome inside invisible Xvfb
-→ dedicated Playwright page
-→ request-marker confirmation
-→ completed assistant response capture
-→ request-bound panel persistence
-→ dedicated page cleanup
-→ Chrome/Xvfb process-group termination
-→ CDP port 9222 release verification
+CDU-001B — Authoritative Console Development Unit documentation
 ```
 
-# 5. Live Evidence
+Deliver the approved CDU documentation suite in `docs/` and update root repository references.
 
-Final Core live proof on 2026-07-26:
+## Next milestone
 
 ```text
-Launching normal Chrome on invisible Xvfb display
-editor_found selector=#prompt-textarea
-user_message_confirmed
-exchange_success
-owned_process_cleanup_start
-owned_process_cleanup_complete cdp_port=9222 released=true
+CDU-002 — Shared Sequential Browser Bridge Queue
 ```
 
-The physical desktop remained free of Chrome windows. The Core panel displayed
-a continuously updating heartbeat, stage and elapsed time.
+The queue will accept independent Project, Core, Research and CDU requests while allowing only one active Browser Bridge exchange at a time.
 
-# 6. Runtime Diagnostics
+## Authority
 
-Every application run creates:
-
-```text
-data/logs/console-YYYYMMDD-HHMMSS.log
-```
-
-The log records request identity, department, route, browser ownership mode,
-stages, composer diagnostics, message counts, confirmation marker, failures,
-tracebacks and cleanup results.
-
-Runtime logs are local artifacts and are not committed.
-
-# 7. Validation Policy
-
-Shared functionality is implemented once and deeply live-validated in Core.
-
-Project and Research use the same bridge, request model, panel implementation
-and route persistence. Additional live smoke tests are required only for
-department-specific evidence or configuration differences.
-
-# 8. Immediate Closeout
-
-1. Apply the B5.2R closeout documentation.
-2. Remove accidental untracked duplicate `CONSOLE_*.md` documents.
-3. Keep `data/logs/` untracked.
-4. Run `scripts/validate_current.sh`.
-5. Stage only the intended implementation, tests, canonical documentation and
-   validation script.
-6. Commit and push.
-7. Confirm `main == origin/main` and a clean working tree except ignored local
-   runtime artifacts.
-
-# 9. Next Sprint
-
-```text
-ASSISTANT-001B5.R2D2 — General Generated-File Capture
-```
-
-Required scope:
-
-- capture generated files from the active assistant response;
-- support arbitrary file types rather than ZIP-only assumptions;
-- preserve the actual original filename and extension;
-- use collision-safe storage;
-- bind files to request, department and conversation URL;
-- expose the download in the originating panel;
-- persist metadata across restart;
-- keep Package Review restricted to valid deployment packages.
-
-# 10. Following Sprint
-
-After download capture is stable:
-
-```text
-ASSISTANT-001B5.5 — Supervised Interdepartmental Communication
-```
-
-Panels may prepare and route structured handoffs, while the user can inspect,
-edit, approve, reject, hold or stop every cross-department message.
-
-
-# 11. B5.R2D2 Implementation Candidate
-
-The active candidate:
-
-- scopes download discovery to the newly completed assistant response;
-- supports arbitrary generated file types;
-- preserves the browser-suggested filename and extension;
-- sanitises unsafe path components;
-- uses collision-safe storage under `data/inbox/<department>/`;
-- binds captured files to request, department and conversation URL;
-- persists metadata and refreshes the originating panel;
-- keeps Package Review enabled only for selected `.zip` files.
-
-Required live proof is one generated `.txt` file in Core.
-
-# 12. B5.R2D2 Live Finding
-
-The first live Core test proved that generated-file UI can exist outside the
-assistant text node. The next candidate searches the complete assistant turn and
-supports links, buttons, role buttons and file-card metadata.
-
-If capture is still empty, the runtime log contains candidate attributes and a
-bounded outerHTML excerpt for the exact completed assistant turn.
-
-# 13. Two-Stage File Download
-
-The bridge now supports:
-
-```text
-file card click
-→ direct download, or
-→ preview opens
-→ visible Download control discovered
-→ browser download captured
-```
-
-Preview discovery is logged with bounded candidate attributes and page HTML when
-no usable Download control is found.
-
-
-# 14. Citation Interaction Diagnostic
-
-The prior live run proved only that `Coding Citation` did not emit a direct
-browser download and that a later whole-page query saw `Download apps`.
-
-The diagnostic candidate now records generic visible interactive DOM before and
-after the click. It does not assume a modal, popover, preview or download
-selector.
-
-
-# 15. Focused Active-Layer Evidence
-
-Confirmed live evidence:
-
-- the body becomes scroll-locked;
-- pointer events are disabled on the body;
-- focus moves from the composer to `button[data-testid="close-button"]`.
-
-The active diagnostic records the Close button's ancestor chain and every
-visible interactive control inside its containing blocking layer. No second
-action is performed.
-
-
-# 16. Generated-File Button Activation
-
-Confirmed live DOM:
-
-```html
-<button aria-label="curvature-download-test.txt" type="button">
-```
-
-Confirmed prior behaviour: `candidate.click()` changed focus but emitted no
-download event.
-
-Current candidate implementation tests deterministic activation methods on the
-same file button and does not treat `Coding Citation` as the desired download
-source.
-
-# Existing File-Card Observation
-
-Use the already-rendered `curvature-download-test.txt` file card as the test
-target. Do not generate a new assistant response for this diagnostic. The
-observer records the exact browser channel used by the card.
-
-
-# Generated-File Delivery Mechanism Confirmed
-
-Confirmed live delivery chain:
-
-```text
-file button
-→ interpreter/download metadata request
-→ estuary/content fetch
-→ HTTP 200 attachment response
-```
-
-There is no native browser download event, Blob URL, anchor click or popup.
-The implementation captures the final attachment response body directly.
-
-# B5.R2D2 Generated-File Capture — Closed
-
-Status: **LIVE PASS**
-
-Verified on 2026-07-28:
-
-```text
-128 automated tests passed
-git diff --check passed
-Core generated a real curvature-download-test.txt file card
-Console activated the exact file card
-ChatGPT delivered the file through a fetch response
-final endpoint: /backend-api/estuary/content
-HTTP status: 200
-Content-Disposition: attachment
-captured size: 29 bytes
-saved path: data/inbox/core/curvature-download-test.txt
-saved content: CURVATURE_DOWNLOAD_CAPTURE_OK
-exchange result: downloads=1
-```
-
-Confirmed delivery model:
-
-```text
-assistant file card
-→ button activation
-→ interpreter/download metadata
-→ Estuary attachment fetch
-→ response body capture
-→ collision-safe department inbox write
-```
-
-A native Playwright download event, Blob URL, programmatic anchor click and popup
-were not used in the verified flow.
-
-`Coding Citation` is not a generated-file candidate and must not be activated by
-the download scanner.
-
-The temporary TEST-01 observer served its diagnostic purpose and is not part of
-the production workflow.
-
-# Completed Supervised Handoff Scope
-
-## B5.5A — First Contact Foundation
-
-Structured handoff records, lifecycle validation, complete visible timelines and
-SQLite restart continuity are implemented.
-
-## B5.5B — Bridge Controls
-
-The user may create, inspect, edit, request approval, approve, reject, hold,
-redirect or stop a handoff. Approval remains distinct from delivery.
-
-## B5.5C — Engage Controlled Delivery
-
-Commit `10dbf6c` implements one-shot delivery of an approved handoff after a
-separate user confirmation. Success records the target response; failure holds the
-handoff with a visible reason. No autonomous loop is implemented.
-
-# Completed Context and Reply Scope
-
-## B5.5F — Bounded Normal Task Context
-
-Normal Task authoritative context is bounded at whole-document boundaries with a
-12,000-character budget. Current State has priority. Thread Handoff remains the
-full-context route.
-
-## B5.6A — Reply Viewer
-
-Department panels show compact reply receipts and `View Replies (N)`. The
-resizable viewer exposes saved tasks and replies while the complete persisted
-transcript continues feeding context, Thread Pressure and Thread Handoff.
-
-# Verification
-
-```text
-154 automated tests passed
-git diff --check passed
-Reply Viewer manually verified
-department reply ordering manually verified
-```
-
-# B5.5D1 Closeout
-
-Commit:
-
-```text
-f50e89c Complete B5.5D1 department-generated draft intake
-```
-
-Verification:
-
-```text
-175 automated tests passed
-git diff --check passed
-main == origin/main
-working tree clean
-final snapshot: curvature-console-snapshot-20260730-175323-f50e89c.zip
-```
-
-Live path verified:
-
-```text
-Project response emits proposal envelope
-→ Console creates PENDING_APPROVAL handoff
-→ operator approves
-→ operator confirms Deliver once
-→ exact persisted Core conversation receives handoff
-→ Core replies B5.5D1-H6 REPLY CAPTURE RECEIVED
-→ Console captures the reply
-→ no timeout and no autonomous continuation
-```
-
-# Exact Next Step
-
-Define and implement B5.5D2 as a separate supervised return-path increment. The
-target department reply may be reviewed, edited, held or approved by the
-operator before anything is sent back to the source department. No response may
-return automatically and no autonomous department loop is permitted.
-
-
-# B5.5D2A Current Handoff State
-
-Repository baseline before candidate commit:
-
-```text
-branch: main
-base commit: 34bf968a5c9b9d3bee9a50f0adf501e20a475a02
-main == origin/main before local D2A changes
-automated validation: 184 passed
-git diff --check: passed
-```
-
-Implemented candidate:
-
-```text
-target reply captured
-→ AWAITING_USER_DECISION
-→ operator chooses Continue in Target / Return to Source / Hold / Close
-→ Return to Source opens review
-→ operator confirms Return once
-→ exact persisted source conversation receives the bounded return
-→ source acknowledgement remains in the same handoff timeline
-```
-
-Persistence and UI hardening:
-
-- SQLite migration accepts `awaiting_user_decision`, `in_progress`,
-  `return_sent` and `returned` without losing existing handoffs or messages;
-- the open Supervised Communication Hub refreshes after asynchronous state
-  changes and preserves the selected handoff;
-- the inline `Reply received` field is removed;
-- `View Replies (N) • X new` is highlighted for unread replies;
-- read/unread state persists across restart;
-- tests were aligned with the intentional UI removal rather than restoring a
-  deleted widget.
-
-Live status:
-
-A controlled trial reached `RETURNED` and exposed the stale-Hub and unread-reply
-issues now fixed. The required closeout proof is a real Curvature task routed
-Project → Core and explicitly returned Core → Project while the Hub remains open.
-
-# Exact Next Step After Commit
-
-1. Commit and push the D2A implementation, tests and canonical documentation.
-2. Confirm `main == origin/main` and a clean working tree.
-3. Create a fresh timestamped snapshot.
-4. Run one real multi-sprint-oriented Curvature handoff.
-5. Verify `AWAITING_USER_DECISION`, live Hub refresh, unread highlighting,
-   explicit Return once, same-handoff timeline and no autonomous loop.
-6. Close D2A only after that live evidence passes.
+CDU owns Console development and integration. It does not decide Chronicle direction, implementation or research conclusions.
