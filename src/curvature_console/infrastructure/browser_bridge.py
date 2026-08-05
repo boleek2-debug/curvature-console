@@ -1350,7 +1350,7 @@ class ChatGPTBrowserBridge:
         )
 
         self._report_stage(BrowserBridgeStage.WAITING_FOR_RESPONSE)
-        response_text = self._wait_for_completed_response(
+        response_text, response_message_id = self._wait_for_completed_response(
             page=page,
             baseline_count=baseline_assistant_count,
             baseline_signatures=baseline_assistant_signatures,
@@ -1371,8 +1371,11 @@ class ChatGPTBrowserBridge:
             )
 
         self._report_stage(BrowserBridgeStage.CAPTURING_DOWNLOADS)
-        latest_assistant_message = assistant_messages.nth(
-            assistant_messages.count() - 1
+        latest_assistant_message = self._completed_assistant_message(
+            page=page,
+            assistant_messages=assistant_messages,
+            response_message_id=response_message_id,
+            response_text=response_text,
         )
         downloaded_files = self._capture_generated_downloads(
             page=page,
@@ -1390,6 +1393,67 @@ class ChatGPTBrowserBridge:
             response_text=response_text,
             downloaded_files=downloaded_files,
         )
+
+
+    def _completed_assistant_message(
+        self,
+        *,
+        page: Page,
+        assistant_messages: Locator,
+        response_message_id: str,
+        response_text: str,
+    ) -> Locator:
+        """Resolve the exact assistant turn confirmed by response waiting.
+
+        The newest DOM locator is not always the completed response turn: ChatGPT
+        can keep older file cards later in DOM order. Prefer the confirmed
+        data-message-id and only fall back to normalized response text.
+        """
+
+        if response_message_id:
+            exact = page.locator(
+                f'{ASSISTANT_MESSAGE_SELECTOR}[data-message-id="{response_message_id}"]'
+            )
+            if exact.count() > 0:
+                self._logger.info(
+                    "download_scope_resolved request_id=%s method=message_id "
+                    "message_id=%s",
+                    self._active_request.request_id
+                    if self._active_request is not None
+                    else "-",
+                    response_message_id,
+                )
+                return exact.last
+
+        normalized_response = self._normalize_message_text(response_text)
+        for index in range(assistant_messages.count() - 1, -1, -1):
+            candidate = assistant_messages.nth(index)
+            try:
+                candidate_text = self._normalize_message_text(
+                    candidate.inner_text()
+                )
+            except Exception:
+                continue
+            if candidate_text == normalized_response:
+                self._logger.warning(
+                    "download_scope_resolved request_id=%s method=response_text "
+                    "message_id_missing=%s",
+                    self._active_request.request_id
+                    if self._active_request is not None
+                    else "-",
+                    not bool(response_message_id),
+                )
+                return candidate
+
+        self._logger.warning(
+            "download_scope_fallback request_id=%s method=last_assistant_turn "
+            "response_message_id=%s",
+            self._active_request.request_id
+            if self._active_request is not None
+            else "-",
+            response_message_id or "-",
+        )
+        return assistant_messages.nth(assistant_messages.count() - 1)
 
 
     def _capture_generated_downloads(
@@ -2982,7 +3046,7 @@ class ChatGPTBrowserBridge:
                             else "-",
                             candidate[0] or "-",
                         )
-                        return candidate[1]
+                        return candidate[1], candidate[0]
                 else:
                     previous_identity = candidate
                     stable_started_at = None

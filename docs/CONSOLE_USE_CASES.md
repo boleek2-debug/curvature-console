@@ -69,3 +69,22 @@ When ChatGPT exposes one generated file through both an Estuary fetch response a
 ## Use case: operator-owned vision gap
 
 When a requirement depends on an unmade creative decision, Project must not fill the gap. It gathers relevant consequences from Core and Research, then presents the operator with a focused question, options and recommendation.
+
+## UC — Review a background Core ↔ CDU conversation
+
+1. Core emits an automatic Console request.
+2. Console creates one durable operational conversation for the escalation chain.
+3. Core and CDU exchanges continue without modal reply notifications.
+4. Console appends the request, CDU response, artifacts and returned Core assessment to the same transcript.
+5. When the chain reaches a result, blocker or operator decision, the Operational Conversations button shows a review count.
+6. The operator opens the review window and reads the complete history without opening the underlying ChatGPT chats.
+## Operator reviews an operational result
+1. Departments complete or block a background operational conversation.
+2. Console shows one review count instead of per-message popups.
+3. Operator opens the full transcript.
+4. Accept closes the result. Reject or Ask / Continue requires a comment and resumes the same source task.
+5. The operator action and subsequent department response remain in the same durable history.
+
+## Continue one operational conversation
+
+When the operator selects Ask / Continue, Console records the comment in the existing conversation, resumes the source department and appends any subsequent CDU exchange as another round of the same conversation. The operator sees one list entry with updated round count and lifecycle timestamps.

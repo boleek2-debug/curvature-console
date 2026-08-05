@@ -49,3 +49,51 @@ def test_download_signature_collapses_browser_collision_suffixes(tmp_path) -> No
     assert _download_content_signature(first, first.name) == (
         _download_content_signature(duplicate, duplicate.name)
     )
+
+
+def test_artifact_transport_name_is_unique_per_round() -> None:
+    from curvature_console.infrastructure.console_request import (
+        build_artifact_transport_names,
+    )
+
+    response = (
+        "BEGIN_CURVATURE_CONSOLE_REQUEST\n"
+        '{"schema_version":1,"request_type":"CONSOLE_TOOL_REQUEST",'
+        '"title":"Regenerate artifact","problem_or_need":"Refresh output.",'
+        '"required_output":"Return exactly one file named report.txt.",'
+        '"constraints":["Logical filename remains report.txt"],'
+        '"acceptance_criteria":["report.txt contains fresh content"]}'
+        "\nEND_CURVATURE_CONSOLE_REQUEST"
+    )
+    request = parse_console_requests(response).requests[0]
+
+    first = build_artifact_transport_names(
+        request, request_id="console-auto-aaaaaaaaaa", round_number=1
+    )
+    second = build_artifact_transport_names(
+        request, request_id="console-auto-bbbbbbbbbb", round_number=2
+    )
+
+    assert first[0].logical_filename == "report.txt"
+    assert first[0].transport_filename == "report.round-1.aaaaaaaaaa.txt"
+    assert second[0].transport_filename == "report.round-2.bbbbbbbbbb.txt"
+    assert first[0].transport_filename != second[0].transport_filename
+
+
+def test_artifact_filename_extraction_preserves_order_and_deduplicates() -> None:
+    from curvature_console.infrastructure.console_request import (
+        extract_artifact_filenames,
+    )
+
+    response = (
+        "BEGIN_CURVATURE_CONSOLE_REQUEST\n"
+        '{"schema_version":1,"request_type":"CONSOLE_TOOL_REQUEST",'
+        '"title":"Create outputs","problem_or_need":"Need files.",'
+        '"required_output":"Return first.txt and second.json.",'
+        '"constraints":["Keep first.txt unchanged"],'
+        '"acceptance_criteria":["second.json is valid"]}'
+        "\nEND_CURVATURE_CONSOLE_REQUEST"
+    )
+    request = parse_console_requests(response).requests[0]
+
+    assert extract_artifact_filenames(request) == ("first.txt", "second.json")

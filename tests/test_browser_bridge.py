@@ -1417,7 +1417,7 @@ def test_completed_response_accepts_new_message_id_when_count_is_unchanged(
         ),
     )
 
-    assert result == "B5.5D1-H3 DELIVERY RECEIVED"
+    assert result == ("B5.5D1-H3 DELIVERY RECEIVED", "assistant-new-2")
 
 
 def test_assistant_message_signatures_capture_id_and_normalized_text(
@@ -1703,7 +1703,7 @@ def test_completed_response_extends_wait_while_generation_is_active(
         baseline_signatures=(),
     )
 
-    assert result == "Delayed but complete response"
+    assert result == ("Delayed but complete response", "assistant-new")
 
 
 def test_polish_download_button_is_generated_file_candidate(tmp_path: Path) -> None:
@@ -2510,3 +2510,43 @@ def test_attachment_readiness_does_not_accept_brief_unknown_state(
     bridge._upload_attachments(page=Page(), attachment_paths=(attachment,))
 
     assert clock["value"] == pytest.approx(0.75)
+
+
+def test_completed_assistant_message_prefers_confirmed_message_id(tmp_path: Path) -> None:
+    bridge = ChatGPTBrowserBridge(_config(tmp_path))
+
+    class FakeLocator:
+        def __init__(self, items):
+            self.items = items
+        def count(self):
+            return len(self.items)
+        def nth(self, index):
+            return self.items[index]
+        @property
+        def last(self):
+            return self.items[-1]
+
+    class FakeMessage:
+        def __init__(self, message_id, text):
+            self.message_id = message_id
+            self.text = text
+        def inner_text(self):
+            return self.text
+
+    old = FakeMessage("old-id", "Old response with stale file")
+    new = FakeMessage("new-id", "New response with current file")
+
+    class FakePage:
+        def locator(self, selector):
+            if 'data-message-id="new-id"' in selector:
+                return FakeLocator([new])
+            return FakeLocator([])
+
+    resolved = bridge._completed_assistant_message(
+        page=FakePage(),
+        assistant_messages=FakeLocator([new, old]),
+        response_message_id="new-id",
+        response_text="New response with current file",
+    )
+
+    assert resolved is new

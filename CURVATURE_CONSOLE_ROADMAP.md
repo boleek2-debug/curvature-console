@@ -49,4 +49,34 @@ Deliver:
 
 ## CDU-004A — Artifact Deduplication and Escalation Chain Control
 
-Delivered logical artifact deduplication, bounded corrective escalation, automatic defect context and operator-stop semantics. Automated validation passed with 243 tests, and the 2026-08-05 live retest confirmed one logical artifact, duplicate suppression, automatic return and Core acceptance. Documentation closure, commit, push and clean snapshot are the remaining closure steps.
+Delivered logical artifact deduplication, bounded corrective escalation, automatic defect context and operator-stop semantics. Automated validation passed with 243 tests, and the 2026-08-05 live retest confirmed one logical artifact, duplicate suppression, automatic return and Core acceptance. Documentation closure is complete. Commit, push and a clean snapshot are the remaining repository closure steps.
+
+### CDU-004B — Background interdepartmental conversations and Operator Review
+
+- CDU-004B1: durable operational conversation records, transcript capture and review surface — closed after full validation and live restart evidence.
+- CDU-004B2: Accept, Reject and Ask/Continue actions on the same conversation.
+- CDU-004B3: automatic decision/blocker classification and meaningful final notifications.
+- CDU-004B4: generalise operational conversations beyond automatic CDU escalation to Project, Core and Research collaboration.
+### CDU-004B2 — Operator Review — closed
+- Accept, Reject and Ask / Continue in the durable conversation review surface.
+- Persisted operator comments and review states.
+- Reject and Ask return to the source department without creating a new unrelated workflow.
+
+### CDU-004B2A — Same-conversation continuation and lifecycle visibility
+
+Status: closed after automated validation and same-conversation live verification.
+
+- Preserve one operational conversation across Ask / Continue rounds.
+- Display start, last activity, result and closure timestamps.
+- Display logical round count and an explicit lifecycle footer.
+### CDU-004B2B — Exact completed-turn artifact capture
+Status: closed after exact-message scoping and live stage-two verification.
+
+### CDU-004B2C — Fresh artifact transport identity
+Status: closed after full validation and live Ask/Continue plus Reject retests.
+
+- Generate a unique physical transport filename for every artifact-producing round.
+- Validate that the current CDU response attached the required transport object.
+- Reject stale logical-name cards and missing fresh files.
+- Map validated transport objects back to stable logical artifact names.
+- Return Console-calculated size and SHA-256 to the source department.

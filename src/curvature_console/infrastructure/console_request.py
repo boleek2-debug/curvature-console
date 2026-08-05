@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+from pathlib import Path
+import re
 from typing import Any
 
 BEGIN_MARKER = "BEGIN_CURVATURE_CONSOLE_REQUEST"
@@ -49,6 +51,58 @@ class ConsoleRequest:
                 f"## Acceptance criteria\n{criteria}",
             )
         )
+
+
+_ARTIFACT_FILENAME_RE = re.compile(
+    r"(?<![A-Za-z0-9._-])([A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]{1,12})(?![A-Za-z0-9._-])"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactTransportName:
+    """Map one stable logical artifact name to a unique transport filename."""
+
+    logical_filename: str
+    transport_filename: str
+
+
+def extract_artifact_filenames(request: ConsoleRequest) -> tuple[str, ...]:
+    """Extract ordered logical output filenames declared by a CDU request."""
+
+    texts = (request.required_output, *request.constraints, *request.acceptance_criteria)
+    found: list[str] = []
+    seen: set[str] = set()
+    for text in texts:
+        for match in _ARTIFACT_FILENAME_RE.finditer(text):
+            filename = Path(match.group(1)).name
+            key = filename.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(filename)
+    return tuple(found)
+
+
+def build_artifact_transport_names(
+    request: ConsoleRequest,
+    *,
+    request_id: str,
+    round_number: int,
+) -> tuple[ArtifactTransportName, ...]:
+    """Build unique physical names so ChatGPT cannot reuse a stale file card."""
+
+    token = re.sub(r"[^A-Za-z0-9]", "", request_id)[-10:] or "request"
+    mappings: list[ArtifactTransportName] = []
+    for logical_filename in extract_artifact_filenames(request):
+        path = Path(logical_filename)
+        transport = f"{path.stem}.round-{round_number}.{token}{path.suffix}"
+        mappings.append(
+            ArtifactTransportName(
+                logical_filename=logical_filename,
+                transport_filename=transport,
+            )
+        )
+    return tuple(mappings)
 
 
 @dataclass(frozen=True, slots=True)

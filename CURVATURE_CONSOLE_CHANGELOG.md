@@ -83,3 +83,49 @@ Prepared:
 - no escalation loop occurred;
 - added the approved capability-based Console-first action plan for the whole Curvature organisation;
 - documented operator-owned vision, autonomous departmental collaboration, meaningful decision gates, separate operational conversations, Conversation Review and later voice accessibility.
+
+## 2026-08-05 — CDU-004B1 operational conversation foundation
+
+- Added durable operational conversation and transcript persistence.
+- Automatic department-to-CDU escalation chains now create a dedicated background conversation record.
+- CDU replies, returned source-department replies and captured artifact paths are appended to the same transcript.
+- Added an Operational Conversations review window and toolbar review counter.
+- Internal exchanges remain non-modal; operator-facing review count appears only for result, blocker or decision states.
+## 2026-08-05 — CDU-004B2 Operator Review
+- Added Accept, Reject and Ask / Continue controls to Operational Conversations.
+- Operator decisions are persisted in the existing conversation transcript.
+- Reject and Ask require a comment and continue through the original source department route.
+- Accept closes the review without creating another interdepartmental exchange.
+- Review notifications remain limited to final results, blockers and operator decisions.
+
+## 2026-08-05 — CDU-004B2A Same-conversation continuation and lifecycle visibility
+
+- Reused the existing operational conversation ID for operator Ask / Continue rounds.
+- Kept new technical request and escalation IDs inside the same durable conversation.
+- Added persistent round counts and result/closure timestamps.
+- Added visible lifecycle details and a clear end-of-conversation marker in Operator Review.
+- Added regression coverage for continuation identity and lifecycle persistence.
+## CDU-004B2B — Exact completed-turn artifact capture
+- Browser Bridge now scopes generated-file capture to the exact assistant message confirmed by response identity.
+- Prevents a later operational-conversation round from downloading a stale attachment card from an earlier CDU response.
+- Added regression coverage for message-id-first turn resolution.
+
+## 2026-08-05 — CDU-004B2C Fresh artifact transport identity
+
+- Added a unique physical transport filename for each generated artifact in each operational-conversation round.
+- CDU requests now distinguish stable logical filenames from one-use transport filenames.
+- Console validates the exact transport filename before accepting a generated file.
+- Accepted transport files are mapped back to collision-safe local versions of the logical filename.
+- Automatic return metadata now includes the logical filename, actual byte count and SHA-256 calculated by Console.
+- Stale or reused file cards are rejected instead of being reported to the source department as successful output.
+
+## 2026-08-05 — CDU-004B1–B2C closure
+
+- Full target validation passed with 251 tests and clean `git diff --check`.
+- Live restart persistence, Accept, Ask / Continue and Reject paths passed.
+- Same-conversation continuation preserved one operator-visible identity and one source task.
+- Exact assistant-turn scoping prevented stale cross-turn attachment selection.
+- Unique per-round transport filenames produced fresh physical file objects.
+- Console verified actual byte counts and SHA-256 values before returning results to Core.
+- Stage-two and rejected-result replacement artifacts were physically captured and verified.
+- CDU-004B1, CDU-004B2, CDU-004B2A, CDU-004B2B and CDU-004B2C are closed.

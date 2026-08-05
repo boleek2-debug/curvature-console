@@ -50,3 +50,27 @@ Departments may communicate, clarify, test and correct autonomously within their
 Accepted: 2026-08-05
 
 Internal replies do not generate operator-facing modal notifications. Notify only for a final result, an operator decision, a controlled action or a terminal blocker. Opening the notification must expose the complete operational transcript and Accept, Reject and Ask or Continue controls.
+
+## Decision — interdepartmental collaboration uses durable operational conversations
+
+Automatic collaboration is represented by a persistent operational conversation keyed to the escalation chain. Department chat remains the execution substrate, while the Console-owned transcript is the operator review record. Routine internal replies do not create modal notifications. Result-ready, blocked and operator-decision states are surfaced through the review counter.
+## Decision — operator reviews outcomes, not message transport
+Operational conversations may run without per-message approval. The operator is engaged only for a final result, blocker or genuine decision. Accept closes the result. Reject and Ask / Continue preserve the same conversation and source task, append the operator comment, and resume through the source department.
+
+## Decision — Operational identity is stable across continuation rounds
+
+An operator Ask / Continue action resumes the existing operational conversation. New Browser Bridge request IDs and escalation-chain IDs are implementation details and must not create a second operator-visible conversation. Operator Review must show when a result was reached, when the conversation was closed and how many logical rounds occurred.
+## Exact response identity is authoritative for artifact capture
+Generated artifacts must be searched only inside the assistant turn whose `data-message-id` was confirmed by response completion. DOM order alone is not authoritative because older file cards may remain later in the rendered conversation.
+
+## Fresh generated artifacts require unique transport identities
+
+Accepted: 2026-08-05
+
+A stable logical artifact filename must not be reused as the browser transport identity across operational-conversation rounds. Every round receives a unique transport filename containing the round number and automatic request identity. CDU must create and attach a new physical file under that exact transport name. Console validates the captured transport name, computes the actual byte count and SHA-256, then maps the file back to the stable logical filename for source-department use. Model-authored claims never override Console-observed file bytes.
+
+## Decision — CDU-004B1–B2C accepted and closed
+
+Accepted: 2026-08-05
+
+Durable operational conversations and Operator Review are the approved execution model for automatic CDU collaboration. Accept closes a result without another exchange. Ask / Continue and Reject resume the same operator-visible conversation and source task. Artifact-producing rounds must use exact assistant-turn scoping and unique transport identities, with Console-observed bytes and hashes treated as authoritative. The implementation is accepted after 251 passing tests and successful live Accept, Ask / Continue and Reject verification.

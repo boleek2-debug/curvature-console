@@ -58,6 +58,36 @@ class GeneratedDownloadRecord:
     captured_at: str
 
 
+
+
+@dataclass(frozen=True, slots=True)
+class OperationalConversationRecord:
+    """Persisted interdepartmental workflow conversation."""
+
+    conversation_id: str
+    source_request_id: str
+    title: str
+    participants: tuple[str, ...]
+    status: str
+    created_at: str
+    updated_at: str
+    result_ready_at: str | None
+    closed_at: str | None
+    round_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class OperationalConversationMessage:
+    """One durable message in an operational conversation."""
+
+    message_id: str
+    conversation_id: str
+    sequence: int
+    author_department_id: str
+    body: str
+    created_at: str
+
+
 @dataclass(frozen=True, slots=True)
 class DepartmentChatHistoryEntry:
     """One previous or newly activated department conversation."""
@@ -626,6 +656,184 @@ class SQLiteStateStore:
             )
         return tuple(records)
 
+    def create_operational_conversation(
+        self,
+        *,
+        conversation_id: str,
+        source_request_id: str,
+        title: str,
+        participants: Iterable[str],
+        status: str = "RUNNING",
+    ) -> None:
+        """Create or refresh one durable interdepartmental conversation."""
+
+        timestamp = datetime.now(UTC).isoformat()
+        participant_json = json.dumps(tuple(participants))
+        with self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO operational_conversation (
+                    conversation_id, source_request_id, title, participants_json,
+                    status, created_at, updated_at, result_ready_at, closed_at,
+                    round_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, 1)
+                ON CONFLICT(conversation_id) DO UPDATE SET
+                    title = excluded.title,
+                    participants_json = excluded.participants_json,
+                    updated_at = excluded.updated_at
+                """,
+                (conversation_id, source_request_id, title, participant_json,
+                 status, timestamp, timestamp),
+            )
+
+    def begin_operational_round(
+        self, conversation_id: str, *, title: str | None = None
+    ) -> int:
+        """Resume an existing conversation as one additional logical round."""
+
+        timestamp = datetime.now(UTC).isoformat()
+        with self._connection:
+            if title is None:
+                self._connection.execute(
+                    "UPDATE operational_conversation "
+                    "SET status = 'RUNNING', updated_at = ?, "
+                    "result_ready_at = NULL, closed_at = NULL, "
+                    "round_count = round_count + 1 "
+                    "WHERE conversation_id = ?",
+                    (timestamp, conversation_id),
+                )
+            else:
+                self._connection.execute(
+                    "UPDATE operational_conversation "
+                    "SET title = ?, status = 'RUNNING', updated_at = ?, "
+                    "result_ready_at = NULL, closed_at = NULL, "
+                    "round_count = round_count + 1 "
+                    "WHERE conversation_id = ?",
+                    (title, timestamp, conversation_id),
+                )
+            row = self._connection.execute(
+                "SELECT round_count FROM operational_conversation "
+                "WHERE conversation_id = ?",
+                (conversation_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(conversation_id)
+        return int(row["round_count"])
+
+    def append_operational_message(
+        self,
+        *,
+        conversation_id: str,
+        author_department_id: str,
+        body: str,
+    ) -> None:
+        """Append one message while preserving deterministic sequence order."""
+
+        timestamp = datetime.now(UTC).isoformat()
+        with self._connection:
+            row = self._connection.execute(
+                "SELECT COALESCE(MAX(sequence), 0) + 1 AS next_sequence "
+                "FROM operational_conversation_message "
+                "WHERE conversation_id = ?",
+                (conversation_id,),
+            ).fetchone()
+            sequence = int(row["next_sequence"])
+            self._connection.execute(
+                """
+                INSERT INTO operational_conversation_message (
+                    message_id, conversation_id, sequence,
+                    author_department_id, body, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (f"{conversation_id}:{sequence}", conversation_id, sequence,
+                 author_department_id, body, timestamp),
+            )
+            self._connection.execute(
+                "UPDATE operational_conversation SET updated_at = ? "
+                "WHERE conversation_id = ?",
+                (timestamp, conversation_id),
+            )
+
+    def update_operational_conversation_status(
+        self, conversation_id: str, status: str
+    ) -> None:
+        timestamp = datetime.now(UTC).isoformat()
+        result_statuses = {
+            "RESULT_READY", "BLOCKED", "AWAITING_OPERATOR_DECISION"
+        }
+        closed_statuses = {"ACCEPTED", "CANCELLED", "FAILED"}
+        result_ready_at = timestamp if status in result_statuses else None
+        closed_at = timestamp if status in closed_statuses else None
+        with self._connection:
+            self._connection.execute(
+                "UPDATE operational_conversation "
+                "SET status = ?, updated_at = ?, "
+                "result_ready_at = COALESCE(?, result_ready_at), "
+                "closed_at = COALESCE(?, closed_at) "
+                "WHERE conversation_id = ?",
+                (status, timestamp, result_ready_at, closed_at, conversation_id),
+            )
+
+    def load_operational_conversation(
+        self, conversation_id: str
+    ) -> OperationalConversationRecord | None:
+        row = self._connection.execute(
+            "SELECT * FROM operational_conversation WHERE conversation_id = ?",
+            (conversation_id,),
+        ).fetchone()
+        return self._operational_record(row) if row is not None else None
+
+    def load_operational_conversations(
+        self,
+    ) -> tuple[OperationalConversationRecord, ...]:
+        rows = self._connection.execute(
+            "SELECT * FROM operational_conversation ORDER BY updated_at DESC"
+        ).fetchall()
+        return tuple(self._operational_record(row) for row in rows)
+
+    def load_operational_messages(
+        self, conversation_id: str
+    ) -> tuple[OperationalConversationMessage, ...]:
+        rows = self._connection.execute(
+            "SELECT * FROM operational_conversation_message "
+            "WHERE conversation_id = ? ORDER BY sequence",
+            (conversation_id,),
+        ).fetchall()
+        return tuple(
+            OperationalConversationMessage(
+                message_id=row["message_id"],
+                conversation_id=row["conversation_id"],
+                sequence=row["sequence"],
+                author_department_id=row["author_department_id"],
+                body=row["body"],
+                created_at=row["created_at"],
+            )
+            for row in rows
+        )
+
+    def count_operational_reviews(self) -> int:
+        row = self._connection.execute(
+            "SELECT COUNT(*) AS count FROM operational_conversation "
+            "WHERE status IN ('RESULT_READY', 'BLOCKED', "
+            "'AWAITING_OPERATOR_DECISION')"
+        ).fetchone()
+        return int(row["count"])
+
+    @staticmethod
+    def _operational_record(row: sqlite3.Row) -> OperationalConversationRecord:
+        return OperationalConversationRecord(
+            conversation_id=row["conversation_id"],
+            source_request_id=row["source_request_id"],
+            title=row["title"],
+            participants=tuple(json.loads(row["participants_json"])),
+            status=row["status"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            result_ready_at=row["result_ready_at"],
+            closed_at=row["closed_at"],
+            round_count=int(row["round_count"]),
+        )
+
     def _initialize_schema(self) -> None:
         with self._connection:
             self._connection.executescript(
@@ -742,6 +950,35 @@ class SQLiteStateStore:
                     )
                 );
 
+                CREATE TABLE IF NOT EXISTS operational_conversation (
+                    conversation_id TEXT PRIMARY KEY,
+                    source_request_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    participants_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    result_ready_at TEXT,
+                    closed_at TEXT,
+                    round_count INTEGER NOT NULL DEFAULT 1
+                );
+
+                CREATE TABLE IF NOT EXISTS operational_conversation_message (
+                    message_id TEXT PRIMARY KEY,
+                    conversation_id TEXT NOT NULL,
+                    sequence INTEGER NOT NULL,
+                    author_department_id TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE (conversation_id, sequence),
+                    FOREIGN KEY (conversation_id)
+                        REFERENCES operational_conversation(conversation_id)
+                        ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_operational_conversation_status
+                ON operational_conversation (status, updated_at);
+
                 CREATE TABLE IF NOT EXISTS department_chat_history (
                     department_id TEXT NOT NULL,
                     conversation_url TEXT NOT NULL,
@@ -753,6 +990,29 @@ class SQLiteStateStore:
 
         self._migrate_department_reply_state()
         self._migrate_handoff_status_constraint()
+        self._migrate_operational_conversation_lifecycle()
+
+
+    def _migrate_operational_conversation_lifecycle(self) -> None:
+        """Add lifecycle columns to databases created before CDU-004B2A."""
+
+        columns = {
+            row["name"]
+            for row in self._connection.execute(
+                "PRAGMA table_info(operational_conversation)"
+            ).fetchall()
+        }
+        additions = (
+            ("result_ready_at", "TEXT"),
+            ("closed_at", "TEXT"),
+            ("round_count", "INTEGER NOT NULL DEFAULT 1"),
+        )
+        with self._connection:
+            for name, declaration in additions:
+                if name not in columns:
+                    self._connection.execute(
+                        f"ALTER TABLE operational_conversation ADD COLUMN {name} {declaration}"
+                    )
 
     def _migrate_department_reply_state(self) -> None:
         """Add persisted reply-read state to databases created by older builds."""

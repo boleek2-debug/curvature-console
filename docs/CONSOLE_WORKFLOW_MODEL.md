@@ -77,3 +77,33 @@ Routine department communication will move from operator-approved message-by-mes
 The operator review surface must preserve the complete transcript and provide Accept, Reject and Ask or Continue. Reject and Ask resume the same conversation.
 
 Autonomy is constrained by authority: the operator owns Chronicle vision; Project coordinates and specifies it; no department may silently establish missing creative decisions.
+
+## Durable operational conversation foundation
+
+An automatic Console escalation now owns a durable operational conversation identified by its escalation chain. The record stores the source request, participants, status and ordered transcript. Source requests, CDU responses, artifact paths and returned source-department decisions remain in one reviewable history across application restarts.
+
+The first implementation exposes a non-modal Operational Conversations review window. Only conversations in result-ready, blocked or operator-decision states increment the toolbar review counter. Accept, Reject and Ask/Continue remain the next controlled workflow increment.
+## Operator review transition
+RESULT_READY, BLOCKED or AWAITING_OPERATOR_DECISION may transition to ACCEPTED through Accept. Reject and Ask / Continue append an operator message, transition to RUNNING, and queue a continuation to the original source department. The operational conversation ID and source request ID must remain unchanged. No per-message modal notification is created.
+
+## Stable operational conversation identity
+
+`OPERATIONAL_CONVERSATION_ID` is the durable operator-visible identity. Browser request IDs and escalation chain IDs may change between rounds, but they remain subordinate technical identifiers. Continuation must update the existing conversation to RUNNING, increment its round count, clear its prior result-ready marker for the active round and later set a new result-ready timestamp when work stops for operator review.
+## Artifact capture scope
+For every department exchange, the response waiter returns both normalized response text and the confirmed assistant `data-message-id`. File discovery is scoped to that exact assistant turn. A text match is a bounded fallback; selecting the last assistant locator is only a diagnostic fallback.
+
+## Fresh artifact transport contract
+
+Logical artifact identity and browser transport identity are separate. A logical name such as `report.txt` may remain stable across a conversation, but each artifact-producing round must use a unique physical transport name such as `report.round-2.<request-token>.txt`. CDU must generate a new file object under the exact transport name in the current assistant turn. Console rejects stale or unexpected names, maps a validated file to a collision-safe local version of the logical name and returns its observed byte count and SHA-256. Textual claims from a model do not substitute for captured-file validation.
+
+## Closed Operator Review workflow
+
+The durable Operator Review workflow is validated and closed for CDU escalation:
+
+- Accept terminates the review without a follow-up departmental exchange.
+- Ask / Continue and Reject append the operator instruction, return the same conversation to RUNNING and continue through the original source department.
+- A new technical request may be created, but `OPERATIONAL_CONVERSATION_ID` and source task remain stable.
+- Every artifact-producing round uses a unique transport filename and exact assistant-turn capture scope.
+- Only Console-observed file bytes, size and SHA-256 may establish successful output.
+
+The next workflow extension is automatic decision/blocker classification and meaningful final notifications.

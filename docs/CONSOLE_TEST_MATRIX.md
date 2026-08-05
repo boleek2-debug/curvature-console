@@ -72,3 +72,42 @@ A milestone closes only when automated validation, `git diff --check`, expected 
 ## Planned Console-first acceptance areas
 
 Future milestones must add regression and live coverage for durable operational conversations, notification suppression, Conversation Review, Accept/Reject/Ask continuation, operator-owned vision gates, restart recovery and complete multi-department Console-first execution.
+
+## CDU-004B1 operational conversation foundation
+
+- SQLite operational conversation create/update/load: targeted automated PASS in packaging environment.
+- Ordered durable transcript: targeted automated PASS in packaging environment.
+- Result-ready review counter: targeted automated PASS in packaging environment.
+- Qt review dialog and full regression suite: required in project Conda environment.
+- Live automatic Core → CDU → Core transcript capture across restart: required before milestone closure.
+## CDU-004B2 Operator Review
+- Persist operator-authored transcript entries and terminal ACCEPTED state.
+- Accept without mandatory comment.
+- Reject and Ask / Continue require operator text.
+- Reject and Ask preserve conversation ID and source request ID when routed back.
+- Review count excludes accepted conversations.
+- Live Accept, Ask / Continue and Reject tests: PASS.
+
+## CDU-004B2A
+
+- Same operational conversation reused across Ask / Continue: automated coverage added.
+- Source request remains stable while technical request IDs change: covered by persistence test.
+- Round count increments without duplicating transcript records: automated coverage added.
+- Result-ready and closure timestamps persist: automated coverage added.
+- Lifecycle details visible in Operator Review: target-environment live test required.
+## CDU-004B2B
+- Exact confirmed assistant message selected by message ID: automated PASS.
+- Stale file card from earlier round excluded from capture scope: regression covered.
+- Live stage-one → Ask/Continue → stage-two artifact-content test: PASS.
+
+## CDU-004B2C
+
+- Logical artifact filename extraction and deduplication: automated PASS.
+- Unique transport filename differs between rounds and requests: automated PASS.
+- Exact assistant-turn capture remains required: covered by CDU-004B2B regression tests.
+- Stale logical-name attachment rejection: PASS through unique transport identity.
+- Transport-to-logical local mapping with Console-calculated byte count and SHA-256: live PASS.
+- Live stage-one → Ask/Continue → stage-two artifact-content test: PASS.
+- Live Reject → corrected stage-two artifact test: PASS.
+- Full target suite: 251 passed.
+- `git diff --check`: PASS.

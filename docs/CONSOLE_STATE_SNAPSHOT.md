@@ -10,7 +10,7 @@ Last Updated: 2026-08-05
 ```text
 Repository: ~/curvature-console
 Branch: main
-Verified commit: 0abfee2da345effa4e8293478abbcfcc11b72772
+Verified commit: 46f16b9da345effa4e8293478abbcfcc11b72772
 origin/main: same
 Working tree at supplied snapshot: clean
 ```
@@ -82,3 +82,23 @@ Remaining closure work: update documentation, commit, push and produce a clean s
 ## Approved next direction
 
 The full capability-based development sequence is recorded in `docs/CURVATURE_CONSOLE_FIRST_ACTION_PLAN.md`. The next implementation area after CDU-004A closure is durable background interdepartmental conversation and operator review, with operator-owned vision and consequence-based approval gates.
+
+
+## CDU-004B1–B2C closure state
+
+CDU-004B1 durable operational conversations, CDU-004B2 Operator Review, CDU-004B2A same-conversation lifecycle, CDU-004B2B exact completed-turn capture and CDU-004B2C fresh artifact transport identity are closed.
+
+Closure evidence:
+
+- full target validation: 251 tests passed;
+- `git diff --check`: PASS;
+- durable conversation persisted across restart;
+- Accept closed without an extra departmental exchange;
+- Ask / Continue preserved one operator-visible conversation and one source task;
+- stage two used a unique round-two transport filename and a new Estuary object;
+- captured stage-two bytes were `SAME_THREAD_STAGE_TWO`, SHA-256 `42c363c8f22cbe2077e0eb0ae0a26abe852dc91b0e288f8f211bd43c627b2b0f`;
+- Reject preserved the same conversation and source task, superseded stage one and returned a fresh round-two artifact;
+- captured reject-stage-two bytes were `REJECT_STAGE_TWO`, SHA-256 `ef686f7b0e25a727a1113d6e6d56114a8ecb23f92257269ec3d2efd8d0512b06`;
+- exact assistant `data-message-id` scoping and Console-observed file metadata were used throughout.
+
+Current next milestone: CDU-004B3 decision/blocker classification and meaningful final notifications. Repository closure still requires the approved commit, push and clean snapshot.

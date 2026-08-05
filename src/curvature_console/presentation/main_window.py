@@ -32,6 +32,7 @@ from curvature_console.infrastructure.browser_bridge import (
     SHARED_PROJECT_URL,
     BrowserBridgeConfig,
     BrowserExchangeRequest,
+    CapturedDownload,
 )
 from curvature_console.infrastructure.package_apply import PackageApplier
 from curvature_console.infrastructure.package_review import (
@@ -39,7 +40,9 @@ from curvature_console.infrastructure.package_review import (
     PackageReviewer,
 )
 from curvature_console.infrastructure.console_request import (
+    ArtifactTransportName,
     ConsoleRequest,
+    build_artifact_transport_names,
     parse_console_requests,
 )
 from curvature_console.infrastructure.context_loader import (
@@ -76,6 +79,9 @@ from curvature_console.presentation.handoff_controls_dialog import (
 from curvature_console.presentation.package_review_dialog import (
     PackageReviewDialog,
 )
+from curvature_console.presentation.operational_conversations_dialog import (
+    OperationalConversationsDialog,
+)
 from curvature_console.presentation.reply_viewer_dialog import (
     ReplyViewerDialog,
 )
@@ -101,6 +107,9 @@ class PendingBrowserExchange:
     escalation_chain_id: str | None = None
     escalation_attempt: int = 0
     automatic_console_return: bool = False
+    operational_conversation_id: str | None = None
+    operational_operator_followup: bool = False
+    artifact_transport_names: tuple[ArtifactTransportName, ...] = ()
 
 
 class MainWindow(QMainWindow):
@@ -187,6 +196,9 @@ class MainWindow(QMainWindow):
         self._handoff_progress_specs: dict[str, tuple[str, str]] = {}
         self._handoff_controls_dialog: HandoffControlsDialog | None = None
         self._support_unit_dialog: ConsoleDevelopmentUnitDialog | None = None
+        self._operational_conversations_dialog: (
+            OperationalConversationsDialog | None
+        ) = None
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setObjectName("departmentSplitter")
@@ -258,6 +270,16 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.refresh_all_button)
         toolbar.addWidget(self.handoff_controls_button)
         toolbar.addWidget(self.support_unit_button)
+        self.operational_conversations_button = QPushButton(
+            "Operational Conversations"
+        )
+        self.operational_conversations_button.setObjectName(
+            "operationalConversationsButton"
+        )
+        self.operational_conversations_button.clicked.connect(
+            self.open_operational_conversations
+        )
+        toolbar.addWidget(self.operational_conversations_button)
         self.browser_queue_label = QLabel("Bridge queue: idle")
         self.browser_queue_label.setObjectName("browserBridgeQueueLabel")
         toolbar.addWidget(self.browser_queue_label)
@@ -273,7 +295,159 @@ class MainWindow(QMainWindow):
         self.load_workspace_configs()
         self.refresh_all_contexts()
         self.restore_persisted_state()
+        self._refresh_operational_review_button()
         self._restoring_state = False
+
+    def open_operational_conversations(self) -> None:
+        """Open the durable background conversation review surface."""
+
+        dialog = OperationalConversationsDialog(
+            state_store=self.state_store, parent=self
+        )
+        dialog.review_action_requested.connect(
+            self._handle_operational_review_action
+        )
+        self._operational_conversations_dialog = dialog
+        try:
+            dialog.exec()
+        finally:
+            self._operational_conversations_dialog = None
+            self._refresh_operational_review_button()
+
+    def _refresh_operational_review_button(self) -> None:
+        count = self.state_store.count_operational_reviews()
+        label = "Operational Conversations"
+        if count:
+            label += f" ({count})"
+        self.operational_conversations_button.setText(label)
+
+    def _refresh_open_operational_dialog(self) -> None:
+        dialog = self._operational_conversations_dialog
+        if dialog is not None:
+            dialog.refresh()
+        self._refresh_operational_review_button()
+
+
+    def _handle_operational_review_action(
+        self, conversation_id: str, action: str, comment: str
+    ) -> None:
+        """Persist an operator decision and continue only when requested."""
+
+        record = self.state_store.load_operational_conversation(conversation_id)
+        if record is None:
+            self.statusBar().showMessage("Operational conversation no longer exists.")
+            return
+        action = action.upper().strip()
+        if action not in {"ACCEPT", "REJECT", "ASK"}:
+            self.statusBar().showMessage("Unsupported operator review action.")
+            return
+        clean_comment = comment.strip()
+        if action in {"REJECT", "ASK"} and not clean_comment:
+            self.statusBar().showMessage(
+                "Reject and Ask / Continue require an operator comment."
+            )
+            return
+
+        labels = {
+            "ACCEPT": "Accepted by operator",
+            "REJECT": "Rejected by operator",
+            "ASK": "Operator asked for continuation",
+        }
+        body = labels[action]
+        if clean_comment:
+            body += f"\n\n{clean_comment}"
+        self.state_store.append_operational_message(
+            conversation_id=conversation_id,
+            author_department_id="operator",
+            body=body,
+        )
+
+        if action == "ACCEPT":
+            self.state_store.update_operational_conversation_status(
+                conversation_id, "ACCEPTED"
+            )
+            self._refresh_open_operational_dialog()
+            self.statusBar().showMessage(
+                f"Operational result accepted: {record.title}"
+            )
+            return
+
+        source_department_id = next(
+            (
+                participant
+                for participant in record.participants
+                if participant != "console-development"
+            ),
+            None,
+        )
+        if source_department_id is None:
+            self.state_store.update_operational_conversation_status(
+                conversation_id, "BLOCKED"
+            )
+            self._refresh_open_operational_dialog()
+            self.statusBar().showMessage(
+                "Operator feedback saved, but no source department route exists."
+            )
+            return
+        route = self.state_store.load_chat_route(source_department_id)
+        if route is None:
+            self.state_store.update_operational_conversation_status(
+                conversation_id, "BLOCKED"
+            )
+            self._refresh_open_operational_dialog()
+            self.statusBar().showMessage(
+                "Operator feedback saved, but the source department route "
+                "is unavailable."
+            )
+            return
+
+        request_id = f"operator-review-{uuid4().hex}"
+        instruction = (
+            f"CURVATURE_REQUEST_ID: {request_id}\n"
+            f"SOURCE_REQUEST_ID: {record.source_request_id}\n"
+            f"OPERATIONAL_CONVERSATION_ID: {conversation_id}\n"
+            f"OPERATOR_REVIEW_ACTION: {action}\n\n"
+            "# OPERATOR REVIEW CONTINUATION\n\n"
+            f"The operator has {labels[action].lower()} for the existing "
+            "operational conversation. Continue within the same source task and "
+            "department authority. Do not create a new unrelated handoff.\n\n"
+            f"## Operator comment\n{clean_comment}"
+        )
+        pending = PendingBrowserExchange(
+            request_id=request_id,
+            department_id=source_department_id,
+            user_task=instruction,
+            source_request_id=record.source_request_id,
+            operational_conversation_id=conversation_id,
+            operational_operator_followup=True,
+        )
+        self._pending_exchanges[request_id] = pending
+        self.state_store.update_operational_conversation_status(
+            conversation_id, "RUNNING"
+        )
+        self._set_browser_operation_busy(True, source_department_id)
+        worker = BrowserBridgeWorker(
+            config=self.browser_config,
+            request=BrowserExchangeRequest(
+                request_id=request_id,
+                department_id=source_department_id,
+                message_text=instruction,
+                create_new_thread=False,
+                conversation_url=route.active_conversation_url,
+                confirmation_marker=f"CURVATURE_REQUEST_ID: {request_id}",
+            ),
+        )
+        worker.succeeded.connect(self._handle_browser_success)
+        worker.failed.connect(self._handle_browser_failure)
+        worker.cancelled.connect(self._handle_browser_cancelled)
+        worker.route_unverified.connect(self._handle_browser_route_unverified)
+        worker.stage_changed.connect(self._handle_browser_stage)
+        worker.finished.connect(self._clear_browser_worker)
+        self._refresh_open_operational_dialog()
+        self.statusBar().showMessage(
+            f"Operator {action.lower()} queued for {source_department_id}"
+        )
+        self._enqueue_browser_worker(worker)
 
     def open_support_unit(self) -> None:
         """Open the Console Development Unit workspace and dedicated chat."""
@@ -758,6 +932,67 @@ class MainWindow(QMainWindow):
             self.state_store.load_chat_route("console-development")
             or self.state_store.load_chat_route("support")
         )
+        conversation_id = (
+            source_pending.operational_conversation_id or chain_id
+        )
+        existing_conversation = self.state_store.load_operational_conversation(
+            conversation_id
+        )
+        if existing_conversation is None:
+            self.state_store.create_operational_conversation(
+                conversation_id=conversation_id,
+                source_request_id=(
+                    source_pending.source_request_id or source_pending.request_id
+                ),
+                title=request.title,
+                participants=(
+                    source_pending.department_id,
+                    "console-development",
+                ),
+                status="RUNNING",
+            )
+            round_number = 1
+        else:
+            round_number = self.state_store.begin_operational_round(
+                conversation_id, title=request.title
+            )
+            self.state_store.append_operational_message(
+                conversation_id=conversation_id,
+                author_department_id="system",
+                body=(
+                    f"Operational conversation round {round_number} started.\n"
+                    f"Technical escalation chain: {chain_id}\n"
+                    f"Request: {request.title}"
+                ),
+            )
+        transport_names = build_artifact_transport_names(
+            request,
+            request_id=request_id,
+            round_number=round_number,
+        )
+        if transport_names:
+            transport_lines = "\n".join(
+                f"- Logical filename: {item.logical_filename}\n"
+                f"  Required transport filename: {item.transport_filename}"
+                for item in transport_names
+            )
+            payload += (
+                "\n\n## Mandatory fresh-artifact transport contract\n\n"
+                "Generate a new physical file object for this exact response. "
+                "Do not reuse, relink or reattach a file card from an earlier "
+                "message, even when the logical filename is unchanged. Attach "
+                "the file using the exact unique transport filename below. "
+                "The Console will validate the transport filename and map it "
+                "back to the stable logical filename after capture.\n\n"
+                f"{transport_lines}\n\n"
+                "In the response metadata, report both logical_filename and "
+                "transport_filename."
+            )
+        self.state_store.append_operational_message(
+            conversation_id=conversation_id,
+            author_department_id=source_pending.department_id,
+            body=body,
+        )
         pending = PendingBrowserExchange(
             request_id=request_id,
             department_id="console-development",
@@ -770,6 +1005,8 @@ class MainWindow(QMainWindow):
             ),
             escalation_chain_id=chain_id,
             escalation_attempt=attempt,
+            operational_conversation_id=conversation_id,
+            artifact_transport_names=transport_names,
         )
         self._pending_exchanges[request_id] = pending
         attachment_paths: tuple[Path, ...] = ()
@@ -828,6 +1065,12 @@ class MainWindow(QMainWindow):
             and pending.escalation_attempt >= 2
             and parsed.requests
         ):
+            if pending.operational_conversation_id:
+                self.state_store.update_operational_conversation_status(
+                    pending.operational_conversation_id,
+                    "AWAITING_OPERATOR_DECISION",
+                )
+                self._refresh_open_operational_dialog()
             self.statusBar().showMessage(
                 "Automatic CDU escalation stopped after two attempts; "
                 "operator action is required."
@@ -842,6 +1085,90 @@ class MainWindow(QMainWindow):
                 request_index=index,
             )
         return len(parsed.requests), parsed.errors
+
+    @staticmethod
+    def _canonical_transport_filename(filename: str) -> str:
+        """Ignore only browser-added collision suffixes during transport checks."""
+
+        path = Path(filename)
+        stem = path.stem
+        for suffix in tuple(f"({index})" for index in range(1, 1000)):
+            if stem.endswith(suffix):
+                stem = stem[: -len(suffix)]
+                break
+        return f"{stem}{path.suffix}".casefold()
+
+    @staticmethod
+    def _collision_safe_artifact_path(directory: Path, filename: str) -> Path:
+        """Return a non-destructive local path for one logical artifact version."""
+
+        candidate = directory / Path(filename).name
+        if not candidate.exists():
+            return candidate
+        path = Path(filename)
+        index = 2
+        while True:
+            candidate = directory / f"{path.stem}-{index}{path.suffix}"
+            if not candidate.exists():
+                return candidate
+            index += 1
+
+    def _normalize_console_artifacts(
+        self,
+        *,
+        pending: PendingBrowserExchange,
+        downloaded_files: tuple[object, ...],
+    ) -> tuple[tuple[object, ...], tuple[str, ...]]:
+        """Validate fresh transport names and map them to stable logical names."""
+
+        mappings = pending.artifact_transport_names
+        if not mappings:
+            return downloaded_files, ()
+
+        expected = {
+            self._canonical_transport_filename(item.transport_filename): item
+            for item in mappings
+        }
+        matched: set[str] = set()
+        normalized: list[CapturedDownload] = []
+        errors: list[str] = []
+
+        for download in downloaded_files:
+            original_filename = str(getattr(download, "original_filename", ""))
+            key = self._canonical_transport_filename(original_filename)
+            mapping = expected.get(key)
+            if mapping is None:
+                errors.append(
+                    "Rejected unexpected or stale CDU artifact: "
+                    f"{original_filename or '<unnamed>'}."
+                )
+                continue
+            saved_path = Path(getattr(download, "saved_path"))
+            destination = self._collision_safe_artifact_path(
+                saved_path.parent,
+                mapping.logical_filename,
+            )
+            if saved_path != destination:
+                saved_path.replace(destination)
+            normalized.append(
+                CapturedDownload(
+                    original_filename=mapping.logical_filename,
+                    saved_path=destination,
+                    source_url=str(getattr(download, "source_url", "")),
+                    size_bytes=destination.stat().st_size,
+                )
+            )
+            matched.add(key)
+
+        for key, mapping in expected.items():
+            if key not in matched:
+                errors.append(
+                    "Missing required fresh CDU transport artifact: "
+                    f"{mapping.transport_filename} "
+                    f"(logical {mapping.logical_filename})."
+                )
+
+        return tuple(normalized), tuple(errors)
 
     def _queue_console_result_return(
         self,
@@ -862,11 +1189,23 @@ class MainWindow(QMainWindow):
                 + source_department_id
             )
             return
-        filenames = []
+        artifact_lines: list[str] = []
         for item in downloaded_files:
-            path = getattr(item, "saved_path", None)
-            filenames.append(str(path or item))
-        artifacts = "\n".join(f"- {name}" for name in filenames) or "- none"
+            path_value = getattr(item, "saved_path", None)
+            path = Path(path_value) if path_value is not None else None
+            logical_name = str(
+                getattr(item, "original_filename", path.name if path else item)
+            )
+            if path is not None and path.is_file():
+                data = path.read_bytes()
+                artifact_lines.append(
+                    f"- logical_filename={logical_name}; "
+                    f"saved_path={path}; size_bytes={len(data)}; "
+                    f"sha256={sha256(data).hexdigest()}"
+                )
+            else:
+                artifact_lines.append(f"- logical_filename={logical_name}")
+        artifacts = "\n".join(artifact_lines) or "- none"
         request_id = f"console-return-{uuid4().hex}"
         message_text = (
             f"CURVATURE_REQUEST_ID: {request_id}\n"
@@ -889,6 +1228,7 @@ class MainWindow(QMainWindow):
             escalation_chain_id=pending.escalation_chain_id,
             escalation_attempt=pending.escalation_attempt,
             automatic_console_return=True,
+            operational_conversation_id=pending.operational_conversation_id,
         )
         self._pending_exchanges[request_id] = source_pending
         self._set_browser_operation_busy(True, source_department_id)
@@ -1281,9 +1621,19 @@ class MainWindow(QMainWindow):
                 department_id="console-development", project_name=project_name,
                 project_url=project_url, active_conversation_url=conversation_url
             )
+            captured_console_downloads = tuple(downloaded_files)
+            transport_errors: tuple[str, ...] = ()
+            if pending.automatic_console_request:
+                captured_console_downloads, transport_errors = (
+                    self._normalize_console_artifacts(
+                        pending=pending,
+                        downloaded_files=captured_console_downloads,
+                    )
+                )
             self.state_store.save_generated_downloads(
                 request_id=request_id, department_id="console-development",
-                conversation_url=conversation_url, downloads=tuple(downloaded_files)
+                conversation_url=conversation_url,
+                downloads=captured_console_downloads,
             )
             if dialog is not None:
                 dialog.set_generated_downloads(
@@ -1291,16 +1641,78 @@ class MainWindow(QMainWindow):
                 )
                 dialog.clear_sent_attachments()
                 self.state_store.replace_attachments("console-development", ())
-            self.statusBar().showMessage("Console Development response received and saved")
+            self.statusBar().showMessage(
+                "Console Development response received and saved"
+                + (
+                    f"; {len(transport_errors)} fresh-artifact validation error(s)"
+                    if transport_errors else ""
+                )
+            )
             if pending.automatic_console_request:
+                if pending.operational_conversation_id:
+                    artifacts = tuple(
+                        str(getattr(item, "saved_path", item))
+                        for item in captured_console_downloads
+                    )
+                    artifact_text = (
+                        "\n\nCaptured artifacts:\n"
+                        + "\n".join(f"- {item}" for item in artifacts)
+                        if artifacts
+                        else ""
+                    )
+                    self.state_store.append_operational_message(
+                        conversation_id=pending.operational_conversation_id,
+                        author_department_id="console-development",
+                        body=response_text + artifact_text,
+                    )
+                    if transport_errors:
+                        self.state_store.append_operational_message(
+                            conversation_id=pending.operational_conversation_id,
+                            author_department_id="system",
+                            body=(
+                                "Fresh-artifact transport validation failed:\n- "
+                                + "\n- ".join(transport_errors)
+                            ),
+                        )
+                    self.state_store.update_operational_conversation_status(
+                        pending.operational_conversation_id, "WAITING_SOURCE"
+                    )
+                    self._refresh_open_operational_dialog()
+                return_response = response_text
+                if transport_errors:
+                    return_response += (
+                        "\n\n## Console fresh-artifact validation\n"
+                        "FAILED\n- " + "\n- ".join(transport_errors)
+                    )
+                elif pending.artifact_transport_names:
+                    return_response += (
+                        "\n\n## Console fresh-artifact validation\nPASS"
+                    )
                 self._queue_console_result_return(
                     pending=pending,
-                    response_text=response_text,
-                    downloaded_files=tuple(downloaded_files),
+                    response_text=return_response,
+                    downloaded_files=captured_console_downloads,
                 )
             return
         panel = self.department_panels[department_id]
         panel.append_browser_exchange(pending.user_task, response_text)
+        if (
+            pending.operational_operator_followup
+            and pending.operational_conversation_id
+        ):
+            self.state_store.append_operational_message(
+                conversation_id=pending.operational_conversation_id,
+                author_department_id=department_id,
+                body=response_text,
+            )
+            parsed_followups = parse_console_requests(response_text)
+            followup_status = (
+                "RUNNING" if parsed_followups.requests else "RESULT_READY"
+            )
+            self.state_store.update_operational_conversation_status(
+                pending.operational_conversation_id, followup_status
+            )
+            self._refresh_open_operational_dialog()
         captured_handoffs, handoff_errors = (
             self._capture_department_handoff_proposals(
                 pending,
@@ -1313,6 +1725,19 @@ class MainWindow(QMainWindow):
                 response_text,
             )
         )
+        if pending.automatic_console_return and pending.operational_conversation_id:
+            self.state_store.append_operational_message(
+                conversation_id=pending.operational_conversation_id,
+                author_department_id=department_id,
+                body=response_text,
+            )
+            final_status = (
+                "RUNNING" if captured_console_requests else "RESULT_READY"
+            )
+            self.state_store.update_operational_conversation_status(
+                pending.operational_conversation_id, final_status
+            )
+            self._refresh_open_operational_dialog()
 
         captured_downloads = tuple(downloaded_files)
         self.state_store.save_generated_downloads(
@@ -1401,6 +1826,23 @@ class MainWindow(QMainWindow):
             return
         panel = self.department_panels[department_id]
         panel.append_browser_exchange(pending.user_task, response_text)
+        if (
+            pending.operational_operator_followup
+            and pending.operational_conversation_id
+        ):
+            self.state_store.append_operational_message(
+                conversation_id=pending.operational_conversation_id,
+                author_department_id=department_id,
+                body=response_text,
+            )
+            parsed_followups = parse_console_requests(response_text)
+            followup_status = (
+                "RUNNING" if parsed_followups.requests else "RESULT_READY"
+            )
+            self.state_store.update_operational_conversation_status(
+                pending.operational_conversation_id, followup_status
+            )
+            self._refresh_open_operational_dialog()
         captured_handoffs, handoff_errors = (
             self._capture_department_handoff_proposals(
                 pending,
