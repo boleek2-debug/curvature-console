@@ -1,9 +1,9 @@
 # Console Development Unit State Snapshot
 
 Status: Operational
-Version: 1.1.0
+Version: 1.2.0
 Owner: Curvature Console Development Unit
-Last Updated: 2026-08-04
+Last Updated: 2026-08-05
 
 ## Repository
 
@@ -55,3 +55,30 @@ Shared authority boundaries and formal Console request routing are now propagate
 Baseline commit: `bf3fc85`.
 
 Prepared changes add automatic department-to-CDU escalation and automatic CDU-to-source return. Targeted parser and transfer-package tests: 23 passed. Full project validation and live end-to-end verification remain required before commit and push.
+
+## Prepared next state — CDU-004A
+
+Base commit: `5add1e5`
+
+Prepared changes add generated-artifact deduplication, bounded two-attempt escalation chains, automatic defect snapshot/log attachments and terminal operator-stop semantics. Local validation and live verification are pending.
+## 2026-08-05 — CDU-004A live verification PASS
+
+Working base commit: `5add1e5`.
+
+Evidence:
+
+- 243 automated tests passed;
+- `git diff --check` passed;
+- Core emitted the structured request automatically;
+- Console routed it to CDU automatically;
+- CDU generated `console-first-automatic-test.txt`;
+- the Estuary and native-download representations had the same SHA-256 and the duplicate was suppressed;
+- exactly one 37-byte artifact was returned;
+- Core verified filename, UTF-8 content and SHA-256 and accepted the retest;
+- no corrective escalation loop occurred.
+
+Remaining closure work: update documentation, commit, push and produce a clean snapshot.
+
+## Approved next direction
+
+The full capability-based development sequence is recorded in `docs/CURVATURE_CONSOLE_FIRST_ACTION_PLAN.md`. The next implementation area after CDU-004A closure is durable background interdepartmental conversation and operator review, with operator-owned vision and consequence-based approval gates.

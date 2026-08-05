@@ -1,7 +1,7 @@
 # Console Development Unit Roadmap
 
 Status: Active
-Version: 1.0.0
+Version: 2.0.0
 Owner: Curvature Console Development Unit
 
 ## Completed baseline
@@ -18,21 +18,27 @@ Owner: Curvature Console Development Unit
 
 ## Current milestone
 
-### CDU-001B — Authoritative documentation suite
+### CDU-004A — Artifact deduplication and escalation chain control
 
-Create the CDU role, product, architecture, workflow, integration, request, backlog, roadmap, decisions, test, security, use-case, UI-action and state documents.
+Automated validation passed with 243 tests. The live Core → CDU → Core retest on 2026-08-05 confirmed duplicate suppression, exactly one returned artifact, exact content verification and source-department acceptance. Documentation closure and repository finalisation remain.
 
-## Ordered next milestones
+## Ordered capability milestones
 
-1. CDU-002 — Shared sequential Browser Bridge queue
-2. CDU-003 — Tool request and handoff routing
-3. CDU-004 — Tool adapter foundation
-4. CDU-005 — Existing tool consolidation
-5. CDU-006 — ComfyUI integration
-6. CDU-007 — Godot integration
-7. CDU-008 — Blender integration
-8. CDU-009 — Research intake integration
-9. CDU-010 — Composite workflow orchestration
+1. Close CDU-004A documentation and repository state.
+2. Durable interdepartmental operational conversations.
+3. Separate operational transcripts from main department chats.
+4. Notify only for final results, operator decisions, controlled actions and terminal blockers.
+5. Conversation Review with Accept, Reject and Ask or Continue.
+6. Replace operator-approved message transport with autonomous departmental collaboration.
+7. Enforce consequence-based decision gates and operator-owned Chronicle vision.
+8. Add restart-safe persistence, recovery, attempt control and idempotency.
+9. Rebuild the main Console surface around work state and review queues.
+10. Execute the complete Curvature Console-first migration test.
+11. Promote Console to the primary operator interface.
+12. Continue real-requirement-driven tool adapters and composite orchestration.
+13. Add later one-click speech playback and local voice dictation.
+
+The authoritative detailed plan is `CURVATURE_CONSOLE_FIRST_ACTION_PLAN.md`.
 
 ## Promotion rule
 

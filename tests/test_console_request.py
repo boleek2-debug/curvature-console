@@ -34,3 +34,18 @@ def test_invalid_console_request_is_rejected() -> None:
     assert not result.requests
     assert len(result.errors) == 1
     assert "Unsupported request_type" in result.errors[0]
+
+
+def test_download_signature_collapses_browser_collision_suffixes(tmp_path) -> None:
+    from curvature_console.infrastructure.browser_bridge import (
+        _download_content_signature,
+    )
+
+    first = tmp_path / "console-first-automatic-test.txt"
+    duplicate = tmp_path / "console-first-automatic-test(1).txt"
+    first.write_text("CONSOLE_FIRST_AUTOMATIC_ESCALATION_OK", encoding="utf-8")
+    duplicate.write_text("CONSOLE_FIRST_AUTOMATIC_ESCALATION_OK", encoding="utf-8")
+
+    assert _download_content_signature(first, first.name) == (
+        _download_content_signature(duplicate, duplicate.name)
+    )

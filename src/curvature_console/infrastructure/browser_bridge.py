@@ -15,6 +15,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+from hashlib import sha256
 from pathlib import Path
 from typing import Final
 from urllib.parse import urlparse
@@ -247,6 +248,21 @@ class _ResponseBackedDownload:
 
     def save_as(self, target: Path) -> None:
         target.write_bytes(self.body_bytes)
+
+
+def _canonical_download_filename(filename: str) -> str:
+    """Normalize browser collision suffixes for logical artifact comparison."""
+
+    path = Path(filename)
+    stem = re.sub(r"(?:\(\d+\)|-\d+)$", "", path.stem)
+    return f"{stem}{path.suffix}".casefold()
+
+
+def _download_content_signature(path: Path, filename: str) -> tuple[str, int, str]:
+    """Return a stable logical signature for one captured artifact."""
+
+    data = path.read_bytes()
+    return (_canonical_download_filename(filename), len(data), sha256(data).hexdigest())
 
 
 @dataclass(frozen=True, slots=True)
@@ -1415,6 +1431,7 @@ class ChatGPTBrowserBridge:
 
         captured: list[CapturedDownload] = []
         seen_signatures: set[str] = set()
+        seen_artifacts: set[tuple[str, int, str]] = set()
         diagnostics: list[str] = []
         candidate_count = candidates.count()
 
@@ -1477,6 +1494,22 @@ class ChatGPTBrowserBridge:
                     if saved_path.is_file()
                     else 0
                 )
+                artifact_signature = _download_content_signature(
+                    saved_path, original_filename
+                )
+                if artifact_signature in seen_artifacts:
+                    saved_path.unlink(missing_ok=True)
+                    self._logger.info(
+                        "download_duplicate_suppressed request_id=%s "
+                        "department_id=%s original_filename=%r "
+                        "sha256=%s",
+                        request.request_id,
+                        request.department_id,
+                        original_filename,
+                        artifact_signature[2],
+                    )
+                    continue
+                seen_artifacts.add(artifact_signature)
                 record = CapturedDownload(
                     original_filename=original_filename,
                     saved_path=saved_path,

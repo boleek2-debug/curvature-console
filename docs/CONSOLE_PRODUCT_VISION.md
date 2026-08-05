@@ -1,7 +1,7 @@
 # Console Product Vision
 
 Status: Approved
-Version: 1.0.0
+Version: 1.1.0
 Owner: Curvature Console Development Unit
 
 ## Purpose
@@ -30,3 +30,10 @@ Console should evolve from a departmental coordination tool into a controlled or
 - validate results against explicit acceptance criteria;
 - return results to the requesting department;
 - support one-button, multi-stage workflows without removing operator control.
+## Console-first organisational direction
+
+Console is intended to become the primary operator interface for the whole Curvature organisation. Departments collaborate through durable operational conversations in the background, while the operator is interrupted only for meaningful decisions, controlled actions, terminal blockers and final results.
+
+Console autonomy is operational, not creative. The operator owns Chronicle vision and canon. Project coordinates and specifies that vision and must not independently replace it.
+
+The complete ordered direction is maintained in `CURVATURE_CONSOLE_FIRST_ACTION_PLAN.md`.

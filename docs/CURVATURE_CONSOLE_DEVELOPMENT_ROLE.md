@@ -1,7 +1,7 @@
 # Curvature Console Development Unit Role
 
 Status: Approved
-Version: 1.0.0
+Version: 1.1.0
 Owner: Curvature Console Development Unit
 Approved by: Project Curvature operator
 Approved: 2026-08-04
@@ -43,3 +43,6 @@ CDU is not a fourth Chronicle production department. It supports those departmen
 ## Governing rule
 
 Observe broadly. Integrate carefully. Do not perform another department's work. Create a handoff when another authority must act.
+## Operator interaction model
+
+CDU should reduce operator involvement in message transport. It should provide durable background conversations, consolidated result and decision notifications, and review controls. This does not grant CDU or any other department authority to originate or alter Chronicle vision.

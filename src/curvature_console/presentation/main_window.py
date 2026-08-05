@@ -98,6 +98,9 @@ class PendingBrowserExchange:
     automatic_console_request: bool = False
     source_department_id: str | None = None
     source_request_id: str | None = None
+    escalation_chain_id: str | None = None
+    escalation_attempt: int = 0
+    automatic_console_return: bool = False
 
 
 class MainWindow(QMainWindow):
@@ -726,13 +729,20 @@ class MainWindow(QMainWindow):
 
         request_id = f"console-auto-{uuid4().hex}"
         case_id = f"console-dev-case-{uuid4().hex[:16]}"
+        chain_id = (
+            source_pending.escalation_chain_id
+            or f"console-chain-{uuid4().hex}"
+        )
+        attempt = source_pending.escalation_attempt + 1
         body = request.render_request_body()
         payload = (
             f"CURVATURE_REQUEST_ID: {request_id}\n"
             f"CONSOLE_DEV_CASE_ID: {case_id}\n"
             f"CONSOLE_REQUEST_TYPE: {request.request_type}\n"
             f"REQUESTING_DEPARTMENT: {source_pending.department_id}\n"
-            f"SOURCE_REQUEST_ID: {source_pending.request_id}\n\n"
+            f"SOURCE_REQUEST_ID: {source_pending.request_id}\n"
+            f"ESCALATION_CHAIN_ID: {chain_id}\n"
+            f"ESCALATION_ATTEMPT: {attempt}\n\n"
             "# AUTOMATIC CONSOLE DEVELOPMENT ESCALATION\n\n"
             "The source department detected that it lacks a Console tool, "
             "integration or workflow required to continue its current task. "
@@ -755,9 +765,28 @@ class MainWindow(QMainWindow):
             support_unit=True,
             automatic_console_request=True,
             source_department_id=source_pending.department_id,
-            source_request_id=source_pending.request_id,
+            source_request_id=(
+                source_pending.source_request_id or source_pending.request_id
+            ),
+            escalation_chain_id=chain_id,
+            escalation_attempt=attempt,
         )
         self._pending_exchanges[request_id] = pending
+        attachment_paths: tuple[Path, ...] = ()
+        if request.request_type == "CONSOLE_DEFECT":
+            candidates: list[Path] = []
+            for directory, pattern in (
+                (self.data_directory / "snapshots", "*.zip"),
+                (self.data_directory / "logs", "*.log"),
+            ):
+                matches = sorted(
+                    directory.glob(pattern),
+                    key=lambda path: path.stat().st_mtime,
+                    reverse=True,
+                ) if directory.exists() else []
+                if matches:
+                    candidates.append(matches[0])
+            attachment_paths = tuple(candidates)
         worker = BrowserBridgeWorker(
             config=self.browser_config,
             request=BrowserExchangeRequest(
@@ -769,6 +798,7 @@ class MainWindow(QMainWindow):
                     route.active_conversation_url if route else None
                 ),
                 confirmation_marker=f"CURVATURE_REQUEST_ID: {request_id}",
+                attachment_paths=attachment_paths,
             ),
         )
         worker.succeeded.connect(self._handle_browser_success)
@@ -793,6 +823,18 @@ class MainWindow(QMainWindow):
         """Capture machine-readable CDU requests and queue them automatically."""
 
         parsed = parse_console_requests(response_text)
+        if (
+            pending.automatic_console_return
+            and pending.escalation_attempt >= 2
+            and parsed.requests
+        ):
+            self.statusBar().showMessage(
+                "Automatic CDU escalation stopped after two attempts; "
+                "operator action is required."
+            )
+            return 0, parsed.errors + (
+                "Automatic escalation chain reached its two-attempt limit.",
+            )
         for index, request in enumerate(parsed.requests, start=1):
             self._queue_automatic_console_request(
                 source_pending=pending,
@@ -828,7 +870,9 @@ class MainWindow(QMainWindow):
         request_id = f"console-return-{uuid4().hex}"
         message_text = (
             f"CURVATURE_REQUEST_ID: {request_id}\n"
-            f"SOURCE_REQUEST_ID: {pending.source_request_id or ''}\n\n"
+            f"SOURCE_REQUEST_ID: {pending.source_request_id or ''}\n"
+            f"ESCALATION_CHAIN_ID: {pending.escalation_chain_id or ''}\n"
+            f"ESCALATION_ATTEMPT: {pending.escalation_attempt}\n\n"
             "# AUTOMATIC CONSOLE DEVELOPMENT RESULT RETURN\n\n"
             "Console Development Unit completed or assessed the automatically "
             "escalated request. Continue the original task within your own "
@@ -842,6 +886,9 @@ class MainWindow(QMainWindow):
             department_id=source_department_id,
             user_task=message_text,
             source_request_id=pending.source_request_id,
+            escalation_chain_id=pending.escalation_chain_id,
+            escalation_attempt=pending.escalation_attempt,
+            automatic_console_return=True,
         )
         self._pending_exchanges[request_id] = source_pending
         self._set_browser_operation_busy(True, source_department_id)

@@ -1,9 +1,9 @@
 # Curvature Console Handoff
 
 Status: Active
-Version: 3.0.0
+Version: 4.0.0
 Owner: Curvature Console Development Unit
-Last Updated: 2026-08-04
+Last Updated: 2026-08-05
 
 ## Current verified base
 
@@ -52,3 +52,16 @@ Expected live flow:
 Project/Core/Research task → department emits structured Console request → shared Browser Bridge queue sends it to CDU → CDU result and captured artifact paths return automatically to the source department → source department resumes its original task.
 
 Closure requires automated tests, live verification, current documentation, clean repository state and confirmed source-department continuation.
+
+## CDU-004A
+
+Prepared implementation for logical artifact deduplication, bounded two-attempt automatic escalation and automatic latest snapshot/runtime-log context for corrective Console defects. Requires local validation and live Core → CDU → Core verification.
+## CDU-004A live result
+
+The 2026-08-05 Core → CDU → Core retest passed. Console returned one canonical 37-byte artifact, suppressed the equivalent native-download duplicate by SHA-256, and Core accepted the exact filename and content. Automated validation: 243 passed; `git diff --check`: PASS.
+
+Before the next implementation milestone, commit and push the documented CDU-004A state and create a clean snapshot.
+
+## Next approved implementation area
+
+Build durable background operational conversations and operator review according to `docs/CURVATURE_CONSOLE_FIRST_ACTION_PLAN.md`. The operator must receive one meaningful result, decision or blocker notification rather than a popup for every interdepartmental reply. Project remains a coordinator of operator-owned vision, not an autonomous author of Chronicle direction.

@@ -3,7 +3,7 @@
 Status: Active
 Version: 2.0.0
 Owner: Curvature Console Development Unit
-Last Updated: 2026-08-04
+Last Updated: 2026-08-05
 
 ## 2026-08-04 — CDU-001A / CDU-001A1
 
@@ -66,3 +66,20 @@ Prepared:
 - source-task continuation without operator copy/paste;
 - documentation-closure requirement included in automatic CDU requests;
 - parser and transfer-package regression tests.
+
+## 2026-08-04 — CDU-004A Artifact deduplication and escalation chain control
+
+- duplicate captures of one logical generated artifact are suppressed by canonical filename, size and SHA-256;
+- automatic escalation chains carry a stable chain identifier and attempt number;
+- automatic corrective escalation is limited to two CDU attempts before operator action is required;
+- CONSOLE_DEFECT escalation automatically attaches the latest Console snapshot and runtime log;
+- automatic return metadata preserves the originating request and chain.
+## 2026-08-05 — CDU-004A live verification and Console-first action plan
+
+- full validation passed with 243 tests and clean `git diff --check`;
+- live Core → CDU → Core retest passed;
+- identical Estuary and native-download captures were reduced to one logical artifact;
+- Core verified exact filename, content and SHA-256 and accepted the result;
+- no escalation loop occurred;
+- added the approved capability-based Console-first action plan for the whole Curvature organisation;
+- documented operator-owned vision, autonomous departmental collaboration, meaningful decision gates, separate operational conversations, Conversation Review and later voice accessibility.

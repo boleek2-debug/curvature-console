@@ -48,3 +48,27 @@ A milestone closes only when automated validation, `git diff --check`, expected 
 - shared queue prevents parallel Browser Bridge workers;
 - operator approval remains required for controlled actions;
 - documentation closure is present in the CDU execution prompt.
+
+## CDU-004A
+
+- identical artifact exposed through fetch and native-download channels is captured once;
+- collision suffixes such as `(1)` and local `-2` do not create a second logical artifact when content hashes match;
+- escalation chain preserves source request, chain ID and attempt number;
+- one corrective CONSOLE_DEFECT attempt receives latest snapshot and runtime log;
+- third automatic escalation is blocked and surfaced for operator action.
+## 2026-08-05 CDU-004A live evidence
+
+- automatic Core request detection: PASS;
+- automatic Core → CDU routing: PASS;
+- generated artifact capture: PASS;
+- equivalent fetch/native capture suppression by SHA-256: PASS;
+- logical artifact count equals one: PASS;
+- automatic CDU → Core return: PASS;
+- Core exact filename/content/hash verification and acceptance: PASS;
+- escalation loop prevention in the successful path: PASS;
+- full automated suite: 243 passed;
+- `git diff --check`: PASS.
+
+## Planned Console-first acceptance areas
+
+Future milestones must add regression and live coverage for durable operational conversations, notification suppression, Conversation Review, Accept/Reject/Ask continuation, operator-owned vision gates, restart recovery and complete multi-department Console-first execution.

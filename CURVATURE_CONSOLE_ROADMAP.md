@@ -1,9 +1,9 @@
 # Curvature Console Roadmap
 
 Status: Active
-Version: 3.0.0
+Version: 4.0.0
 Owner: Curvature Console Development Unit
-Last Updated: 2026-08-04
+Last Updated: 2026-08-05
 
 ## Completed foundation
 
@@ -11,23 +11,27 @@ The operational foundation includes departmental workspaces, persistence, Browse
 
 ## Current
 
-### CDU-001B — Authoritative documentation
+### CDU-004A — Artifact Deduplication and Escalation Chain Control
 
-Create and adopt the CDU documentation suite under `docs/`.
+Automated validation and the live Core → CDU → Core retest passed. Documentation closure, commit, push and clean snapshot remain before milestone closure.
 
-## Next
+## Approved development direction
 
-1. CDU-002 — Shared Sequential Browser Bridge Queue
-2. CDU-003 — Tool Request and Handoff Routing
-3. CDU-004 — Tool Adapter Foundation
-4. CDU-005 — Existing Tool Consolidation
-5. CDU-006 — ComfyUI Integration
-6. CDU-007 — Godot Integration
-7. CDU-008 — Blender Integration
-8. CDU-009 — Research Intake Integration
-9. CDU-010 — Composite Workflow Orchestration
+The capability-based Console-first plan for the complete Curvature organisation is authoritative in `docs/CURVATURE_CONSOLE_FIRST_ACTION_PLAN.md`.
 
-Detailed milestone definitions live in `docs/CONSOLE_ROADMAP.md` and backlog entries in `docs/CONSOLE_BACKLOG.md`.
+Immediate ordered work after CDU-004A closure:
+
+1. durable operational conversations;
+2. separate interdepartmental transcript history;
+3. result/blocker/decision-only operator notifications;
+4. Conversation Review with Accept, Reject and Ask;
+5. automatic departmental collaboration with decision gates;
+6. operator-owned vision enforcement;
+7. persistence, recovery and idempotency;
+8. full Curvature Console-first migration test;
+9. later one-click speech playback and local dictation.
+
+Tool adapters and integrations remain on the roadmap, but they follow the operational Console-first foundation and real Project/Core/Research requirements.
 
 ## CDU-004 — Automatic Tool Escalation, Return and Documentation Closure
 
@@ -42,3 +46,7 @@ Deliver:
 - operator approval gates for writes, installs, cost, security and scope;
 - documentation updates as a mandatory completion condition;
 - automated and live end-to-end verification.
+
+## CDU-004A — Artifact Deduplication and Escalation Chain Control
+
+Delivered logical artifact deduplication, bounded corrective escalation, automatic defect context and operator-stop semantics. Automated validation passed with 243 tests, and the 2026-08-05 live retest confirmed one logical artifact, duplicate suppression, automatic return and Core acceptance. Documentation closure, commit, push and clean snapshot are the remaining closure steps.

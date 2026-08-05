@@ -51,3 +51,21 @@ Console acquires permitted sources, records access classification and checksums,
 6. Console captures generated artifacts and returns the CDU result to Core.
 7. Core resumes the original task without operator copy/paste.
 8. The workflow closes only after tests, live validation and documentation are current.
+
+## Duplicate generated-file channels
+
+When ChatGPT exposes one generated file through both an Estuary fetch response and a native browser download, Console computes a logical signature from canonical filename, size and SHA-256. The duplicate technical capture is deleted and only one artifact is returned to the source department.
+## Use case: background Project ↔ Core conversation
+
+1. The operator gives Project a Chronicle goal or decision.
+2. Project converts the approved intent into requirements without inventing new creative direction.
+3. Console opens a durable Project ↔ Core operational conversation.
+4. Project and Core clarify feasibility and implementation consequences without operator message transport.
+5. The operator receives no reply-by-reply popups.
+6. Console notifies the operator only when a final result, real decision, controlled action or terminal blocker exists.
+7. Conversation Review shows the full transcript, recommendation, artifacts and evidence.
+8. Accept closes or advances the work; Reject and Ask continue the same conversation.
+
+## Use case: operator-owned vision gap
+
+When a requirement depends on an unmade creative decision, Project must not fill the gap. It gathers relevant consequences from Core and Research, then presents the operator with a focused question, options and recommendation.
