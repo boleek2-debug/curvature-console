@@ -102,3 +102,7 @@ Closure evidence:
 - exact assistant `data-message-id` scoping and Console-observed file metadata were used throughout.
 
 Current next milestone: CDU-004B3 decision/blocker classification and meaningful final notifications. Repository closure still requires the approved commit, push and clean snapshot.
+
+## 2026-08-06 — CDU-004B4 implementation candidate
+
+CDU-004B4 adds explicit durable background collaboration among Project, Core and Research. All six directed department pairs are accepted by the operational-request parser. Requests route through the shared Browser Bridge queue, target replies and generated artifacts return automatically to the original source, nested CDU escalation preserves the operational conversation ID, and terminal responses reuse the existing RESULT/BLOCKER/OPERATOR_DECISION review model. Supervised handoff proposals remain unchanged and operator-approved. A six-hop limit prevents autonomous loops. Full target-environment validation and three representative live routes remain required before closure.

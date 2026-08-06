@@ -129,3 +129,14 @@ Future milestones must add regression and live coverage for durable operational 
 - Thread Pressure uses only the transcript after the latest marker;
 - restart continuity preserves the fresh pressure epoch;
 - normal non-handoff replies continue to accumulate pressure in the active epoch.
+
+## CDU-004B4
+
+- explicit operational-request parser accepts all six directed Project/Core/Research pairs;
+- malformed, unknown-target and same-department requests are rejected;
+- supervised handoff proposal parser remains unchanged and operator-approved;
+- one durable conversation ID is reused across target return, nested CDU escalation and source continuation;
+- target artifacts are returned with observed size and SHA-256 metadata;
+- six-hop safety limit terminates in OPERATOR_DECISION rather than looping;
+- targeted non-Qt tests: PASS in packaging environment;
+- full Qt regression suite and live Project ↔ Core, Project ↔ Research and Core ↔ Research verification: required before closure.

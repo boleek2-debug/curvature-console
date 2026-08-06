@@ -122,3 +122,11 @@ Explicit workflow-state markers are authoritative. Conservative textual markers 
 ## Thread Handoff and local pressure epochs
 
 A successful Thread Handoff changes the active ChatGPT conversation route and starts a new local pressure epoch. The full Reply Viewer transcript remains cumulative for operator history. Console appends an explicit `=== NEW THREAD AFTER HANDOFF ===` marker and calculates Thread Pressure only from the latest marker onward. Because the marker is stored in the normal persisted transcript, restart does not reconnect pressure to the replaced thread.
+
+## Production-department operational requests
+
+Project, Core and Research may open a background operational conversation by emitting one explicit `BEGIN_CURVATURE_OPERATIONAL_REQUEST` JSON block. The block names the target department, task, context, expected output, constraints and acceptance criteria. This is separate from `BEGIN_CURVATURE_HANDOFF_PROPOSAL`: supervised handoffs remain operator-approved and are not silently converted into autonomous routing.
+
+Console creates or resumes one durable conversation, appends the source request, sends it to the target department, captures the target response and artifacts, and returns the result to the original source. The source may emit one further operational request in the same round when another department contribution is genuinely required. Nested CDU escalation stays inside the same operational conversation. The workflow stops at RESULT, BLOCKER or OPERATOR_DECISION, or at a six-hop safety limit that requires operator review.
+
+Supported production routes are Project ↔ Core, Project ↔ Research and Core ↔ Research. Ordinary internal transitions remain non-modal; only terminal attention states increment Operator Review.

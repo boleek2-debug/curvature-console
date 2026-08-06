@@ -6,6 +6,16 @@ Owner: Curvature Console Development Unit
 Last Updated: 2026-08-06
 
 
+## 2026-08-06 — CDU-004B4 production-department operational conversations
+
+- added explicit background operational-request blocks for Project, Core and Research;
+- routed Project ↔ Core, Project ↔ Research and Core ↔ Research requests without operator message transport;
+- preserved one durable operational conversation across automatic target replies, nested CDU escalation and source continuation;
+- returned generated target artifacts to the requesting department with Console-observed size and SHA-256 metadata;
+- retained supervised handoff proposals as a separate operator-approved workflow;
+- added a six-hop safety limit and operator stop instead of an autonomous loop;
+- added parser and all-pair regression coverage; full Qt and live verification remain required before closure.
+
 ## 2026-08-06 — CDU-004B3 closure and thread-pressure handoff defect fix
 
 - closed CDU-004B3 after 255 automated tests and live RESULT, BLOCKER and OPERATOR_DECISION verification;

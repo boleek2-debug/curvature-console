@@ -88,3 +88,13 @@ When a requirement depends on an unmade creative decision, Project must not fill
 ## Continue one operational conversation
 
 When the operator selects Ask / Continue, Console records the comment in the existing conversation, resumes the source department and appends any subsequent CDU exchange as another round of the same conversation. The operator sees one list entry with updated round count and lifecycle timestamps.
+
+## Use case: background production-department request
+
+1. A source department emits an explicit `BEGIN_CURVATURE_OPERATIONAL_REQUEST` block.
+2. Console validates the target, task, context, expected output, constraints and acceptance criteria.
+3. Console opens or resumes one durable operational conversation and routes the request in the shared Browser Bridge queue.
+4. The target works within its authority and may use the existing CDU escalation path when Console capability is missing.
+5. Console captures the target response and artifacts and returns them to the source department automatically.
+6. The source either emits one further operational request in the same conversation or stops at RESULT, BLOCKER or OPERATOR_DECISION.
+7. Supervised handoff proposals remain separate and still require operator approval.

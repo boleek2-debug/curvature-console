@@ -78,3 +78,11 @@ Durable operational conversations and Operator Review are the approved execution
 ## 2026-08-05 — Classify attention, not transport noise
 
 Decision: operational conversations expose operator attention only when a completed response is a result, a blocker or an operator decision. Internal interdepartmental routing and progress transitions remain non-modal. Classification is persisted with a human-readable reason, and explicit workflow markers override heuristic phrase detection.
+
+## DEC-CDU-2026-08-06-05 — Explicit operational requests remain distinct from supervised handoffs
+
+Decision: Background Project/Core/Research collaboration uses a new explicit `BEGIN_CURVATURE_OPERATIONAL_REQUEST` block. Existing `BEGIN_CURVATURE_HANDOFF_PROPOSAL` blocks remain supervised and operator-approved.
+
+Reason: Generalising operational conversations must not silently remove operator approval from established handoff semantics. Explicit protocol separation makes autonomy intentional, auditable and bounded.
+
+Safety boundary: one continuation request per existing conversation round and a six-hop routing limit; exceeding the limit becomes `OPERATOR_DECISION`.

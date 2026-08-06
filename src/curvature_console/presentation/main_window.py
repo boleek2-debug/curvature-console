@@ -39,6 +39,10 @@ from curvature_console.infrastructure.operational_attention import (
     classify_operational_attention,
     status_for_attention,
 )
+from curvature_console.infrastructure.operational_request import (
+    OperationalRequest,
+    parse_operational_requests,
+)
 from curvature_console.infrastructure.package_apply import PackageApplier
 from curvature_console.infrastructure.package_review import (
     PackageReviewError,
@@ -112,6 +116,11 @@ class PendingBrowserExchange:
     escalation_chain_id: str | None = None
     escalation_attempt: int = 0
     automatic_console_return: bool = False
+    automatic_operational_request: bool = False
+    automatic_operational_return: bool = False
+    operational_source_department_id: str | None = None
+    operational_target_department_id: str | None = None
+    operational_hop_count: int = 0
     operational_conversation_id: str | None = None
     operational_operator_followup: bool = False
     artifact_transport_names: tuple[ArtifactTransportName, ...] = ()
@@ -1269,6 +1278,13 @@ class MainWindow(QMainWindow):
             escalation_attempt=pending.escalation_attempt,
             automatic_console_return=True,
             operational_conversation_id=pending.operational_conversation_id,
+            operational_source_department_id=(
+                pending.operational_source_department_id
+            ),
+            operational_target_department_id=(
+                pending.operational_target_department_id
+            ),
+            operational_hop_count=pending.operational_hop_count,
         )
         self._pending_exchanges[request_id] = source_pending
         self._set_browser_operation_busy(True, source_department_id)
@@ -1293,6 +1309,260 @@ class MainWindow(QMainWindow):
         worker.finished.connect(self._clear_browser_worker)
         self.statusBar().showMessage(
             f"CDU result queued for automatic return to {source_department_id}"
+        )
+        self._enqueue_browser_worker(worker)
+
+    def _queue_automatic_operational_request(
+        self,
+        *,
+        source_pending: PendingBrowserExchange,
+        request: OperationalRequest,
+        request_index: int,
+    ) -> None:
+        """Route one explicit production-department request in the background."""
+
+        source_department_id = source_pending.department_id
+        target_department_id = request.target_department_id
+        route = self.state_store.load_chat_route(target_department_id)
+        conversation_id = (
+            source_pending.operational_conversation_id
+            or f"operational-chain-{uuid4().hex}"
+        )
+        source_request_id = (
+            source_pending.source_request_id or source_pending.request_id
+        )
+        existing = self.state_store.load_operational_conversation(conversation_id)
+        if existing is None:
+            self.state_store.create_operational_conversation(
+                conversation_id=conversation_id,
+                source_request_id=source_request_id,
+                title=request.title,
+                participants=(source_department_id, target_department_id),
+                status="RUNNING",
+            )
+            round_number = 1
+        else:
+            round_number = self.state_store.begin_operational_round(
+                conversation_id, title=request.title
+            )
+            self.state_store.append_operational_message(
+                conversation_id=conversation_id,
+                author_department_id="system",
+                body=(
+                    f"Operational conversation round {round_number} started.\n"
+                    f"Route: {source_department_id} → {target_department_id}."
+                ),
+            )
+
+        body = request.render_request_body()
+        self.state_store.append_operational_message(
+            conversation_id=conversation_id,
+            author_department_id=source_department_id,
+            body=body,
+        )
+        if route is None:
+            self.state_store.append_operational_message(
+                conversation_id=conversation_id,
+                author_department_id="system",
+                body=f"Target route unavailable: {target_department_id}.",
+            )
+            self._finalize_operational_conversation(
+                conversation_id,
+                "workflow_state: BLOCKED\n"
+                f"blocker: Target route unavailable: {target_department_id}.",
+            )
+            return
+
+        hop_count = source_pending.operational_hop_count + 1
+        if hop_count > 6:
+            self.state_store.append_operational_message(
+                conversation_id=conversation_id,
+                author_department_id="system",
+                body="Operational routing stopped at the six-hop safety limit.",
+            )
+            self._finalize_operational_conversation(
+                conversation_id,
+                "workflow_state: AWAITING_OPERATOR_DECISION\n"
+                "operator_decision: Decide how to continue the operational "
+                "conversation after the six-hop safety limit.",
+            )
+            return
+
+        request_id = f"operational-auto-{uuid4().hex}"
+        payload = (
+            f"CURVATURE_REQUEST_ID: {request_id}\n"
+            f"SOURCE_REQUEST_ID: {source_request_id}\n"
+            f"OPERATIONAL_CONVERSATION_ID: {conversation_id}\n"
+            f"OPERATIONAL_ROUND: {round_number}\n"
+            f"SOURCE_DEPARTMENT: {source_department_id}\n"
+            f"TARGET_DEPARTMENT: {target_department_id}\n\n"
+            "# AUTOMATIC INTERDEPARTMENTAL OPERATIONAL REQUEST\n\n"
+            "Work strictly within your department authority. Return a bounded "
+            "result to the requesting department. Do not create a supervised "
+            "handoff merely to transport the reply. State workflow_state as "
+            "RESULT_READY, BLOCKED or AWAITING_OPERATOR_DECISION when the "
+            "operational request reaches an operator-facing stop.\n\n"
+            f"{body}"
+        )
+        pending = PendingBrowserExchange(
+            request_id=request_id,
+            department_id=target_department_id,
+            user_task=payload,
+            source_request_id=source_request_id,
+            operational_conversation_id=conversation_id,
+            automatic_operational_request=True,
+            operational_source_department_id=source_department_id,
+            operational_target_department_id=target_department_id,
+            operational_hop_count=hop_count,
+        )
+        self._pending_exchanges[request_id] = pending
+        self._set_browser_operation_busy(True, target_department_id)
+        worker = BrowserBridgeWorker(
+            config=self.browser_config,
+            request=BrowserExchangeRequest(
+                request_id=request_id,
+                department_id=target_department_id,
+                message_text=payload,
+                create_new_thread=False,
+                conversation_url=route.active_conversation_url,
+                confirmation_marker=f"CURVATURE_REQUEST_ID: {request_id}",
+            ),
+        )
+        worker.succeeded.connect(self._handle_browser_success)
+        worker.failed.connect(self._handle_browser_failure)
+        worker.cancelled.connect(self._handle_browser_cancelled)
+        worker.route_unverified.connect(self._handle_browser_route_unverified)
+        worker.stage_changed.connect(self._handle_browser_stage)
+        worker.finished.connect(self._clear_browser_worker)
+        self.state_store.update_operational_conversation_status(
+            conversation_id, "RUNNING"
+        )
+        self._refresh_open_operational_dialog()
+        self.statusBar().showMessage(
+            f"Background {source_department_id} → {target_department_id} "
+            f"request queued: {request.title}"
+        )
+        self._enqueue_browser_worker(worker)
+
+    def _capture_and_queue_operational_requests(
+        self,
+        pending: PendingBrowserExchange,
+        response_text: str,
+    ) -> tuple[int, tuple[str, ...]]:
+        """Capture explicit background requests without changing handoff semantics."""
+
+        parsed = parse_operational_requests(
+            response_text,
+            source_department_id=pending.department_id,
+        )
+        if len(parsed.requests) > 1 and pending.operational_conversation_id:
+            return 0, parsed.errors + (
+                "Only one continuation request is allowed per existing "
+                "operational conversation round.",
+            )
+        for index, request in enumerate(parsed.requests, start=1):
+            self._queue_automatic_operational_request(
+                source_pending=pending,
+                request=request,
+                request_index=index,
+            )
+        return len(parsed.requests), parsed.errors
+
+    def _queue_operational_result_return(
+        self,
+        *,
+        pending: PendingBrowserExchange,
+        response_text: str,
+        downloaded_files: tuple[object, ...],
+    ) -> None:
+        """Return a production-department result to the original requester."""
+
+        source_department_id = pending.operational_source_department_id
+        if not source_department_id:
+            return
+        route = self.state_store.load_chat_route(source_department_id)
+        conversation_id = pending.operational_conversation_id
+        if route is None or not conversation_id:
+            if conversation_id:
+                self._finalize_operational_conversation(
+                    conversation_id,
+                    "workflow_state: BLOCKED\n"
+                    f"blocker: Source route unavailable: {source_department_id}.",
+                )
+            return
+
+        artifact_lines: list[str] = []
+        attachment_paths: list[Path] = []
+        for item in downloaded_files:
+            path_value = getattr(item, "saved_path", None)
+            if path_value is None:
+                continue
+            path = Path(path_value)
+            if not path.is_file():
+                continue
+            attachment_paths.append(path)
+            data = path.read_bytes()
+            artifact_lines.append(
+                f"- {path.name}; size_bytes={len(data)}; "
+                f"sha256={sha256(data).hexdigest()}"
+            )
+        artifacts = "\n".join(artifact_lines) or "- none"
+        request_id = f"operational-return-{uuid4().hex}"
+        target_department_id = (
+            pending.operational_target_department_id or pending.department_id
+        )
+        message_text = (
+            f"CURVATURE_REQUEST_ID: {request_id}\n"
+            f"SOURCE_REQUEST_ID: {pending.source_request_id or ''}\n"
+            f"OPERATIONAL_CONVERSATION_ID: {conversation_id}\n"
+            f"RETURNING_DEPARTMENT: {target_department_id}\n\n"
+            "# AUTOMATIC INTERDEPARTMENTAL RESULT RETURN\n\n"
+            "Continue the original task within your own department authority. "
+            "Do not repeat work already completed by the returning department. "
+            "You may emit one new BEGIN_CURVATURE_OPERATIONAL_REQUEST block "
+            "when another department contribution is genuinely required. "
+            "Otherwise finish with workflow_state: RESULT_READY, BLOCKED or "
+            "AWAITING_OPERATOR_DECISION.\n\n"
+            f"## Returned response\n{response_text}\n\n"
+            f"## Captured artifacts\n{artifacts}"
+        )
+        source_pending = PendingBrowserExchange(
+            request_id=request_id,
+            department_id=source_department_id,
+            user_task=message_text,
+            source_request_id=pending.source_request_id,
+            operational_conversation_id=conversation_id,
+            automatic_operational_return=True,
+            operational_source_department_id=source_department_id,
+            operational_target_department_id=target_department_id,
+            operational_hop_count=pending.operational_hop_count,
+        )
+        self._pending_exchanges[request_id] = source_pending
+        self._set_browser_operation_busy(True, source_department_id)
+        worker = BrowserBridgeWorker(
+            config=self.browser_config,
+            request=BrowserExchangeRequest(
+                request_id=request_id,
+                department_id=source_department_id,
+                message_text=message_text,
+                create_new_thread=False,
+                conversation_url=route.active_conversation_url,
+                confirmation_marker=f"CURVATURE_REQUEST_ID: {request_id}",
+                attachment_paths=tuple(attachment_paths),
+            ),
+        )
+        worker.succeeded.connect(self._handle_browser_success)
+        worker.failed.connect(self._handle_browser_failure)
+        worker.cancelled.connect(self._handle_browser_cancelled)
+        worker.route_unverified.connect(self._handle_browser_route_unverified)
+        worker.stage_changed.connect(self._handle_browser_stage)
+        worker.finished.connect(self._clear_browser_worker)
+        self.state_store.update_operational_conversation_status(
+            conversation_id, "WAITING_SOURCE"
+        )
+        self._refresh_open_operational_dialog()
+        self.statusBar().showMessage(
+            f"Operational result queued for return to {source_department_id}"
         )
         self._enqueue_browser_worker(worker)
 
@@ -1776,13 +2046,62 @@ class MainWindow(QMainWindow):
                 response_text,
             )
         )
+        captured_operational_requests, operational_request_errors = (
+            self._capture_and_queue_operational_requests(
+                pending,
+                response_text,
+            )
+        )
         if pending.automatic_console_return and pending.operational_conversation_id:
             self.state_store.append_operational_message(
                 conversation_id=pending.operational_conversation_id,
                 author_department_id=department_id,
                 body=response_text,
             )
-            if captured_console_requests:
+            if captured_console_requests or captured_operational_requests:
+                self.state_store.update_operational_conversation_status(
+                    pending.operational_conversation_id, "RUNNING"
+                )
+                self._refresh_open_operational_dialog()
+            elif (
+                pending.operational_source_department_id
+                and pending.operational_source_department_id != department_id
+            ):
+                self._queue_operational_result_return(
+                    pending=pending,
+                    response_text=response_text,
+                    downloaded_files=tuple(downloaded_files),
+                )
+            else:
+                self._finalize_operational_conversation(
+                    pending.operational_conversation_id, response_text
+                )
+
+        if pending.automatic_operational_request and pending.operational_conversation_id:
+            self.state_store.append_operational_message(
+                conversation_id=pending.operational_conversation_id,
+                author_department_id=department_id,
+                body=response_text,
+            )
+            if captured_console_requests or captured_operational_requests:
+                self.state_store.update_operational_conversation_status(
+                    pending.operational_conversation_id, "RUNNING"
+                )
+                self._refresh_open_operational_dialog()
+            else:
+                self._queue_operational_result_return(
+                    pending=pending,
+                    response_text=response_text,
+                    downloaded_files=tuple(downloaded_files),
+                )
+
+        if pending.automatic_operational_return and pending.operational_conversation_id:
+            self.state_store.append_operational_message(
+                conversation_id=pending.operational_conversation_id,
+                author_department_id=department_id,
+                body=response_text,
+            )
+            if captured_console_requests or captured_operational_requests:
                 self.state_store.update_operational_conversation_status(
                     pending.operational_conversation_id, "RUNNING"
                 )
@@ -1838,11 +2157,21 @@ class MainWindow(QMainWindow):
             if console_request_errors
             else ""
         )
+        operational_suffix = (
+            f"; {captured_operational_requests} background department request(s) queued"
+            if captured_operational_requests
+            else ""
+        )
+        operational_error_suffix = (
+            f"; {len(operational_request_errors)} invalid operational request(s) ignored"
+            if operational_request_errors
+            else ""
+        )
         self.statusBar().showMessage(
             f"ChatGPT response received and saved: "
             f"{panel.title_label.text()}{download_suffix}"
-            f"{handoff_suffix}{console_suffix}{error_suffix}"
-            f"{console_error_suffix}"
+            f"{handoff_suffix}{console_suffix}{operational_suffix}{error_suffix}"
+            f"{console_error_suffix}{operational_error_suffix}"
         )
 
     def _handle_browser_route_unverified(
