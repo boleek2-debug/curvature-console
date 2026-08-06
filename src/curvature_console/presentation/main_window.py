@@ -39,6 +39,10 @@ from curvature_console.infrastructure.operational_attention import (
     classify_operational_attention,
     status_for_attention,
 )
+from curvature_console.infrastructure.operational_decision_gate import (
+    evaluate_operational_request_gate,
+    render_operator_decision_stop,
+)
 from curvature_console.infrastructure.operational_request import (
     OperationalRequest,
     parse_operational_requests,
@@ -1360,6 +1364,16 @@ class MainWindow(QMainWindow):
             author_department_id=source_department_id,
             body=body,
         )
+        decision_gate = evaluate_operational_request_gate(request)
+        if decision_gate is not None:
+            stop_text = render_operator_decision_stop(decision_gate)
+            self.state_store.append_operational_message(
+                conversation_id=conversation_id,
+                author_department_id="system",
+                body=stop_text,
+            )
+            self._finalize_operational_conversation(conversation_id, stop_text)
+            return
         if route is None:
             self.state_store.append_operational_message(
                 conversation_id=conversation_id,

@@ -145,3 +145,11 @@ Future milestones must add regression and live coverage for durable operational 
 - live Core → Research → Core: PASS;
 - final status and attention classification for all three representative routes: RESULT_READY / RESULT;
 - CDU-004B4 closure: PASS.
+
+## CDU-004B5 decision gates
+
+- routine operational request does not trigger operator gate
+- product-direction request triggers structured operator decision
+- repository mutation triggers structured operator decision
+- installation decision preserves question/options/consequences through attention classification
+- live validation pending

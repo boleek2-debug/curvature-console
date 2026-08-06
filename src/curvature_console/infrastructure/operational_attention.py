@@ -21,6 +21,9 @@ class OperationalAttention:
 
     kind: OperationalAttentionKind
     reason: str
+    decision_question: str | None = None
+    decision_options: tuple[str, ...] = ()
+    decision_consequences: tuple[str, ...] = ()
 
 
 _EXPLICIT_STATE_RE = re.compile(
@@ -72,9 +75,22 @@ def classify_operational_attention(response_text: str) -> OperationalAttention:
                 "The response explicitly reports a blocker.",
             )
         if value in {"OPERATOR_DECISION", "AWAITING_OPERATOR_DECISION"}:
+            question = _extract_scalar(text, "operator_decision")
+            options = _extract_list(text, "operator_options")
+            consequences = _extract_list(text, "operator_consequences")
+            detail = "The response explicitly requests an operator decision."
+            if question:
+                detail += f" Question: {question}"
+            if options:
+                detail += " Options: " + " | ".join(options)
+            if consequences:
+                detail += " Consequences: " + " | ".join(consequences)
             return OperationalAttention(
                 OperationalAttentionKind.OPERATOR_DECISION,
-                "The response explicitly requests an operator decision.",
+                detail,
+                decision_question=question,
+                decision_options=options,
+                decision_consequences=consequences,
             )
         return OperationalAttention(
             OperationalAttentionKind.RESULT,
@@ -108,3 +124,22 @@ def status_for_attention(attention: OperationalAttention) -> str:
     if attention.kind is OperationalAttentionKind.OPERATOR_DECISION:
         return "AWAITING_OPERATOR_DECISION"
     return "RESULT_READY"
+
+
+def _extract_scalar(text: str, key: str) -> str | None:
+    match = re.search(rf"(?im)^\s*{re.escape(key)}\s*[:=]\s*(.+?)\s*$", text)
+    return match.group(1).strip() if match else None
+
+
+def _extract_list(text: str, key: str) -> tuple[str, ...]:
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if re.match(rf"^\s*{re.escape(key)}\s*[:=]\s*$", line, re.IGNORECASE):
+            values: list[str] = []
+            for candidate in lines[index + 1:]:
+                match = re.match(r"^\s*-\s+(.+?)\s*$", candidate)
+                if not match:
+                    break
+                values.append(match.group(1).strip())
+            return tuple(values)
+    return ()

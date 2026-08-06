@@ -106,3 +106,7 @@ Current next milestone: CDU-004B3 decision/blocker classification and meaningful
 ## 2026-08-06 — CDU-004B4 closed
 
 CDU-004B4 adds explicit durable background collaboration among Project, Core and Research. All six directed department pairs are accepted by the operational-request parser. Requests route through the shared Browser Bridge queue, target replies and generated artifacts return automatically to the original source, nested CDU escalation preserves the operational conversation ID, and terminal responses reuse the existing RESULT/BLOCKER/OPERATOR_DECISION review model. Supervised handoff proposals remain unchanged and operator-approved. A six-hop limit prevents autonomous loops. Full target-environment validation passed with 260 tests. Live Project → Core → Project, Project → Research → Project and Core → Research → Core routes all completed with RESULT_READY and the correct RESULT classification. CDU-004B4 is closed.
+
+## CDU-004B5 candidate state
+
+Authority- and consequence-based operational decision gates are implemented for validation. Routine production collaboration remains autonomous; operator-owned direction, cost, installation, security, repository mutation and unresolved conflict stop before target execution with structured decision details.

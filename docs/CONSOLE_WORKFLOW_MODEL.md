@@ -130,3 +130,7 @@ Project, Core and Research may open a background operational conversation by emi
 Console creates or resumes one durable conversation, appends the source request, sends it to the target department, captures the target response and artifacts, and returns the result to the original source. The source may emit one further operational request in the same round when another department contribution is genuinely required. Nested CDU escalation stays inside the same operational conversation. The workflow stops at RESULT, BLOCKER or OPERATOR_DECISION, or at a six-hop safety limit that requires operator review.
 
 Supported production routes are Project ↔ Core, Project ↔ Research and Core ↔ Research. Ordinary internal transitions remain non-modal; only terminal attention states increment Operator Review.
+
+## Authority and consequence gate
+
+Before an operational request is routed, Console evaluates whether the request crosses an operator-owned boundary. Routine consultation, research, implementation analysis and validation continue automatically. Product direction, scope, canon, art direction, financial commitment, installation, security-sensitive action, shared repository mutation and unresolved departmental conflict become `AWAITING_OPERATOR_DECISION` before target execution. The stop records a decision domain, concrete question, options and consequences.

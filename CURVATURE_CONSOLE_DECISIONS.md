@@ -86,3 +86,7 @@ Decision: Background Project/Core/Research collaboration uses a new explicit `BE
 Reason: Generalising operational conversations must not silently remove operator approval from established handoff semantics. Explicit protocol separation makes autonomy intentional, auditable and bounded.
 
 Safety boundary: one continuation request per existing conversation round and a six-hop routing limit; exceeding the limit becomes `OPERATOR_DECISION`.
+
+## CDU-004B5 — decision-gate authority
+
+Operational routing may proceed autonomously only while the requested work remains within department authority and has no operator-owned consequence. Product direction, scope, canon, art direction, cost, installation, security-sensitive actions, shared repository mutation and unresolved cross-department conflict must stop before execution and request a structured operator decision with question, options and consequences.

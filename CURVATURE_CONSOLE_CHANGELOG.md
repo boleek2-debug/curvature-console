@@ -159,3 +159,10 @@ Prepared:
 - Toolbar review counts are grouped by decision, blocker and result instead of one undifferentiated number.
 - Internal department-to-department transitions remain non-modal; only completed results, blockers and operator decisions surface as operator attention.
 - Added persistence and classifier regression coverage.
+
+## CDU-004B5 — authority and consequence decision gates
+
+- Added pre-routing decision gates for operator-owned product direction, canon/art direction, cost, installation, security, repository mutation and unresolved cross-department conflict.
+- Routine department consultation, validation and implementation analysis continue without operator interruption.
+- Operator stops now include a concrete question, options and consequences rather than a generic decision marker.
+- Operational target prompts explicitly prohibit departments from silently making operator-owned decisions.

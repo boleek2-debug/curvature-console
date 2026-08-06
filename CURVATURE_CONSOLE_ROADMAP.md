@@ -92,3 +92,9 @@ Status: closed after full validation and live verification.
 - Keep internal routing and progress transitions non-modal.
 - Target-environment full regression and live examples of all three classes passed.
 - Follow-up defect fixed: successful Thread Handoff now starts a fresh pressure epoch while preserving cumulative Reply Viewer history.
+
+## CDU-004B5 — authority and consequence decision gates
+
+Status: IMPLEMENTED FOR VALIDATION
+
+Acceptance requires automated validation plus live confirmation that routine collaboration routes normally while at least one product-direction gate and one repository/security/cost gate stop before department execution with a structured operator decision.
