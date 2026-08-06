@@ -80,3 +80,14 @@ Status: closed after full validation and live Ask/Continue plus Reject retests.
 - Reject stale logical-name cards and missing fresh files.
 - Map validated transport objects back to stable logical artifact names.
 - Return Console-calculated size and SHA-256 to the source department.
+
+### CDU-004B3 — Attention classification and meaningful final notifications
+
+Status: implemented for target validation and live verification.
+
+- Classify completed operational responses as RESULT, BLOCKER or OPERATOR_DECISION.
+- Persist the classification and explanation.
+- Map classification to RESULT_READY, BLOCKED or AWAITING_OPERATOR_DECISION.
+- Group toolbar review counts by attention type.
+- Keep internal routing and progress transitions non-modal.
+- Require target-environment full regression and live examples of all three classes before closure.

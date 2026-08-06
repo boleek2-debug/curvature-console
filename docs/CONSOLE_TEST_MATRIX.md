@@ -111,3 +111,13 @@ Future milestones must add regression and live coverage for durable operational 
 - Live Reject → corrected stage-two artifact test: PASS.
 - Full target suite: 251 passed.
 - `git diff --check`: PASS.
+
+## CDU-004B3
+
+- Explicit RESULT / BLOCKER / OPERATOR_DECISION markers: targeted automated PASS.
+- Conservative blocker and operator-decision phrase fallback: targeted automated PASS.
+- Normal completed response defaults to RESULT: targeted automated PASS.
+- Attention kind and reason persist in SQLite: targeted automated PASS.
+- Review counts grouped by attention kind: targeted automated PASS.
+- Full Qt regression suite: required in the project Conda environment because PySide6 is unavailable in the packaging environment.
+- Live verification must demonstrate one result, one blocker and one operator-decision response without modal noise during internal transitions.

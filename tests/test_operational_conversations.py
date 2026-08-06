@@ -144,3 +144,27 @@ def test_operational_lifecycle_timestamps_are_persisted() -> None:
     assert closed is not None
     assert closed.result_ready_at == ready.result_ready_at
     assert closed.closed_at is not None
+
+
+def test_operational_attention_is_persisted_and_counted() -> None:
+    store = SQLiteStateStore()
+    store.create_operational_conversation(
+        conversation_id="chain-attention",
+        source_request_id="source-attention",
+        title="Needs decision",
+        participants=("project", "console-development"),
+    )
+    store.update_operational_attention(
+        "chain-attention",
+        attention_kind="OPERATOR_DECISION",
+        attention_reason="Repository write approval required.",
+    )
+    store.update_operational_conversation_status(
+        "chain-attention", "AWAITING_OPERATOR_DECISION"
+    )
+
+    record = store.load_operational_conversation("chain-attention")
+    assert record is not None
+    assert record.attention_kind == "OPERATOR_DECISION"
+    assert record.attention_reason == "Repository write approval required."
+    assert store.count_operational_attention() == {"OPERATOR_DECISION": 1}

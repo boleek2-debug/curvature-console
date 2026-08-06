@@ -74,6 +74,8 @@ class OperationalConversationRecord:
     result_ready_at: str | None
     closed_at: str | None
     round_count: int
+    attention_kind: str | None
+    attention_reason: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -698,6 +700,7 @@ class SQLiteStateStore:
                     "UPDATE operational_conversation "
                     "SET status = 'RUNNING', updated_at = ?, "
                     "result_ready_at = NULL, closed_at = NULL, "
+                    "attention_kind = NULL, attention_reason = NULL, "
                     "round_count = round_count + 1 "
                     "WHERE conversation_id = ?",
                     (timestamp, conversation_id),
@@ -707,6 +710,7 @@ class SQLiteStateStore:
                     "UPDATE operational_conversation "
                     "SET title = ?, status = 'RUNNING', updated_at = ?, "
                     "result_ready_at = NULL, closed_at = NULL, "
+                    "attention_kind = NULL, attention_reason = NULL, "
                     "round_count = round_count + 1 "
                     "WHERE conversation_id = ?",
                     (title, timestamp, conversation_id),
@@ -774,6 +778,35 @@ class SQLiteStateStore:
                 (status, timestamp, result_ready_at, closed_at, conversation_id),
             )
 
+    def update_operational_attention(
+        self,
+        conversation_id: str,
+        *,
+        attention_kind: str | None,
+        attention_reason: str | None,
+    ) -> None:
+        """Persist why a completed conversation needs operator attention."""
+
+        timestamp = datetime.now(UTC).isoformat()
+        with self._connection:
+            self._connection.execute(
+                "UPDATE operational_conversation "
+                "SET attention_kind = ?, attention_reason = ?, updated_at = ? "
+                "WHERE conversation_id = ?",
+                (attention_kind, attention_reason, timestamp, conversation_id),
+            )
+
+    def count_operational_attention(self) -> dict[str, int]:
+        """Return review counts grouped by operator-attention classification."""
+
+        rows = self._connection.execute(
+            "SELECT COALESCE(attention_kind, 'RESULT') AS kind, COUNT(*) AS count "
+            "FROM operational_conversation "
+            "WHERE status IN ('RESULT_READY', 'BLOCKED', "
+            "'AWAITING_OPERATOR_DECISION') GROUP BY kind"
+        ).fetchall()
+        return {str(row["kind"]): int(row["count"]) for row in rows}
+
     def load_operational_conversation(
         self, conversation_id: str
     ) -> OperationalConversationRecord | None:
@@ -832,6 +865,8 @@ class SQLiteStateStore:
             result_ready_at=row["result_ready_at"],
             closed_at=row["closed_at"],
             round_count=int(row["round_count"]),
+            attention_kind=row["attention_kind"],
+            attention_reason=row["attention_reason"],
         )
 
     def _initialize_schema(self) -> None:
@@ -960,7 +995,9 @@ class SQLiteStateStore:
                     updated_at TEXT NOT NULL,
                     result_ready_at TEXT,
                     closed_at TEXT,
-                    round_count INTEGER NOT NULL DEFAULT 1
+                    round_count INTEGER NOT NULL DEFAULT 1,
+                    attention_kind TEXT,
+                    attention_reason TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS operational_conversation_message (
@@ -1006,6 +1043,8 @@ class SQLiteStateStore:
             ("result_ready_at", "TEXT"),
             ("closed_at", "TEXT"),
             ("round_count", "INTEGER NOT NULL DEFAULT 1"),
+            ("attention_kind", "TEXT"),
+            ("attention_reason", "TEXT"),
         )
         with self._connection:
             for name, declaration in additions:

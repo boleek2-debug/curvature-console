@@ -152,8 +152,12 @@ class OperationalConversationsDialog(QDialog):
             lifecycle += f" | Result: {record.result_ready_at}"
         if record.closed_at:
             lifecycle += f" | Closed: {record.closed_at}"
+        attention = (
+            f" [{record.attention_kind}]" if record.attention_kind else ""
+        )
         return (
-            f"[{record.status}] {record.title}\n{participants}\n{lifecycle}"
+            f"[{record.status}]{attention} {record.title}\n"
+            f"{participants}\n{lifecycle}"
         )
 
     def _show_selected_conversation(self, current: object, previous: object) -> None:
@@ -180,6 +184,10 @@ class OperationalConversationsDialog(QDialog):
             )
         if record.closed_at:
             lifecycle_lines.append(f"Closed: {record.closed_at}")
+        if record.attention_kind:
+            lifecycle_lines.append(f"Attention: {record.attention_kind}")
+        if record.attention_reason:
+            lifecycle_lines.append(f"Reason: {record.attention_reason}")
         self.summary_label.setText(
             f"{record.title}\nStatus: {record.status}\n"
             f"Participants: {participants}\n"
@@ -209,6 +217,14 @@ class OperationalConversationsDialog(QDialog):
         if record.closed_at:
             footer_lines.append(
                 f"<br>Conversation closed: {self._escape(record.closed_at)}"
+            )
+        if record.attention_kind:
+            footer_lines.append(
+                f"<br>Attention: <b>{self._escape(record.attention_kind)}</b>"
+            )
+        if record.attention_reason:
+            footer_lines.append(
+                f"<br>Reason: {self._escape(record.attention_reason)}"
             )
         footer_lines.append("</p><hr>")
         rendered.extend(footer_lines)

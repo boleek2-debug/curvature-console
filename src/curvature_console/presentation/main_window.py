@@ -34,6 +34,11 @@ from curvature_console.infrastructure.browser_bridge import (
     BrowserExchangeRequest,
     CapturedDownload,
 )
+from curvature_console.infrastructure.operational_attention import (
+    OperationalAttention,
+    classify_operational_attention,
+    status_for_attention,
+)
 from curvature_console.infrastructure.package_apply import PackageApplier
 from curvature_console.infrastructure.package_review import (
     PackageReviewError,
@@ -315,10 +320,19 @@ class MainWindow(QMainWindow):
             self._refresh_operational_review_button()
 
     def _refresh_operational_review_button(self) -> None:
-        count = self.state_store.count_operational_reviews()
+        counts = self.state_store.count_operational_attention()
+        total = sum(counts.values())
         label = "Operational Conversations"
-        if count:
-            label += f" ({count})"
+        if total:
+            parts = []
+            for key, short in (
+                ("OPERATOR_DECISION", "decision"),
+                ("BLOCKER", "blocker"),
+                ("RESULT", "result"),
+            ):
+                if counts.get(key):
+                    parts.append(f"{counts[key]} {short}")
+            label += " (" + ", ".join(parts) + ")"
         self.operational_conversations_button.setText(label)
 
     def _refresh_open_operational_dialog(self) -> None:
@@ -448,6 +462,31 @@ class MainWindow(QMainWindow):
             f"Operator {action.lower()} queued for {source_department_id}"
         )
         self._enqueue_browser_worker(worker)
+
+    def _finalize_operational_conversation(
+        self, conversation_id: str, response_text: str
+    ) -> OperationalAttention:
+        """Classify a completed response and expose only meaningful attention."""
+
+        attention = classify_operational_attention(response_text)
+        self.state_store.update_operational_attention(
+            conversation_id,
+            attention_kind=attention.kind.value,
+            attention_reason=attention.reason,
+        )
+        self.state_store.update_operational_conversation_status(
+            conversation_id, status_for_attention(attention)
+        )
+        self._refresh_open_operational_dialog()
+        labels = {
+            "RESULT": "Result ready",
+            "BLOCKER": "Blocker requires attention",
+            "OPERATOR_DECISION": "Operator decision required",
+        }
+        self.statusBar().showMessage(
+            f"{labels[attention.kind.value]} — open Operational Conversations"
+        )
+        return attention
 
     def open_support_unit(self) -> None:
         """Open the Console Development Unit workspace and dedicated chat."""
@@ -1706,13 +1745,15 @@ class MainWindow(QMainWindow):
                 body=response_text,
             )
             parsed_followups = parse_console_requests(response_text)
-            followup_status = (
-                "RUNNING" if parsed_followups.requests else "RESULT_READY"
-            )
-            self.state_store.update_operational_conversation_status(
-                pending.operational_conversation_id, followup_status
-            )
-            self._refresh_open_operational_dialog()
+            if parsed_followups.requests:
+                self.state_store.update_operational_conversation_status(
+                    pending.operational_conversation_id, "RUNNING"
+                )
+                self._refresh_open_operational_dialog()
+            else:
+                self._finalize_operational_conversation(
+                    pending.operational_conversation_id, response_text
+                )
         captured_handoffs, handoff_errors = (
             self._capture_department_handoff_proposals(
                 pending,
@@ -1731,13 +1772,15 @@ class MainWindow(QMainWindow):
                 author_department_id=department_id,
                 body=response_text,
             )
-            final_status = (
-                "RUNNING" if captured_console_requests else "RESULT_READY"
-            )
-            self.state_store.update_operational_conversation_status(
-                pending.operational_conversation_id, final_status
-            )
-            self._refresh_open_operational_dialog()
+            if captured_console_requests:
+                self.state_store.update_operational_conversation_status(
+                    pending.operational_conversation_id, "RUNNING"
+                )
+                self._refresh_open_operational_dialog()
+            else:
+                self._finalize_operational_conversation(
+                    pending.operational_conversation_id, response_text
+                )
 
         captured_downloads = tuple(downloaded_files)
         self.state_store.save_generated_downloads(
@@ -1836,13 +1879,15 @@ class MainWindow(QMainWindow):
                 body=response_text,
             )
             parsed_followups = parse_console_requests(response_text)
-            followup_status = (
-                "RUNNING" if parsed_followups.requests else "RESULT_READY"
-            )
-            self.state_store.update_operational_conversation_status(
-                pending.operational_conversation_id, followup_status
-            )
-            self._refresh_open_operational_dialog()
+            if parsed_followups.requests:
+                self.state_store.update_operational_conversation_status(
+                    pending.operational_conversation_id, "RUNNING"
+                )
+                self._refresh_open_operational_dialog()
+            else:
+                self._finalize_operational_conversation(
+                    pending.operational_conversation_id, response_text
+                )
         captured_handoffs, handoff_errors = (
             self._capture_department_handoff_proposals(
                 pending,

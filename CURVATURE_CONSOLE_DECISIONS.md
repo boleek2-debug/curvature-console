@@ -74,3 +74,7 @@ A stable logical artifact filename must not be reused as the browser transport i
 Accepted: 2026-08-05
 
 Durable operational conversations and Operator Review are the approved execution model for automatic CDU collaboration. Accept closes a result without another exchange. Ask / Continue and Reject resume the same operator-visible conversation and source task. Artifact-producing rounds must use exact assistant-turn scoping and unique transport identities, with Console-observed bytes and hashes treated as authoritative. The implementation is accepted after 251 passing tests and successful live Accept, Ask / Continue and Reject verification.
+
+## 2026-08-05 — Classify attention, not transport noise
+
+Decision: operational conversations expose operator attention only when a completed response is a result, a blocker or an operator decision. Internal interdepartmental routing and progress transitions remain non-modal. Classification is persisted with a human-readable reason, and explicit workflow markers override heuristic phrase detection.

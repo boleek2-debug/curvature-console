@@ -129,3 +129,13 @@ Prepared:
 - Console verified actual byte counts and SHA-256 values before returning results to Core.
 - Stage-two and rejected-result replacement artifacts were physically captured and verified.
 - CDU-004B1, CDU-004B2, CDU-004B2A, CDU-004B2B and CDU-004B2C are closed.
+
+## 2026-08-05 — CDU-004B3 attention classification and meaningful notifications
+
+- Added automatic classification of completed operational conversations as RESULT, BLOCKER or OPERATOR_DECISION.
+- Explicit workflow markers take precedence; conservative blocker and decision phrases are used as fallback.
+- Persisted the attention class and reason with each operational conversation.
+- Operational Conversations now displays the classification and its reason.
+- Toolbar review counts are grouped by decision, blocker and result instead of one undifferentiated number.
+- Internal department-to-department transitions remain non-modal; only completed results, blockers and operator decisions surface as operator attention.
+- Added persistence and classifier regression coverage.

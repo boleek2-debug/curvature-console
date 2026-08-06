@@ -107,3 +107,14 @@ The durable Operator Review workflow is validated and closed for CDU escalation:
 - Only Console-observed file bytes, size and SHA-256 may establish successful output.
 
 The next workflow extension is automatic decision/blocker classification and meaningful final notifications.
+
+
+## Operator attention classification
+
+A completed operational conversation is classified into exactly one operator-attention type:
+
+- `RESULT`: work completed and ready for review; lifecycle status `RESULT_READY`.
+- `BLOCKER`: work cannot continue without resolving a concrete blocker; lifecycle status `BLOCKED`.
+- `OPERATOR_DECISION`: a controlled decision or approval is required; lifecycle status `AWAITING_OPERATOR_DECISION`.
+
+Explicit workflow-state markers are authoritative. Conservative textual markers are a fallback, and an otherwise completed response defaults to `RESULT`. The classification and reason are persisted with the conversation and displayed in Operator Review. Internal routing, automatic CDU exchanges and intermediate progress do not create modal operator notifications.
