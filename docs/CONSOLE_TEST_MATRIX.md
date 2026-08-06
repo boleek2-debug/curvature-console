@@ -139,4 +139,9 @@ Future milestones must add regression and live coverage for durable operational 
 - target artifacts are returned with observed size and SHA-256 metadata;
 - six-hop safety limit terminates in OPERATOR_DECISION rather than looping;
 - targeted non-Qt tests: PASS in packaging environment;
-- full Qt regression suite and live Project ↔ Core, Project ↔ Research and Core ↔ Research verification: required before closure.
+- full target-environment regression suite: 260 tests PASS;
+- live Project → Core → Project: PASS;
+- live Project → Research → Project: PASS;
+- live Core → Research → Core: PASS;
+- final status and attention classification for all three representative routes: RESULT_READY / RESULT;
+- CDU-004B4 closure: PASS.

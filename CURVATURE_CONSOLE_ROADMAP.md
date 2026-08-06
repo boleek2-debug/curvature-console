@@ -56,7 +56,7 @@ Delivered logical artifact deduplication, bounded corrective escalation, automat
 - CDU-004B1: durable operational conversation records, transcript capture and review surface — closed after full validation and live restart evidence.
 - CDU-004B2: Accept, Reject and Ask/Continue actions on the same conversation.
 - CDU-004B3: automatic decision/blocker classification and meaningful final notifications.
-- CDU-004B4: generalise operational conversations beyond automatic CDU escalation to Project, Core and Research collaboration — implemented for automated and live validation.
+- CDU-004B4: generalise operational conversations beyond automatic CDU escalation to Project, Core and Research collaboration — closed after 260 automated tests and live Project ↔ Core, Project ↔ Research and Core ↔ Research verification.
 ### CDU-004B2 — Operator Review — closed
 - Accept, Reject and Ask / Continue in the durable conversation review surface.
 - Persisted operator comments and review states.

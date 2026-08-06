@@ -14,7 +14,7 @@ Last Updated: 2026-08-06
 - returned generated target artifacts to the requesting department with Console-observed size and SHA-256 metadata;
 - retained supervised handoff proposals as a separate operator-approved workflow;
 - added a six-hop safety limit and operator stop instead of an autonomous loop;
-- added parser and all-pair regression coverage; full Qt and live verification remain required before closure.
+- added parser and all-pair regression coverage; full target-environment validation passed with 260 tests, and live Project → Core → Project, Project → Research → Project and Core → Research → Core routes all passed; CDU-004B4 is closed.
 
 ## 2026-08-06 — CDU-004B3 closure and thread-pressure handoff defect fix
 
