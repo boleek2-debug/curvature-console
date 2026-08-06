@@ -3,7 +3,7 @@
 Status: Active
 Version: 4.0.0
 Owner: Curvature Console Development Unit
-Last Updated: 2026-08-05
+Last Updated: 2026-08-06
 
 ## Completed foundation
 
@@ -83,11 +83,12 @@ Status: closed after full validation and live Ask/Continue plus Reject retests.
 
 ### CDU-004B3 — Attention classification and meaningful final notifications
 
-Status: implemented for target validation and live verification.
+Status: closed after full validation and live verification.
 
 - Classify completed operational responses as RESULT, BLOCKER or OPERATOR_DECISION.
 - Persist the classification and explanation.
 - Map classification to RESULT_READY, BLOCKED or AWAITING_OPERATOR_DECISION.
 - Group toolbar review counts by attention type.
 - Keep internal routing and progress transitions non-modal.
-- Require target-environment full regression and live examples of all three classes before closure.
+- Target-environment full regression and live examples of all three classes passed.
+- Follow-up defect fixed: successful Thread Handoff now starts a fresh pressure epoch while preserving cumulative Reply Viewer history.

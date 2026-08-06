@@ -115,6 +115,7 @@ class PendingBrowserExchange:
     operational_conversation_id: str | None = None
     operational_operator_followup: bool = False
     artifact_transport_names: tuple[ArtifactTransportName, ...] = ()
+    creates_new_thread: bool = False
 
 
 class MainWindow(QMainWindow):
@@ -1575,6 +1576,9 @@ class MainWindow(QMainWindow):
             request_id=request_id,
             department_id=department_id,
             user_task=panel.input_editor.toPlainText(),
+            creates_new_thread=(
+                package.mode is TransferPackageMode.THREAD_HANDOFF
+            ),
         )
         self._pending_exchanges[request_id] = pending
         self._set_browser_operation_busy(True, department_id)
@@ -1734,7 +1738,13 @@ class MainWindow(QMainWindow):
                 )
             return
         panel = self.department_panels[department_id]
-        panel.append_browser_exchange(pending.user_task, response_text)
+        if pending.creates_new_thread:
+            panel.start_new_thread_exchange(
+                pending.user_task,
+                response_text,
+            )
+        else:
+            panel.append_browser_exchange(pending.user_task, response_text)
         if (
             pending.operational_operator_followup
             and pending.operational_conversation_id

@@ -265,7 +265,7 @@ class DepartmentPanel(QFrame):
         """Refresh this department's independent local pressure estimate."""
 
         snapshot = self.thread_pressure_estimator.estimate(
-            conversation_text=self._conversation_history_text,
+            conversation_text=self._active_thread_conversation_text(),
             draft_text=self.input_editor.toPlainText(),
             attachment_paths=(
                 record.path for record in self.attachment_list.records
@@ -408,12 +408,37 @@ class DepartmentPanel(QFrame):
         self._update_thread_pressure()
 
     def start_new_thread_exchange(self, user_task: str, assistant_response: str) -> None:
-        self._conversation_history_text="\n\n".join(["=== NEW THREAD AFTER HANDOFF ===","=== USER TASK ===",
-            user_task.strip() or "[No current task draft]","=== ASSISTANT RESPONSE ===",assistant_response])
-        self._reply_count = 1
-        self._last_read_reply_count = 0
+        """Append a successful handoff while starting a fresh pressure epoch.
+
+        Reply history remains cumulative for operator review. Thread pressure,
+        however, is calculated only from the latest handoff marker onward.
+        """
+
+        sections = [
+            self._conversation_history_text.rstrip(),
+            "=== NEW THREAD AFTER HANDOFF ===",
+            "=== USER TASK ===",
+            user_task.strip() or "[No current task draft]",
+            "=== ASSISTANT RESPONSE ===",
+            assistant_response,
+        ]
+        self._conversation_history_text = "\n\n".join(
+            value for value in sections if value != ""
+        )
+        self._reply_count = self._conversation_history_text.count(
+            "=== ASSISTANT RESPONSE ==="
+        )
         self._refresh_reply_button()
         self._update_thread_pressure()
+
+    def _active_thread_conversation_text(self) -> str:
+        """Return only the transcript belonging to the active ChatGPT thread."""
+
+        marker = "=== NEW THREAD AFTER HANDOFF ==="
+        if marker not in self._conversation_history_text:
+            return self._conversation_history_text
+        _, _, active_text = self._conversation_history_text.rpartition(marker)
+        return marker + active_text
 
     @property
     def last_read_reply_count(self) -> int:

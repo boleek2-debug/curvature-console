@@ -118,3 +118,7 @@ A completed operational conversation is classified into exactly one operator-att
 - `OPERATOR_DECISION`: a controlled decision or approval is required; lifecycle status `AWAITING_OPERATOR_DECISION`.
 
 Explicit workflow-state markers are authoritative. Conservative textual markers are a fallback, and an otherwise completed response defaults to `RESULT`. The classification and reason are persisted with the conversation and displayed in Operator Review. Internal routing, automatic CDU exchanges and intermediate progress do not create modal operator notifications.
+
+## Thread Handoff and local pressure epochs
+
+A successful Thread Handoff changes the active ChatGPT conversation route and starts a new local pressure epoch. The full Reply Viewer transcript remains cumulative for operator history. Console appends an explicit `=== NEW THREAD AFTER HANDOFF ===` marker and calculates Thread Pressure only from the latest marker onward. Because the marker is stored in the normal persisted transcript, restart does not reconnect pressure to the replaced thread.

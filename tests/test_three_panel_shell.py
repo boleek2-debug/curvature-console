@@ -157,3 +157,28 @@ def test_abort_button_only_visible_while_browser_is_busy(window: MainWindow) -> 
     assert panel.abort_button.isEnabled()
     panel.set_browser_busy(False)
     assert panel.abort_button.isHidden()
+
+
+def test_successful_handoff_resets_pressure_but_preserves_reply_history(
+    window: MainWindow,
+) -> None:
+    core = window.department_panels["core"]
+    estimator = core.thread_pressure_estimator
+    old_reply_count = 123
+    old_transcript = "\n\n".join(
+        [
+            "=== USER TASK ===\nOld task\n=== ASSISTANT RESPONSE ===\nOld reply"
+            for _ in range(old_reply_count)
+        ]
+    ) + ("x" * (estimator.AMBER_THRESHOLD * 4))
+    core.restore_conversation_text(old_transcript)
+
+    assert "AMBER" in core.thread_pressure_label.text()
+    assert core.view_replies_button.text().startswith("View Replies (123)")
+
+    core.start_new_thread_exchange("Fresh handoff", "Fresh reply")
+
+    assert "GREEN" in core.thread_pressure_label.text()
+    assert core.view_replies_button.text().startswith("View Replies (124)")
+    assert old_transcript in core.conversation_text()
+    assert "=== NEW THREAD AFTER HANDOFF ===" in core.conversation_text()

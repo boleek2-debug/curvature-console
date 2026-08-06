@@ -456,3 +456,47 @@ def test_browser_success_persists_and_displays_generated_files(
         is False
     )
     window.close()
+
+
+def test_thread_handoff_success_starts_fresh_pressure_epoch_and_keeps_history(
+    tmp_path,
+) -> None:
+    create_application(["curvature-console-handoff-pressure-reset-test"])
+    window = MainWindow(
+        state_path=tmp_path / "state.sqlite3",
+        data_directory=tmp_path / "data",
+    )
+    panel = window.department_panels["core"]
+    estimator = panel.thread_pressure_estimator
+    panel.restore_conversation_text(
+        "=== USER TASK ===\nOld\n=== ASSISTANT RESPONSE ===\nOld reply\n"
+        + ("x" * (estimator.AMBER_THRESHOLD * 4))
+    )
+    assert "AMBER" in panel.thread_pressure_label.text()
+
+    request_id = "handoff-pressure-reset"
+    from curvature_console.presentation.main_window import PendingBrowserExchange
+    window._pending_exchanges[request_id] = PendingBrowserExchange(
+        request_id=request_id,
+        department_id="core",
+        user_task="Thread handoff package",
+        creates_new_thread=True,
+    )
+
+    window._handle_browser_success(
+        request_id,
+        "core",
+        "Curvature",
+        "https://chatgpt.com/g/g-p-curvature/project",
+        "https://chatgpt.com/c/new-core-thread",
+        "Continuity accepted.",
+        (),
+    )
+
+    assert "GREEN" in panel.thread_pressure_label.text()
+    assert panel.view_replies_button.text().startswith("View Replies (2)")
+    assert "=== NEW THREAD AFTER HANDOFF ===" in panel.conversation_text()
+    persisted = window.state_store.load_department_state("core")
+    assert persisted is not None
+    assert "=== NEW THREAD AFTER HANDOFF ===" in persisted.conversation_text
+    window.close()

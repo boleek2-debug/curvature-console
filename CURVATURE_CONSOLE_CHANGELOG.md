@@ -3,7 +3,17 @@
 Status: Active
 Version: 2.0.0
 Owner: Curvature Console Development Unit
-Last Updated: 2026-08-05
+Last Updated: 2026-08-06
+
+
+## 2026-08-06 — CDU-004B3 closure and thread-pressure handoff defect fix
+
+- closed CDU-004B3 after 255 automated tests and live RESULT, BLOCKER and OPERATOR_DECISION verification;
+- fixed Thread Pressure remaining bound to the pre-handoff transcript after a successful Thread Handoff;
+- preserved cumulative Reply Viewer history across handoffs;
+- added an explicit new-thread transcript marker so pressure is calculated only from the active thread epoch;
+- persisted the marker in the normal department transcript so restart continuity keeps the reset;
+- added regression coverage for direct panel behavior and Browser Bridge handoff success.
 
 ## 2026-08-04 — CDU-001A / CDU-001A1
 

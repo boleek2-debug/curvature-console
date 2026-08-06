@@ -121,3 +121,11 @@ Future milestones must add regression and live coverage for durable operational 
 - Review counts grouped by attention kind: targeted automated PASS.
 - Full Qt regression suite: required in the project Conda environment because PySide6 is unavailable in the packaging environment.
 - Live verification must demonstrate one result, one blocker and one operator-decision response without modal noise during internal transitions.
+
+## Thread Handoff pressure reset regression
+
+- successful Thread Handoff preserves cumulative reply history;
+- a new-thread marker is appended to the persisted transcript;
+- Thread Pressure uses only the transcript after the latest marker;
+- restart continuity preserves the fresh pressure epoch;
+- normal non-handoff replies continue to accumulate pressure in the active epoch.
