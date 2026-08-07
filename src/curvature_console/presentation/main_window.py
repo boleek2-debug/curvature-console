@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 from hashlib import sha256
+import logging
 from pathlib import Path
 from uuid import uuid4
 
@@ -103,6 +104,9 @@ from curvature_console.presentation.support_unit_dialog import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 @dataclass(frozen=True, slots=True)
 class PendingBrowserExchange:
     """UI state belonging to exactly one immutable browser request."""
@@ -196,6 +200,13 @@ class MainWindow(QMainWindow):
             backup_root=self.data_directory / "package-backups",
         )
         self.state_store = SQLiteStateStore(state_path)
+        recovered_operational_count = (
+            self.state_store.recover_interrupted_operational_conversations()
+        )
+        logger.info(
+            "operational_recovery_complete recovered_count=%s statuses=RUNNING,WAITING_SOURCE",
+            recovered_operational_count,
+        )
         self._bootstrap_chat_routes()
         self.context_loader = WorkspaceContextLoader()
         self.transfer_package_builder = TransferPackageBuilder()
@@ -339,13 +350,15 @@ class MainWindow(QMainWindow):
         label = "Operational Conversations"
         if total:
             parts = []
-            for key, short in (
-                ("OPERATOR_DECISION", "decision"),
-                ("BLOCKER", "blocker"),
-                ("RESULT", "result"),
+            for key, singular, plural in (
+                ("OPERATOR_DECISION", "decision", "decisions"),
+                ("BLOCKER", "blocker", "blockers"),
+                ("RESULT", "result", "results"),
             ):
-                if counts.get(key):
-                    parts.append(f"{counts[key]} {short}")
+                count = counts.get(key, 0)
+                if count:
+                    noun = singular if count == 1 else plural
+                    parts.append(f"{count} {noun}")
             label += " (" + ", ".join(parts) + ")"
         self.operational_conversations_button.setText(label)
 
@@ -357,42 +370,120 @@ class MainWindow(QMainWindow):
 
 
     def _handle_operational_review_action(
-        self, conversation_id: str, action: str, comment: str
+        self,
+        conversation_id: str,
+        action: str,
+        comment: str,
+        selected_option: str,
     ) -> None:
-        """Persist an operator decision and continue only when requested."""
+        """Persist one operator choice and execute its explicit action type."""
 
         record = self.state_store.load_operational_conversation(conversation_id)
         if record is None:
-            self.statusBar().showMessage("Operational conversation no longer exists.")
+            self.statusBar().showMessage(
+                "Operational conversation no longer exists."
+            )
             return
         action = action.upper().strip()
-        if action not in {"ACCEPT", "REJECT", "ASK"}:
+        if action not in {"CONFIRM", "ACCEPT", "RETURN", "ASK", "ABANDON"}:
             self.statusBar().showMessage("Unsupported operator review action.")
             return
         clean_comment = comment.strip()
-        if action in {"REJECT", "ASK"} and not clean_comment:
+        selected_option = selected_option.strip()
+        pending_decision = (
+            record.status == "AWAITING_OPERATOR_DECISION"
+            and record.decision_status == "PENDING"
+        )
+        if pending_decision and action != "CONFIRM":
             self.statusBar().showMessage(
-                "Reject and Ask / Continue require an operator comment."
+                "Choose one decision option and use Confirm decision."
+            )
+            return
+        if not pending_decision and action == "CONFIRM":
+            self.statusBar().showMessage(
+                "Confirm decision is available only for a pending decision."
+            )
+            return
+        if action in {"RETURN", "ASK", "ABANDON"} and not clean_comment:
+            self.statusBar().showMessage(
+                "Return to source, Request clarification / continue, and Close as abandoned require an operator comment."
             )
             return
 
+        selected_action_type = ""
+        if pending_decision:
+            if not selected_option or selected_option not in record.decision_options:
+                self.statusBar().showMessage(
+                    "Select one available option before confirming the decision."
+                )
+                return
+            option_index = record.decision_options.index(selected_option)
+            if option_index >= len(record.decision_action_types):
+                self.statusBar().showMessage(
+                    "The selected option has no executable decision action."
+                )
+                return
+            selected_action_type = record.decision_action_types[option_index]
+            supported = {
+                "APPROVE",
+                "REJECT",
+                "REVISE",
+                "LIMITED_APPROVAL",
+                "REQUEST_NON_MUTATING_PREVIEW",
+            }
+            if selected_action_type not in supported:
+                self.statusBar().showMessage(
+                    "The selected decision action type is unsupported."
+                )
+                return
+
         labels = {
-            "ACCEPT": "Accepted by operator",
-            "REJECT": "Rejected by operator",
-            "ASK": "Operator asked for continuation",
+            "CONFIRM": "Decision confirmed by operator",
+            "ACCEPT": "Closed as accepted by operator",
+            "RETURN": "Returned to source by operator",
+            "ASK": "Operator requested clarification or continuation",
+            "ABANDON": "Closed as abandoned by operator",
         }
         body = labels[action]
+        if selected_option:
+            body += f"\nSelected option: {selected_option}"
+        if selected_action_type:
+            body += f"\nDecision action: {selected_action_type}"
         if clean_comment:
             body += f"\n\n{clean_comment}"
+        logger.info(
+            "operator_action_submitted conversation_id=%s action=%s "
+            "selected_option=%r selected_action_type=%s comment_present=%s "
+            "source_department=%s target_department=%s",
+            conversation_id,
+            action,
+            selected_option,
+            selected_action_type or "-",
+            bool(clean_comment),
+            record.blocked_source_department_id
+            or (record.participants[0] if record.participants else "-"),
+            record.blocked_target_department_id
+            or (record.participants[1] if len(record.participants) > 1 else "-"),
+        )
         self.state_store.append_operational_message(
             conversation_id=conversation_id,
             author_department_id="operator",
             body=body,
         )
+        logger.info(
+            "operator_action_persisted conversation_id=%s action=%s",
+            conversation_id,
+            action,
+        )
 
-        if action == "ACCEPT":
+        if not pending_decision and action == "ACCEPT":
             self.state_store.update_operational_conversation_status(
                 conversation_id, "ACCEPTED"
+            )
+            logger.info(
+                "operator_action_closed_without_resume conversation_id=%s "
+                "action=ACCEPT final_status=ACCEPTED",
+                conversation_id,
             )
             self._refresh_open_operational_dialog()
             self.statusBar().showMessage(
@@ -400,13 +491,45 @@ class MainWindow(QMainWindow):
             )
             return
 
-        source_department_id = next(
-            (
-                participant
-                for participant in record.participants
-                if participant != "console-development"
-            ),
-            None,
+        if not pending_decision and action == "ABANDON":
+            self.state_store.update_operational_conversation_status(
+                conversation_id, "CANCELLED"
+            )
+            logger.info(
+                "operator_action_closed_without_resume conversation_id=%s "
+                "action=ABANDON final_status=CANCELLED",
+                conversation_id,
+            )
+            self._refresh_open_operational_dialog()
+            self.statusBar().showMessage(
+                f"Operational conversation closed as abandoned: {record.title}"
+            )
+            return
+
+        if pending_decision and selected_action_type == "REJECT":
+            self.state_store.resolve_operational_decision(
+                conversation_id,
+                status="REJECTED",
+                selected_option=selected_option,
+                selected_action_type=selected_action_type,
+            )
+            self.state_store.update_operational_conversation_status(
+                conversation_id, "REJECTED"
+            )
+            logger.info(
+                "operator_action_closed_without_resume conversation_id=%s "
+                "action=CONFIRM decision_action=REJECT final_status=REJECTED",
+                conversation_id,
+            )
+            self._refresh_open_operational_dialog()
+            self.statusBar().showMessage(
+                f"Operator rejected gated action: {record.title}"
+            )
+            return
+
+        source_department_id = (
+            record.blocked_source_department_id
+            or (record.participants[0] if record.participants else None)
         )
         if source_department_id is None:
             self.state_store.update_operational_conversation_status(
@@ -429,17 +552,85 @@ class MainWindow(QMainWindow):
             )
             return
 
+        if pending_decision:
+            revision_actions = {"REVISE", "REQUEST_NON_MUTATING_PREVIEW"}
+            resolution_status = (
+                "REVISION_REQUESTED"
+                if selected_action_type in revision_actions
+                else "APPROVED"
+            )
+            self.state_store.resolve_operational_decision(
+                conversation_id,
+                status=resolution_status,
+                selected_option=selected_option,
+                selected_action_type=selected_action_type,
+            )
+            heading = "# OPERATOR DECISION RESOLVED"
+            decision_context = (
+                f"Decision domain: {record.decision_domain or 'UNKNOWN'}\n"
+                f"Operator question: {record.decision_question or ''}\n"
+                f"Selected option: {selected_option}\n"
+                f"Decision action type: {selected_action_type}\n"
+                f"Original gated request:\n{record.blocked_request_body or ''}"
+            )
+            if selected_action_type == "REQUEST_NON_MUTATING_PREVIEW":
+                instruction_text = (
+                    "Return to the original source task in the same operational "
+                    "conversation. Do not commit, push, merge, install, purchase, "
+                    "or perform any other blocked mutation. Run only the safe "
+                    "validation available for the proposed repository change and "
+                    "prepare a reviewable patch/diff, affected-file list, validation "
+                    "result, proposed commit message, and proposed push target. "
+                    "Return the preview as RESULT_READY for a new operator decision."
+                )
+            elif selected_action_type == "REVISE":
+                instruction_text = (
+                    "Return to the original source task in the same operational "
+                    "conversation and provide the revised proposal requested by "
+                    "the selected option. Do not execute the blocked action."
+                )
+            else:
+                instruction_text = (
+                    "Continue the original source task in the same operational "
+                    "conversation. Treat the selected operator option as "
+                    "authoritative and bounded. Do not reinterpret it as "
+                    "permission for any broader action."
+                )
+        else:
+            heading = "# OPERATOR REVIEW CONTINUATION"
+            decision_context = ""
+            if action == "RETURN":
+                instruction_text = (
+                    "The operator returned this result to the source department. "
+                    "Address the operator comment and return a corrected result in "
+                    "the same operational conversation."
+                )
+            else:
+                instruction_text = (
+                    "Provide the clarification or continuation requested by the "
+                    "operator within the same source task and department authority. "
+                    "Do not create a new unrelated handoff."
+                )
+
         request_id = f"operator-review-{uuid4().hex}"
         instruction = (
             f"CURVATURE_REQUEST_ID: {request_id}\n"
             f"SOURCE_REQUEST_ID: {record.source_request_id}\n"
             f"OPERATIONAL_CONVERSATION_ID: {conversation_id}\n"
             f"OPERATOR_REVIEW_ACTION: {action}\n\n"
-            "# OPERATOR REVIEW CONTINUATION\n\n"
-            f"The operator has {labels[action].lower()} for the existing "
-            "operational conversation. Continue within the same source task and "
-            "department authority. Do not create a new unrelated handoff.\n\n"
-            f"## Operator comment\n{clean_comment}"
+            f"{heading}\n\n"
+            f"{instruction_text}\n\n"
+            f"{decision_context}\n\n"
+            f"## Operator comment\n{clean_comment or '- none'}"
+        )
+        logger.info(
+            "operator_resume_enqueued conversation_id=%s request_id=%s "
+            "resume_department=%s action=%s decision_action=%s",
+            conversation_id,
+            request_id,
+            source_department_id,
+            action,
+            selected_action_type or "-",
         )
         pending = PendingBrowserExchange(
             request_id=request_id,
@@ -473,7 +664,7 @@ class MainWindow(QMainWindow):
         worker.finished.connect(self._clear_browser_worker)
         self._refresh_open_operational_dialog()
         self.statusBar().showMessage(
-            f"Operator {action.lower()} queued for {source_department_id}"
+            f"Operator decision queued for {source_department_id}"
         )
         self._enqueue_browser_worker(worker)
 
@@ -1366,7 +1557,28 @@ class MainWindow(QMainWindow):
         )
         decision_gate = evaluate_operational_request_gate(request)
         if decision_gate is not None:
+            logger.info(
+                "operational_decision_gate_intercepted "
+                "conversation_id=%s source_department=%s target_department=%s "
+                "domain=%s title=%r",
+                conversation_id,
+                source_department_id,
+                target_department_id,
+                decision_gate.domain.value,
+                request.title,
+            )
             stop_text = render_operator_decision_stop(decision_gate)
+            self.state_store.save_operational_decision(
+                conversation_id,
+                domain=decision_gate.domain.value,
+                question=decision_gate.question,
+                options=decision_gate.options,
+                consequences=decision_gate.consequences,
+                action_types=decision_gate.action_types,
+                blocked_request_body=body,
+                source_department_id=source_department_id,
+                target_department_id=target_department_id,
+            )
             self.state_store.append_operational_message(
                 conversation_id=conversation_id,
                 author_department_id="system",

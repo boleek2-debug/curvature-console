@@ -6,6 +6,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
+    QComboBox,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -25,7 +26,7 @@ from curvature_console.infrastructure.state_store import (
 class OperationalConversationsDialog(QDialog):
     """Display transcripts and collect one operator review decision."""
 
-    review_action_requested = Signal(str, str, str)
+    review_action_requested = Signal(str, str, str, str)
 
     REVIEWABLE_STATUSES = {
         "RESULT_READY",
@@ -62,30 +63,51 @@ class OperationalConversationsDialog(QDialog):
         self.review_note = QTextEdit()
         self.review_note.setObjectName("operationalConversationReviewNote")
         self.review_note.setPlaceholderText(
-            "Optional for Accept. Required for Reject and Ask / Continue."
+            "Optional for a decision. Required for Return to source, Request clarification / continue, and Close as abandoned."
         )
         self.review_note.setMaximumHeight(110)
+
+        self.decision_option = QComboBox()
+        self.decision_option.setObjectName("operationalDecisionOption")
+        self.decision_option.setVisible(False)
+
+        self.confirm_decision_button = QPushButton("Confirm decision")
+        self.confirm_decision_button.setObjectName(
+            "confirmOperationalDecisionButton"
+        )
+        self.confirm_decision_button.setVisible(False)
+        self.confirm_decision_button.clicked.connect(
+            lambda: self._submit_review_action("CONFIRM")
+        )
 
         self.validation_label = QLabel("")
         self.validation_label.setObjectName("operationalConversationValidation")
         self.validation_label.setWordWrap(True)
 
-        self.accept_button = QPushButton("Accept")
+        self.accept_button = QPushButton("Close as accepted")
         self.accept_button.setObjectName("acceptOperationalConversationButton")
         self.accept_button.clicked.connect(
             lambda: self._submit_review_action("ACCEPT")
         )
 
-        self.reject_button = QPushButton("Reject")
+        self.reject_button = QPushButton("Return to source")
         self.reject_button.setObjectName("rejectOperationalConversationButton")
         self.reject_button.clicked.connect(
-            lambda: self._submit_review_action("REJECT")
+            lambda: self._submit_review_action("RETURN")
         )
 
-        self.ask_button = QPushButton("Ask / Continue")
+        self.ask_button = QPushButton("Request clarification / continue")
         self.ask_button.setObjectName("askOperationalConversationButton")
         self.ask_button.clicked.connect(
             lambda: self._submit_review_action("ASK")
+        )
+
+        self.abandon_button = QPushButton("Close as abandoned")
+        self.abandon_button.setObjectName(
+            "abandonOperationalConversationButton"
+        )
+        self.abandon_button.clicked.connect(
+            lambda: self._submit_review_action("ABANDON")
         )
 
         refresh_button = QPushButton("Refresh")
@@ -104,11 +126,19 @@ class OperationalConversationsDialog(QDialog):
         action_row.addWidget(self.accept_button)
         action_row.addWidget(self.reject_button)
         action_row.addWidget(self.ask_button)
+        action_row.addWidget(self.abandon_button)
 
         right = QVBoxLayout()
         right.addWidget(self.summary_label)
         right.addWidget(self.transcript, 1)
-        right.addWidget(QLabel("Operator comment or question"))
+        self.decision_option_label = QLabel("Decision option")
+        self.decision_option_label.setObjectName("operationalDecisionOptionLabel")
+        right.addWidget(self.decision_option_label)
+        right.addWidget(self.decision_option)
+        right.addWidget(self.confirm_decision_button)
+        self.review_note_label = QLabel("Operator comment or question")
+        self.review_note_label.setObjectName("operationalConversationReviewNoteLabel")
+        right.addWidget(self.review_note_label)
         right.addWidget(self.review_note)
         right.addWidget(self.validation_label)
         right.addLayout(action_row)
@@ -188,6 +218,16 @@ class OperationalConversationsDialog(QDialog):
             lifecycle_lines.append(f"Attention: {record.attention_kind}")
         if record.attention_reason:
             lifecycle_lines.append(f"Reason: {record.attention_reason}")
+        if record.decision_domain:
+            lifecycle_lines.append(f"Decision domain: {record.decision_domain}")
+        if record.decision_status:
+            lifecycle_lines.append(f"Decision status: {record.decision_status}")
+        if record.selected_option:
+            lifecycle_lines.append(f"Selected option: {record.selected_option}")
+        if record.selected_action_type:
+            lifecycle_lines.append(
+                f"Decision action: {record.selected_action_type}"
+            )
         self.summary_label.setText(
             f"{record.title}\nStatus: {record.status}\n"
             f"Participants: {participants}\n"
@@ -229,26 +269,66 @@ class OperationalConversationsDialog(QDialog):
         footer_lines.append("</p><hr>")
         rendered.extend(footer_lines)
         self.transcript.setHtml("\n".join(rendered))
-        self._set_review_enabled(record.status in self.REVIEWABLE_STATUSES)
+        self.decision_option.clear()
+        self.decision_option.addItems(record.decision_options)
+        pending_decision = (
+            record.status == "AWAITING_OPERATOR_DECISION"
+            and record.decision_status == "PENDING"
+            and bool(record.decision_options)
+        )
+        resolved_decision = (
+            bool(record.decision_status)
+            and record.decision_status != "PENDING"
+        )
+        ordinary_review = not pending_decision and not resolved_decision
+
+        self.decision_option_label.setVisible(pending_decision)
+        self.decision_option.setVisible(pending_decision)
+        self.confirm_decision_button.setVisible(pending_decision)
+        self.review_note_label.setVisible(pending_decision or ordinary_review)
+        self.review_note.setVisible(pending_decision or ordinary_review)
+        self.validation_label.setVisible(pending_decision or ordinary_review)
+        self.accept_button.setVisible(ordinary_review)
+        self.reject_button.setVisible(ordinary_review)
+        self.ask_button.setVisible(ordinary_review)
+        self.abandon_button.setVisible(ordinary_review)
+        self._set_review_enabled(
+            record.status in self.REVIEWABLE_STATUSES and not resolved_decision
+        )
 
     def _set_review_enabled(self, enabled: bool) -> None:
         self.review_note.setEnabled(enabled)
+        self.decision_option.setEnabled(enabled)
+        self.confirm_decision_button.setEnabled(enabled)
         self.accept_button.setEnabled(enabled)
         self.reject_button.setEnabled(enabled)
         self.ask_button.setEnabled(enabled)
+        self.abandon_button.setEnabled(enabled)
 
     def _submit_review_action(self, action: str) -> None:
         conversation_id = self._selected_conversation_id()
         if conversation_id is None:
             return
         comment = self.review_note.toPlainText().strip()
-        if action in {"REJECT", "ASK"} and not comment:
+        if action in {"RETURN", "ASK", "ABANDON"} and not comment:
             self.validation_label.setText(
-                "Reject and Ask / Continue require an operator comment."
+                "Return to source, Request clarification / continue, and Close as abandoned require an operator comment."
+            )
+            return
+        selected_option = (
+            self.decision_option.currentText().strip()
+            if self.decision_option.isVisible()
+            else ""
+        )
+        if action == "CONFIRM" and self.decision_option.isVisible() and not selected_option:
+            self.validation_label.setText(
+                "Select one available option before confirming the decision."
             )
             return
         self.validation_label.setText("Submitting operator review...")
-        self.review_action_requested.emit(conversation_id, action, comment)
+        self.review_action_requested.emit(
+            conversation_id, action, comment, selected_option
+        )
 
     @staticmethod
     def _escape(text: str) -> str:

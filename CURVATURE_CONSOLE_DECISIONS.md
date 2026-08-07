@@ -90,3 +90,22 @@ Safety boundary: one continuation request per existing conversation round and a 
 ## CDU-004B5 — decision-gate authority
 
 Operational routing may proceed autonomously only while the requested work remains within department authority and has no operator-owned consequence. Product direction, scope, canon, art direction, cost, installation, security-sensitive actions, shared repository mutation and unresolved cross-department conflict must stop before execution and request a structured operator decision with question, options and consequences.
+
+
+## CDU-004B6 — bounded decision resolution
+
+Accepted for validation: 2026-08-06
+
+A pending decision presents context-specific operator options and one Confirm decision action. Each option carries an explicit machine action type such as APPROVE, REJECT, REVISE, LIMITED_APPROVAL or REQUEST_NON_MUTATING_PREVIEW. The preview action is valid only for a concrete non-mutating repository path: run validation and prepare a patch/diff without commit or push. Console executes the selected action type without inferring intent from the label. Repository, installation, purchase and security operations remain delegated to the authorized source department; Console never performs them directly. Ordinary result review uses explicit consequence labels and keeps local closure separate from source-department continuation.
+
+## CDU-004B6 — ordinary review actions must describe consequences
+
+Accepted for validation: 2026-08-06
+
+Ordinary result review uses four distinct actions. Close as accepted and Close as abandoned are local terminal actions and must never start a department worker. Return to source starts a corrective round in the source department and requires an operator reason. Request clarification / continue starts a bounded source-department follow-up and requires an operator instruction. A recovered interrupted conversation may be closed as abandoned without asking the source department to confirm that it is dead. Every operator action must produce a causal runtime audit record before any worker is queued.
+
+## 2026-08-07 — CDU-004B6 closure decision
+
+Decision: close CDU-004B6 after 279 passing target-environment tests, clean `git diff --check`, and live evidence for bounded APPROVE/REJECT/REVISE/non-mutating-preview resolution, interrupted-work recovery, causal operator audit logging, Project-source pre-routing interception, revision-work routing, and revised-plan approval.
+
+Invariant: decision gates stop operator-owned decisions before target execution, but revision/preparation work that merely references an existing approved direction must route normally. Approval returns bounded authority to the source department; it does not itself execute implementation, repository mutation, installation, purchase, or security-sensitive work.

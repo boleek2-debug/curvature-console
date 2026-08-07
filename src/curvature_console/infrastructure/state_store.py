@@ -76,6 +76,18 @@ class OperationalConversationRecord:
     round_count: int
     attention_kind: str | None
     attention_reason: str | None
+    decision_domain: str | None
+    decision_question: str | None
+    decision_options: tuple[str, ...]
+    decision_consequences: tuple[str, ...]
+    decision_action_types: tuple[str, ...]
+    blocked_request_body: str | None
+    blocked_source_department_id: str | None
+    blocked_target_department_id: str | None
+    decision_status: str | None
+    selected_option: str | None
+    selected_action_type: str | None
+    resolved_at: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -765,7 +777,7 @@ class SQLiteStateStore:
         result_statuses = {
             "RESULT_READY", "BLOCKED", "AWAITING_OPERATOR_DECISION"
         }
-        closed_statuses = {"ACCEPTED", "CANCELLED", "FAILED"}
+        closed_statuses = {"ACCEPTED", "REJECTED", "CANCELLED", "FAILED"}
         result_ready_at = timestamp if status in result_statuses else None
         closed_at = timestamp if status in closed_statuses else None
         with self._connection:
@@ -796,6 +808,89 @@ class SQLiteStateStore:
                 (attention_kind, attention_reason, timestamp, conversation_id),
             )
 
+
+    def save_operational_decision(
+        self,
+        conversation_id: str,
+        *,
+        domain: str,
+        question: str,
+        options: Iterable[str],
+        consequences: Iterable[str],
+        action_types: Iterable[str],
+        blocked_request_body: str,
+        source_department_id: str,
+        target_department_id: str,
+    ) -> None:
+        """Persist the exact gated request needed for later operator resolution."""
+
+        timestamp = datetime.now(UTC).isoformat()
+        with self._connection:
+            self._connection.execute(
+                "UPDATE operational_conversation SET decision_domain = ?, "
+                "decision_question = ?, decision_options_json = ?, "
+                "decision_consequences_json = ?, decision_action_types_json = ?, "
+                "blocked_request_body = ?, "
+                "blocked_source_department_id = ?, "
+                "blocked_target_department_id = ?, decision_status = 'PENDING', "
+                "selected_option = NULL, selected_action_type = NULL, "
+                "resolved_at = NULL, updated_at = ? "
+                "WHERE conversation_id = ?",
+                (
+                    domain,
+                    question,
+                    json.dumps(tuple(options)),
+                    json.dumps(tuple(consequences)),
+                    json.dumps(tuple(action_types)),
+                    blocked_request_body,
+                    source_department_id,
+                    target_department_id,
+                    timestamp,
+                    conversation_id,
+                ),
+            )
+
+    def resolve_operational_decision(
+        self,
+        conversation_id: str,
+        *,
+        status: str,
+        selected_option: str | None,
+        selected_action_type: str | None = None,
+    ) -> None:
+        """Record one durable operator resolution for a gated request."""
+
+        timestamp = datetime.now(UTC).isoformat()
+        with self._connection:
+            self._connection.execute(
+                "UPDATE operational_conversation SET decision_status = ?, "
+                "selected_option = ?, selected_action_type = ?, "
+                "resolved_at = ?, updated_at = ? "
+                "WHERE conversation_id = ?",
+                (status, selected_option, selected_action_type, timestamp, timestamp, conversation_id),
+            )
+
+
+    def recover_interrupted_operational_conversations(self) -> int:
+        """Mark process-bound operational work as interrupted after restart."""
+
+        timestamp = datetime.now(UTC).isoformat()
+        reason = (
+            "The Console restarted while this operational conversation was active "
+            "or waiting for an in-process department return. No active worker can "
+            "still own it; operator review is required before retry."
+        )
+        with self._connection:
+            cursor = self._connection.execute(
+                "UPDATE operational_conversation "
+                "SET status = 'BLOCKED', updated_at = ?, "
+                "result_ready_at = COALESCE(result_ready_at, ?), "
+                "attention_kind = 'BLOCKER', attention_reason = ? "
+                "WHERE status IN ('RUNNING', 'WAITING_SOURCE')",
+                (timestamp, timestamp, reason),
+            )
+        return int(cursor.rowcount)
+
     def count_operational_attention(self) -> dict[str, int]:
         """Return review counts grouped by operator-attention classification."""
 
@@ -803,7 +898,9 @@ class SQLiteStateStore:
             "SELECT COALESCE(attention_kind, 'RESULT') AS kind, COUNT(*) AS count "
             "FROM operational_conversation "
             "WHERE status IN ('RESULT_READY', 'BLOCKED', "
-            "'AWAITING_OPERATOR_DECISION') GROUP BY kind"
+            "'AWAITING_OPERATOR_DECISION') "
+            "AND (decision_status IS NULL OR decision_status = 'PENDING') "
+            "GROUP BY kind"
         ).fetchall()
         return {str(row["kind"]): int(row["count"]) for row in rows}
 
@@ -848,7 +945,8 @@ class SQLiteStateStore:
         row = self._connection.execute(
             "SELECT COUNT(*) AS count FROM operational_conversation "
             "WHERE status IN ('RESULT_READY', 'BLOCKED', "
-            "'AWAITING_OPERATOR_DECISION')"
+            "'AWAITING_OPERATOR_DECISION') "
+            "AND (decision_status IS NULL OR decision_status = 'PENDING')"
         ).fetchone()
         return int(row["count"])
 
@@ -867,6 +965,18 @@ class SQLiteStateStore:
             round_count=int(row["round_count"]),
             attention_kind=row["attention_kind"],
             attention_reason=row["attention_reason"],
+            decision_domain=row["decision_domain"],
+            decision_question=row["decision_question"],
+            decision_options=tuple(json.loads(row["decision_options_json"] or "[]")),
+            decision_consequences=tuple(json.loads(row["decision_consequences_json"] or "[]")),
+            decision_action_types=tuple(json.loads(row["decision_action_types_json"] or "[]")),
+            blocked_request_body=row["blocked_request_body"],
+            blocked_source_department_id=row["blocked_source_department_id"],
+            blocked_target_department_id=row["blocked_target_department_id"],
+            decision_status=row["decision_status"],
+            selected_option=row["selected_option"],
+            selected_action_type=row["selected_action_type"],
+            resolved_at=row["resolved_at"],
         )
 
     def _initialize_schema(self) -> None:
@@ -997,7 +1107,19 @@ class SQLiteStateStore:
                     closed_at TEXT,
                     round_count INTEGER NOT NULL DEFAULT 1,
                     attention_kind TEXT,
-                    attention_reason TEXT
+                    attention_reason TEXT,
+                    decision_domain TEXT,
+                    decision_question TEXT,
+                    decision_options_json TEXT,
+                    decision_consequences_json TEXT,
+                    decision_action_types_json TEXT,
+                    blocked_request_body TEXT,
+                    blocked_source_department_id TEXT,
+                    blocked_target_department_id TEXT,
+                    decision_status TEXT,
+                    selected_option TEXT,
+                    selected_action_type TEXT,
+                    resolved_at TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS operational_conversation_message (
@@ -1045,6 +1167,18 @@ class SQLiteStateStore:
             ("round_count", "INTEGER NOT NULL DEFAULT 1"),
             ("attention_kind", "TEXT"),
             ("attention_reason", "TEXT"),
+            ("decision_domain", "TEXT"),
+            ("decision_question", "TEXT"),
+            ("decision_options_json", "TEXT"),
+            ("decision_consequences_json", "TEXT"),
+            ("decision_action_types_json", "TEXT"),
+            ("blocked_request_body", "TEXT"),
+            ("blocked_source_department_id", "TEXT"),
+            ("blocked_target_department_id", "TEXT"),
+            ("decision_status", "TEXT"),
+            ("selected_option", "TEXT"),
+            ("selected_action_type", "TEXT"),
+            ("resolved_at", "TEXT"),
         )
         with self._connection:
             for name, declaration in additions:

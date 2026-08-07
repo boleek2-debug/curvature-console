@@ -48,6 +48,14 @@ Acceptance: complete approved documentation set in `docs/`, root references upda
 
 ## Deferred
 
+### Project Value Monitor — non-blocking post-foundation feature
+
+- daily informational estimate of Project Asset Value and Potential Company Valuation as separate measures;
+- show range, midpoint, confidence, daily change and historical graph;
+- explain valuation changes using concrete project progress/drivers rather than arbitrary per-commit increments;
+- update at most once daily by default;
+- schedule only after the operational Console workflow is stable so it does not slow current development.
+
 - automatic Git push UI;
 - true parallel browser exchanges;
 - detachable multi-window workspace;

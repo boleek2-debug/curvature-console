@@ -153,3 +153,78 @@ Future milestones must add regression and live coverage for durable operational 
 - repository mutation triggers structured operator decision
 - installation decision preserves question/options/consequences through attention classification
 - live validation pending
+
+
+## CDU-004B6 decision resolution
+
+- Decision context persistence and reload: PASS.
+- Resolution status, selected option, explicit action type and timestamp persistence: PASS.
+- Option/action cardinality and repository APPROVE/REJECT/REQUEST_NON_MUTATING_PREVIEW mapping: PASS.
+- Rejected decision closes lifecycle without routing: PASS.
+- Full target-environment regression: 279 tests PASS.
+- `git diff --check`: PASS.
+- Live Core APPROVE resume to source: PASS.
+- Live Core REJECT without routing: PASS.
+- Live Core REQUEST_NON_MUTATING_PREVIEW return to source with no commit/push authority: PASS.
+- Live causal operator audit logging: PASS.
+- Live Project REVISE end-to-end path: PASS.
+- Live revised-plan APPROVE path: PASS.
+
+## CDU-004B6 resolved-decision history-only UI
+
+- Resolved REJECTED gated decision hides all review and decision controls: automated UI regression added.
+- Dialog Close remains the only available action after resolution.
+- Live regression: PASS; resolved gated decisions expose history only and Close.
+
+## CDU-004B6 attention badge and interrupted RUNNING recovery
+
+- Resolved gated RESULT_READY conversation is not counted as actionable operator attention: automated PASS.
+- Ordinary unresolved RESULT_READY conversation remains countable: existing coverage retained.
+- RUNNING conversation recovered after Console restart becomes BLOCKED / BLOCKER: automated PASS.
+- Badge singular/plural rendering for decision/blocker/result: PASS in target UI validation.
+
+## CDU-004B6 ordinary-review action semantics and audit trail
+
+- Ordinary review exposes Close as accepted / Return to source / Request clarification or continue / Close as abandoned: automated UI regression added.
+- Close as abandoned requires a reason, persists an operator message, closes as CANCELLED and creates no pending browser exchange: automated regression added.
+- Runtime audit emits operator_action_submitted, operator_action_persisted and operator_action_closed_without_resume for local abandonment: automated regression added.
+- Runtime audit emits operator_resume_enqueued only for actions that actually resume the source department: live-log PASS.
+
+## CDU-004B6 interrupted operational recovery
+
+- `RUNNING` after restart → `BLOCKED / BLOCKER`.
+- `WAITING_SOURCE` after restart → `BLOCKED / BLOCKER`.
+- Startup audit log records the recovery count and covered statuses.
+
+### CDU-004B6 — implementation plan approval gate
+
+- PASS (targeted): explicit implementation-plan approval request produces `IMPLEMENTATION_PLAN_APPROVAL` with `APPROVE / REJECT / REVISE`.
+- PASS (targeted): revision option is `Request a revised implementation plan.`
+- PASS (targeted): routine implementation-plan preparation remains ungated.
+- LIVE PASS: Project outbound plan-approval request logs `operational_decision_gate_intercepted` before any Core worker; selecting REVISE resumes Project.
+### CDU-004B6 implementation-plan intent discrimination
+- PASS: explicit implementation-plan approval is intercepted before target routing.
+- PASS: `Revise Chronicle implementation plan` with future-approval wording is not intercepted.
+- PASS: explicit approval of a revised implementation plan remains intercepted.
+
+### CDU-004B6 product-direction context discrimination
+- PASS (targeted): `Revise Chronicle implementation plan` is not gated merely because constraints say to preserve the approved Chronicle product direction.
+- PASS (targeted): an explicit product-direction decision in revision title/task remains gated.
+- LIVE PASS: after operator REVISE, `Revise Chronicle implementation plan` routes to Core without `IMPLEMENTATION_PLAN_APPROVAL` or `PRODUCT_DIRECTION` interception; Core returns the revised plan to Project.
+
+## CDU-004B6 closure evidence — 2026-08-07
+
+- Full target suite: 279 passed.
+- `git diff --check`: PASS.
+- Core-source APPROVE: PASS.
+- Core-source REJECT: PASS.
+- Core-source non-mutating preview: PASS for decision routing/constraints/no mutation; real local validation/patch generation was outside the ChatGPT worker's filesystem capability and was not claimed.
+- Interrupted `WAITING_SOURCE` recovery: PASS (`operational_recovery_complete recovered_count=1`).
+- Close as abandoned after recovery: PASS; `operator_action_submitted` → `operator_action_persisted` → `operator_action_closed_without_resume`, no worker.
+- Project-source initial implementation-plan approval interception before Core: PASS.
+- REVISE resumes Project: PASS.
+- Revision work routes Project → Core without false-positive gate: PASS.
+- Revised plan returns Core → Project: PASS.
+- Revised-plan APPROVE is gated before Core and resumes Project: PASS.
+- No tested approval path automatically starts implementation, commit, push or merge.
+- CDU-004B6 closure: PASS.

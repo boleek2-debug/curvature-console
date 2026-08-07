@@ -1,5 +1,16 @@
 # Curvature Console Changelog
 
+
+## 2026-08-06 — CDU-004B6 decision resolution candidate
+
+- Persisted gated decision context and the exact blocked operational request.
+- Added durable decision status, selected option and resolution timestamp.
+- Added dynamic option selection with explicit machine action types to Operational Conversations.
+- Pending gated decisions now use one Confirm decision action. The selected option determines APPROVE, REJECT, REVISE, LIMITED_APPROVAL or REQUEST_NON_MUTATING_PREVIEW behaviour. Repository preview is explicitly bounded to validation plus patch/diff preparation with no commit or push; other decision domains use revision or limited approval rather than a generic dry-run.
+- REJECT closes without routing; approval and revision-style options return to the source with the exact selected scope.
+- Existing Accept behaviour for ordinary completed results remains unchanged.
+- Targeted persistence validation: 8 tests passed in the packaging environment; full target-environment validation remains required.
+
 Status: Active
 Version: 2.0.0
 Owner: Curvature Console Development Unit
@@ -166,3 +177,59 @@ Prepared:
 - Routine department consultation, validation and implementation analysis continue without operator interruption.
 - Operator stops now include a concrete question, options and consequences rather than a generic decision marker.
 - Operational target prompts explicitly prohibit departments from silently making operator-owned decisions.
+
+### CDU-004B6 resolved-decision history-only UI hotfix
+
+- Resolved gated decisions no longer expose Accept, Reject, Ask / Continue, Confirm decision, decision-option, or operator-comment controls.
+- A resolved decision is now a read-only historical record; only the dialog Close action remains available.
+- Added UI regression coverage for a rejected gated decision.
+
+### CDU-004B6 operational attention counter and restart recovery hotfix
+
+- Operational Conversations badge now uses correct singular/plural labels.
+- Resolved gated-decision results are excluded from actionable attention counts.
+- Conversations left RUNNING by a previous Console process are recovered as BLOCKED with explicit BLOCKER attention on startup.
+- Added regression coverage for resolved-result counting and interrupted RUNNING recovery.
+
+### CDU-004B6 operator-review semantics and audit trail correction
+
+- Renamed ordinary review actions to describe their actual effects: Close as accepted, Return to source, Request clarification / continue, and Close as abandoned.
+- Added Close as abandoned as a local terminal action. It records the operator reason, closes the conversation as CANCELLED, starts no worker and creates no follow-up result requiring acceptance.
+- Return to source remains the explicit corrective round and requires an operator comment.
+- Added causal runtime audit events for submitted and persisted operator actions, local closure without resume, and queued source-department resume.
+- Added regression coverage for explicit action labels and local abandoned closure without a browser exchange.
+
+## 2026-08-06 — CDU-004B6 orphaned WAITING_SOURCE recovery
+
+- Startup recovery now converts both `RUNNING` and `WAITING_SOURCE` operational conversations to `BLOCKED / BLOCKER` because neither can retain a live in-process worker after Console termination.
+- Startup writes `operational_recovery_complete` with the recovered count and covered statuses.
+
+## 2026-08-07 — CDU-004B6 Project-source plan approval interception
+
+- Added a dedicated `IMPLEMENTATION_PLAN_APPROVAL` decision domain.
+- Approval/authorization decisions about an implementation plan are intercepted before the target department worker is queued.
+- Routine requests to prepare an implementation plan remain ungated.
+- Added an `operational_decision_gate_intercepted` runtime audit event so live routing evidence shows the gate firing before any target worker.
+- Added regression tests for both approval interception and routine plan preparation.
+### 2026-08-07 — CDU-004B6 implementation-plan revision routing fix
+- Narrowed `IMPLEMENTATION_PLAN_APPROVAL` detection to explicit approval/authorization actions in the request title/task.
+- Revision work such as `Revise Chronicle implementation plan` is no longer gated merely because context or expected output mentions a later approval decision.
+- Explicit approval of a revised implementation plan remains gated.
+- Added regression coverage for both the false-positive revision case and explicit revised-plan approval.
+
+### 2026-08-07 — CDU-004B6 direction-context false-positive fix
+- Product-direction and canon/art gates now evaluate the requested action (title/task), not descriptive context, constraints or acceptance criteria.
+- Revision work may reference the existing approved product direction as a preservation constraint without creating a false operator decision.
+- An explicit product-direction or canon/art change requested in the title/task remains gated.
+- Added regression coverage for the live `Revise Chronicle implementation plan` false-positive and for an explicit direction change inside revision work.
+
+## 2026-08-07 — CDU-004B6 closure
+
+- Closed CDU-004B6 decision resolution and workflow resume after full target validation with 279 passing tests and clean `git diff --check`.
+- Live Core-source decision paths verified APPROVE, REJECT and REQUEST_NON_MUTATING_PREVIEW semantics, including source-department resume and no automatic repository mutation.
+- Resolved gated decisions are history-only; ordinary review now separates local acceptance/abandonment from corrective return and clarification.
+- Runtime audit logging now records operator submission, persistence, local closure or exact queued resume causality.
+- Restart recovery converts orphaned `RUNNING` and `WAITING_SOURCE` conversations to `BLOCKED / BLOCKER`; live abandonment then closes locally without any worker.
+- Live Project-source implementation-plan flow verified interception before Core, REVISE returning to Project, revision work routing normally to Core, Core returning the amended plan to Project, and a revised-plan APPROVE gate returning authorization to Project without starting implementation.
+- False-positive `IMPLEMENTATION_PLAN_APPROVAL` and `PRODUCT_DIRECTION` interceptions on revision work were eliminated with targeted regression coverage.
+- Project Value Monitor was recorded as a deferred, non-blocking post-foundation backlog item.

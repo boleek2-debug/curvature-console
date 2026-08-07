@@ -110,3 +110,42 @@ CDU-004B4 adds explicit durable background collaboration among Project, Core and
 ## CDU-004B5 candidate state
 
 Authority- and consequence-based operational decision gates are implemented for validation. Routine production collaboration remains autonomous; operator-owned direction, cost, installation, security, repository mutation and unresolved conflict stop before target execution with structured decision details.
+
+
+## CDU-004B6 implementation candidate — 2026-08-06
+
+The current candidate stores decision domain, question, context-specific options, consequences, explicit action types, exact blocked request, source and target departments, resolution state, selected option and timestamp. Pending gated decisions expose one Confirm decision control. The option action type determines whether Console resumes, rejects, requests revision, applies a limited approval or asks for non-mutating repository preview. Ordinary completed-result review remains separate. Full target validation and revised live workflow evidence remain outstanding.
+
+### CDU-004B6 UI invariant: resolved decisions are history only
+
+Once a gated operator decision leaves PENDING state, Operational Conversations displays its selected option, action, status, and timestamps as read-only history. Decision selectors, comments, Confirm decision, Accept, Reject, and Ask / Continue are hidden. The only remaining dialog action is Close.
+
+### CDU-004B6 attention/recovery correction
+
+Operational attention badges now represent only conversations with an available operator action. A gated decision that has already been resolved and later reaches RESULT_READY remains historical and is not counted again. Any conversation persisted as RUNNING across a Console restart is treated as interrupted process-bound work and is recovered to BLOCKED with BLOCKER attention instead of remaining falsely RUNNING.
+
+### CDU-004B6 ordinary-review semantics and causal audit logging
+
+Ordinary review no longer overloads Reject as both dismissal and corrective return. Close as abandoned is a local terminal action for dead or intentionally discarded conversations and never resumes a department. Return to source starts a corrective round. Request clarification / continue starts a bounded follow-up. Close as accepted closes a completed result locally. Runtime logs now record the operator action before persistence, the persisted action, and either local closure or the exact queued resume request and department.
+
+## CDU-004B6 recovery semantics
+
+Operational conversations persisted as `RUNNING` or `WAITING_SOURCE` are process-bound. On Console startup they are recovered to `BLOCKED / BLOCKER`; they must never remain orphaned with an idle bridge queue.
+
+### CDU-004B6 plan-approval interception correction — 2026-08-07
+
+The operational decision gate now recognizes explicit approval/authorization decisions for Chronicle implementation plans as `IMPLEMENTATION_PLAN_APPROVAL`. The gate is evaluated on the source department's outbound operational request before target routing. A matched request is persisted as `AWAITING_OPERATOR_DECISION`; no target worker is queued until operator resolution. Routine plan drafting/preparation does not trigger this gate. Runtime logs emit `operational_decision_gate_intercepted` with conversation, source, target, domain and title.
+### CDU-004B6 revision-work routing refinement
+Implementation-plan decision gating now distinguishes approval intent from revision work. `Approve ... implementation plan` and explicit approval of a revised plan are operator-gated; `Revise ... implementation plan` routes to the implementation department even when its context says a later approval is required.
+
+## CDU-004B6 direction-context discrimination — 2026-08-07
+
+A live Project REVISE retest exposed a second false-positive: the revision request was correctly excluded from `IMPLEMENTATION_PLAN_APPROVAL` but was then intercepted as `PRODUCT_DIRECTION` because a preservation constraint mentioned the approved Chronicle product direction. Product/canon direction gates now inspect only title/task action intent; consequence gates continue to inspect the full structured request.
+
+## 2026-08-07 — CDU-004B6 closed
+
+CDU-004B6 decision resolution and workflow resume is closed. Full target-environment validation passes with 279 tests and clean `git diff --check`. Live evidence confirms: Core-source APPROVE returns bounded authorization to Core without automatic mutation; REJECT closes without routing; non-mutating preview returns to Core with commit/push prohibited; resolved decisions are history-only; interrupted `RUNNING` and `WAITING_SOURCE` conversations recover to `BLOCKED / BLOCKER`; Close as abandoned records causal audit events and closes locally with no worker; Project-source implementation-plan approval is intercepted before Core; REVISE resumes Project; `Revise Chronicle implementation plan` routes normally to Core; Core returns the amended plan to Project; and `Approve revised Chronicle implementation plan` is intercepted again and APPROVE resumes Project without automatically beginning implementation.
+
+The live false-positive defects that previously gated revision work as `IMPLEMENTATION_PLAN_APPROVAL` or `PRODUCT_DIRECTION` are fixed and covered by regression tests. Runtime logging now exposes the operator action, selected machine action type, persistence, and exact local-close or resume-enqueue consequence.
+
+Repository closure remaining for this milestone: commit, push and a clean post-push snapshot.

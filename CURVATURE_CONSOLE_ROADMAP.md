@@ -95,6 +95,22 @@ Status: closed after full validation and live verification.
 
 ## CDU-004B5 — authority and consequence decision gates
 
-Status: IMPLEMENTED FOR VALIDATION
+Status: CLOSED after 265 automated tests and live routine-routing, visual-direction and repository-mutation verification.
 
-Acceptance requires automated validation plus live confirmation that routine collaboration routes normally while at least one product-direction gate and one repository/security/cost gate stop before department execution with a structured operator decision.
+## CDU-004B6 — decision resolution and workflow resume
+
+Status: CLOSED after 279 automated tests, clean `git diff --check`, and live Core- and Project-source decision/recovery verification.
+
+- Persist the exact gated request, decision domain, question, options and consequences.
+- Present context-specific operator options in Operational Conversations.
+- One Confirm decision control resolves the selected option.
+- Explicit action types drive approval, rejection, revision, limited approval or non-mutating repository previews without parsing the visible label.
+- Rejection closes without execution; continuation actions resume the owning source department while preserving the same conversation and source task.
+- Acceptance authorizes only the selected bounded action; it never performs repository, security, cost or implementation actions directly.
+- Resolved decisions are history-only; ordinary review separates local closure from source-department continuation.
+- Interrupted `RUNNING` / `WAITING_SOURCE` conversations recover to `BLOCKED / BLOCKER` and can be abandoned locally without spawning a worker.
+- Implementation-plan approval is intercepted before target routing; REVISE returns to Project, revision work proceeds to Core without a false gate, and revised-plan approval is gated again before any implementation begins.
+
+## Later — Project Value Monitor
+
+Non-blocking post-foundation Console feature: a daily Project Asset Value and Potential Company Valuation monitor with separate ranges/midpoints, confidence, daily change, history and evidence-based change drivers. It must not displace or slow operational workflow stabilization.
