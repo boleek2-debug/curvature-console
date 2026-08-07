@@ -12,6 +12,12 @@ This plan defines the ordered capabilities required to make Curvature Console th
 
 The plan is capability-based rather than calendar-based. Work advances when the preceding capability is implemented, tested live, documented and safely closed. No week or day estimate is part of acceptance.
 
+## Current progress — 2026-08-07
+
+Steps 1–8 are materially implemented through CDU-004B6. Step 9 is now the active hardening milestone as CDU-004B7. After that, the agreed order is step 10 main work-state UI, step 11 real Chronicle E2E, step 12 Console-first promotion, then requirement-driven tool adapters and integrations.
+
+The approved post-promotion integration order is Godot/local build-test tooling first, Research source intake second, then Blender/ComfyUI/controlled image-to-3D pipelines and composite orchestration. Chronicle Beta Feedback Hub is planned for the stage when functional test builds exist. Voice remains later.
+
 ## Governing principles
 
 1. The operator owns the vision, canon, product direction and final creative decisions.

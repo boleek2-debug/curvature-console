@@ -1,16 +1,16 @@
 # Console Development Unit State Snapshot
 
 Status: Operational
-Version: 1.2.0
+Version: 1.3.0
 Owner: Curvature Console Development Unit
-Last Updated: 2026-08-05
+Last Updated: 2026-08-07
 
 ## Repository
 
 ```text
 Repository: ~/curvature-console
 Branch: main
-Verified commit: 46f16b9da345effa4e8293478abbcfcc11b72772
+Verified commit: 21643599e7e735a22ae5d6ecafe78bea9fcc5c22
 origin/main: same
 Working tree at supplied snapshot: clean
 ```
@@ -27,7 +27,7 @@ Working tree at supplied snapshot: clean
 
 ## Current milestone
 
-CDU-003 — Formal Console requests and authority routing.
+CDU-004B7 — Console-first reliability and recovery hardening.
 
 ## CDU-003 package scope
 
@@ -39,7 +39,7 @@ CDU-003 — Formal Console requests and authority routing.
 
 ## Immediate next step
 
-Apply, validate and live-test one formal request from a production department to CDU. Then execute the Console-first migration workflow test before declaring the browser chat fallback-only.
+Perform a bounded reliability/recovery audit of the operational foundation before adding a major feature. Test restart, interruption, retry and idempotency across queues, operational conversations, artifacts, nested CDU escalation, decision gates, cancellation/hold/retry and Thread Pressure. Defects found become regression tests. After B7 closure, rebuild the main Console work-state surface, then run one real Chronicle Console-first end-to-end workflow before promotion.
 
 ## Known follow-up
 
@@ -148,4 +148,9 @@ CDU-004B6 decision resolution and workflow resume is closed. Full target-environ
 
 The live false-positive defects that previously gated revision work as `IMPLEMENTATION_PLAN_APPROVAL` or `PRODUCT_DIRECTION` are fixed and covered by regression tests. Runtime logging now exposes the operator action, selected machine action type, persistence, and exact local-close or resume-enqueue consequence.
 
-Repository closure remaining for this milestone: commit, push and a clean post-push snapshot.
+Repository closure complete: commit and push succeeded, and the clean post-push snapshot verifies `HEAD == origin/main` at `21643599e7e735a22ae5d6ecafe78bea9fcc5c22`.
+
+
+## 2026-08-07 — post-B6 planning state
+
+The operator approved the next ordered development sequence: reliability/recovery hardening; main work-state UI; one real Chronicle Console-first E2E; formal Console-first promotion; Tool Adapter Foundation; Godot/local build-test integration; Research source intake; Blender/ComfyUI/image-to-3D pipelines; composite workflows; Chronicle Beta Feedback Hub; then voice accessibility. Project Value Monitor remains a non-blocking deferred feature.

@@ -233,3 +233,11 @@ Prepared:
 - Live Project-source implementation-plan flow verified interception before Core, REVISE returning to Project, revision work routing normally to Core, Core returning the amended plan to Project, and a revised-plan APPROVE gate returning authorization to Project without starting implementation.
 - False-positive `IMPLEMENTATION_PLAN_APPROVAL` and `PRODUCT_DIRECTION` interceptions on revision work were eliminated with targeted regression coverage.
 - Project Value Monitor was recorded as a deferred, non-blocking post-foundation backlog item.
+
+## 2026-08-07 — Post-B6 roadmap alignment
+
+- Updated authoritative roadmaps and state snapshot to the clean post-push B6 commit `21643599e7e735a22ae5d6ecafe78bea9fcc5c22`.
+- Declared CDU-004B7 Console-first reliability and recovery hardening as the active milestone.
+- Recorded the agreed sequence through work-state UI, real Chronicle E2E, Console-first promotion and later tool integrations.
+- Reordered planned integrations to put Godot/local build-test tooling and Research source intake before Blender/ComfyUI/image-to-3D composite pipelines.
+- Kept Project Value Monitor explicitly deferred and non-blocking.

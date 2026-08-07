@@ -109,3 +109,11 @@ Ordinary result review uses four distinct actions. Close as accepted and Close a
 Decision: close CDU-004B6 after 279 passing target-environment tests, clean `git diff --check`, and live evidence for bounded APPROVE/REJECT/REVISE/non-mutating-preview resolution, interrupted-work recovery, causal operator audit logging, Project-source pre-routing interception, revision-work routing, and revised-plan approval.
 
 Invariant: decision gates stop operator-owned decisions before target execution, but revision/preparation work that merely references an existing approved direction must route normally. Approval returns bounded authority to the source department; it does not itself execute implementation, repository mutation, installation, purchase, or security-sensitive work.
+
+## 2026-08-07 — Post-B6 execution order
+
+Decision: after CDU-004B6 closure, the next active milestone is CDU-004B7 Console-first reliability and recovery hardening. Major new integrations must wait until the operational foundation has been interruption/restart/retry audited.
+
+Approved order: B7 hardening → main work-state UI → one real Chronicle Console-first E2E → Console-first promotion → Tool Adapter Foundation → Godot/local build-test integration → Research source intake → Blender/ComfyUI/controlled image-to-3D pipelines → composite workflows → Chronicle Beta Feedback Hub → voice accessibility.
+
+Project Value Monitor remains deferred and non-blocking. It may be implemented only when it does not slow the critical operational path.

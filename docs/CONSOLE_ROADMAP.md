@@ -1,45 +1,40 @@
 # Console Development Unit Roadmap
 
 Status: Active
-Version: 2.0.0
+Version: 3.0.0
 Owner: Curvature Console Development Unit
+Last Updated: 2026-08-07
 
-## Completed baseline
+## Completed operational foundation
 
-- departmental workspace, persistence and context loading;
-- Browser Bridge and URL routing;
-- generated-file capture;
-- package review and safe apply;
-- supervised handoffs and return path;
-- Console Development Unit diagnostics and chat;
-- attachments, screenshot paste and downloads;
-- Support Unit to CDU identity migration;
-- resilient attachment readiness.
+The Console now includes the shared Browser Bridge queue, automatic CDU escalation and return, durable operational conversations, separate transcript review, meaningful result/blocker/decision attention, same-conversation continuation, exact artifact capture and transport identity, general Project/Core/Research collaboration, authority/consequence decision gates, bounded operator resolution, causal operator audit logging, and restart recovery for interrupted operational states.
+
+CDU-004B6 closed after 279 automated tests and live Project/Core decision-resolution verification.
 
 ## Current milestone
 
-### CDU-004A — Artifact deduplication and escalation chain control
+### CDU-004B7 — Console-first reliability and recovery hardening
 
-Automated validation passed with 243 tests. The live Core → CDU → Core retest on 2026-08-05 confirmed duplicate suppression, exactly one returned artifact, exact content verification and source-department acceptance. Documentation closure and repository finalisation remain.
+Audit the already-built operational foundation before adding major new capability. The milestone targets restart, interruption, retry, idempotency and safe terminal-state behaviour across queues, operational conversations, artifacts, nested CDU escalation, decision gates, cancellation/hold/retry and Thread Pressure.
 
 ## Ordered capability milestones
 
-1. Close CDU-004A documentation and repository state.
-2. Durable interdepartmental operational conversations.
-3. Separate operational transcripts from main department chats.
-4. Notify only for final results, operator decisions, controlled actions and terminal blockers.
-5. Conversation Review with Accept, Reject and Ask or Continue.
-6. Replace operator-approved message transport with autonomous departmental collaboration.
-7. Enforce consequence-based decision gates and operator-owned Chronicle vision.
-8. Add restart-safe persistence, recovery, attempt control and idempotency.
-9. Rebuild the main Console surface around work state and review queues.
-10. Execute the complete Curvature Console-first migration test.
-11. Promote Console to the primary operator interface.
-12. Continue real-requirement-driven tool adapters and composite orchestration.
-13. Add later one-click speech playback and local voice dictation.
+1. CDU-004B7 reliability and recovery hardening.
+2. Rebuild the main Console surface around active work, queued work, decisions, results, blockers and recent completed work.
+3. Execute one real operator-originated Chronicle workflow end to end through whatever departments are actually required.
+4. Promote Console to the primary Curvature operator interface only after that workflow is restart-safe and documented.
+5. Build the Tool Adapter Foundation: adapter contract, capability registry, safe runner, health checks, execution ledger and artifact registry.
+6. Integrate Godot and local Chronicle build/test tooling.
+7. Add Research source-intake tooling.
+8. Add Blender, ComfyUI and controlled image-to-3D asset pipelines with provenance and approval.
+9. Add composite one-button workflows.
+10. Add the Chronicle Beta Feedback Hub when functional test builds exist.
+11. Add one-click speech playback and local dictation after operational stability.
 
-The authoritative detailed plan is `CURVATURE_CONSOLE_FIRST_ACTION_PLAN.md`.
+## Parallel / deferred
+
+Project Value Monitor remains non-blocking: daily Project Asset Value and Potential Company Valuation, each with range, midpoint, confidence, daily delta, history and evidence-based change drivers. It must not displace critical Console-first work.
 
 ## Promotion rule
 
-A candidate integration enters implementation only when a real Project, Core, Research or CDU requirement supplies inputs, outputs, constraints and acceptance criteria.
+A new integration enters implementation only when a real Project, Core, Research or CDU requirement supplies inputs, outputs, constraints and acceptance criteria.

@@ -1,34 +1,40 @@
 # Console Backlog
 
 Status: Active
-Version: 1.0.0
+Version: 2.0.0
 Owner: Curvature Console Development Unit
+Last Updated: 2026-08-07
 
 ## Active
 
-### CDU-001B — Authoritative CDU documentation
+### CDU-004B7 — Console-first reliability and recovery hardening
 
-Acceptance: complete approved documentation set in `docs/`, root references updated, repository validation passes.
+- audit restart recovery for all process-bound operational states;
+- verify queue persistence and safe recovery semantics;
+- verify retry/idempotency and stable logical identity;
+- verify artifact dedupe and fresh transport identity across retry/recovery;
+- verify nested CDU escalation and return across interruption;
+- verify decision-gate state and operator action causality across restart;
+- verify cancellation, hold and retry behaviour;
+- verify Thread Pressure state across handoff/restart;
+- add regression tests for every defect found;
+- close with focused live evidence, current docs and clean repository state.
 
 ## Next
 
-### CDU-002 — Shared sequential Browser Bridge queue
+### Main Console Work-State UI
 
-- four request sources: Project, Core, Research, CDU;
-- one active exchange;
-- durable queue and restart recovery;
-- visible QUEUED/RUNNING/COMPLETED/FAILED states;
-- cancel queued, hold active, retry failed;
-- independent drafts and attachments.
+Prioritise active work, queued work, operator decisions, results ready, blockers, recent completed work and CDU/tool problems.
 
-### CDU-003 — Tool request and handoff routing
+### Real Chronicle Console-first E2E
 
-- formal request types;
-- CDU inbox and lifecycle;
-- result return to requester;
-- Project/Core/Research decision routing.
+Run one real operator-originated Chronicle goal through the departments actually required, including artifacts, validation, documentation and one meaningful operator decision or final acceptance. No manual ChatGPT message transport.
 
-### CDU-004 — Tool adapter foundation
+### Console-first promotion
+
+After the real E2E workflow is restart-safe and documented, make Console the primary Curvature operating interface and leave browser chats as execution substrate / diagnostic fallback.
+
+### Tool Adapter Foundation
 
 - adapter contract;
 - capability registry;
@@ -37,14 +43,15 @@ Acceptance: complete approved documentation set in `docs/`, root references upda
 - execution ledger;
 - artifact registry.
 
-## Planned integrations
+## Planned integration order
 
-- CDU-005 consolidate existing tools under adapter model;
-- CDU-006 ComfyUI workflow integration;
-- CDU-007 Godot run and validation integration;
-- CDU-008 Blender technical asset integration;
-- CDU-009 Research source-intake integration;
-- CDU-010 composite multi-tool orchestration.
+1. Godot and local Chronicle build/test tooling;
+2. Research source intake;
+3. Blender technical asset tooling;
+4. ComfyUI image-generation workflow;
+5. controlled image-to-3D pipeline with provenance, review and approval;
+6. composite multi-tool orchestration;
+7. Chronicle Beta Feedback Hub once functional builds exist.
 
 ## Deferred
 

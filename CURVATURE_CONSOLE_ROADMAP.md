@@ -3,7 +3,7 @@
 Status: Active
 Version: 4.0.0
 Owner: Curvature Console Development Unit
-Last Updated: 2026-08-06
+Last Updated: 2026-08-07
 
 ## Completed foundation
 
@@ -11,27 +11,38 @@ The operational foundation includes departmental workspaces, persistence, Browse
 
 ## Current
 
-### CDU-004A — Artifact Deduplication and Escalation Chain Control
+### CDU-004B7 — Console-first reliability and recovery hardening
 
-Automated validation and the live Core → CDU → Core retest passed. Documentation closure, commit, push and clean snapshot remain before milestone closure.
+Status: ACTIVE.
+
+CDU-004B6 is closed and pushed. The next milestone is a bounded reliability audit before any major new feature or external-tool integration. It verifies that queues, operational conversations, retries, recovery, artifacts, nested CDU escalation, decision gates, cancellation/hold/retry and Thread Pressure all reach safe, explicit states across restart and failure.
+
+Acceptance direction:
+
+1. no orphaned process-bound workflow states after restart;
+2. retries and resumptions remain idempotent and preserve stable logical identity;
+3. no duplicate transport, artifact or operator action is created by recovery;
+4. every stopped workflow exposes a clear operator-visible reason and safe next action;
+5. automated regression coverage plus focused live interruption/recovery evidence;
+6. current documentation and a clean repository snapshot before closure.
 
 ## Approved development direction
 
-The capability-based Console-first plan for the complete Curvature organisation is authoritative in `docs/CURVATURE_CONSOLE_FIRST_ACTION_PLAN.md`.
+The capability-based Console-first plan in `docs/CURVATURE_CONSOLE_FIRST_ACTION_PLAN.md` remains authoritative. The agreed execution order after CDU-004B6 is now:
 
-Immediate ordered work after CDU-004A closure:
+1. CDU-004B7 reliability/recovery hardening;
+2. rebuild the main Console surface around work state;
+3. run one real Chronicle end-to-end Console workflow;
+4. formally promote Console to the primary Curvature operating interface;
+5. implement the Tool Adapter Foundation;
+6. integrate Godot and local build/test tooling first;
+7. add Research source-intake tooling;
+8. add Blender, ComfyUI and controlled image-to-3D asset pipelines;
+9. add composite one-button workflows;
+10. add the Chronicle Beta Feedback Hub when functional builds exist;
+11. add voice playback/dictation after operational stability.
 
-1. durable operational conversations;
-2. separate interdepartmental transcript history;
-3. result/blocker/decision-only operator notifications;
-4. Conversation Review with Accept, Reject and Ask;
-5. automatic departmental collaboration with decision gates;
-6. operator-owned vision enforcement;
-7. persistence, recovery and idempotency;
-8. full Curvature Console-first migration test;
-9. later one-click speech playback and local dictation.
-
-Tool adapters and integrations remain on the roadmap, but they follow the operational Console-first foundation and real Project/Core/Research requirements.
+Project Value Monitor remains a deferred, non-blocking feature and may be scheduled only when it cannot slow the critical operational path.
 
 ## CDU-004 — Automatic Tool Escalation, Return and Documentation Closure
 
