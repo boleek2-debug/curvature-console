@@ -9,6 +9,15 @@ Last Updated: 2026-08-07
 
 ### CDU-004B7 — Console-first reliability and recovery hardening
 
+Current decomposition:
+
+- **B7A — Durable Browser Exchange Ledger:** implemented and target-validated at 283 tests; persist every queued Browser Bridge exchange and its execution lifecycle before adding automatic recovery;
+- **B7B — Failure / Cancel State Closure:** implementation prepared for target validation; close operational ghosts immediately on transport failure/cancel and recover interrupted supervised-handoff transport states to `HELD`;
+- **B7C — Restart Reconciliation + Idempotent Retry:** reconcile durable exchanges after restart instead of blind resend;
+- **B7D — Live Crash / Recovery Matrix:** kill/restart at controlled checkpoints and verify truthful recovery.
+
+Audit/closure scope:
+
 - audit restart recovery for all process-bound operational states;
 - verify queue persistence and safe recovery semantics;
 - verify retry/idempotency and stable logical identity;

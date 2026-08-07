@@ -21,9 +21,9 @@ Curvature Console is a PySide6 desktop application with SQLite persistence, YAML
 
 ## Planned orchestration components
 
-### Shared Bridge Queue
+### Shared Bridge Queue and Browser Exchange Ledger
 
-A durable queue for Project, Core, Research and CDU. Only one exchange controls Chrome at a time. Queue records survive restart.
+Project, Core, Research and CDU share one FIFO Browser Bridge queue; only one exchange controls Chrome at a time. CDU-004B7A adds a separate durable SQLite execution ledger written before worker execution. The ledger preserves request/workflow identity and lifecycle state even if the in-memory queue or worker disappears. Queue reconstruction and restart reconciliation are not yet automatic; they are B7C work.
 
 ### Tool Adapter Registry
 

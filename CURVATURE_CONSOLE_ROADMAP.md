@@ -17,6 +17,8 @@ Status: ACTIVE.
 
 CDU-004B6 is closed and pushed. The next milestone is a bounded reliability audit before any major new feature or external-tool integration. It verifies that queues, operational conversations, retries, recovery, artifacts, nested CDU escalation, decision gates, cancellation/hold/retry and Thread Pressure all reach safe, explicit states across restart and failure.
 
+Current substage: **CDU-004B7B — Failure / Cancel State Closure** (implementation prepared for target validation). B7A established the durable Browser Exchange Ledger. B7B closes in-session operational transport failures/cancellations to `BLOCKED` immediately and recovers interrupted supervised-handoff transport states to `HELD` after restart. Automatic restart reconciliation/resend remains deferred to B7C.
+
 Acceptance direction:
 
 1. no orphaned process-bound workflow states after restart;

@@ -117,3 +117,17 @@ Decision: after CDU-004B6 closure, the next active milestone is CDU-004B7 Consol
 Approved order: B7 hardening → main work-state UI → one real Chronicle Console-first E2E → Console-first promotion → Tool Adapter Foundation → Godot/local build-test integration → Research source intake → Blender/ComfyUI/controlled image-to-3D pipelines → composite workflows → Chronicle Beta Feedback Hub → voice accessibility.
 
 Project Value Monitor remains deferred and non-blocking. It may be implemented only when it does not slow the critical operational path.
+
+## 2026-08-07 — B7 transport state is separate from workflow state
+
+Decision: Browser Bridge execution state must be persisted as its own durable ledger rather than inferred from Operational Conversation or supervised-handoff status. A logical workflow may span multiple transport attempts, while each Browser Bridge request has one immutable request ID and one independently auditable lifecycle.
+
+B7A records transport truth only. It must not auto-resend after restart. B7C will reconcile non-terminal ledger records and must distinguish work that was never submitted from work that may already exist in ChatGPT before offering or performing retry.
+
+## 2026-08-07 — B7B transport failure closes workflow state immediately
+
+Decision: Browser Bridge transport failure/cancellation must not leave an operational conversation in a process-owned state until the next Console restart. When an exchange associated with `RUNNING` or `WAITING_SOURCE` work fails or is cancelled, the conversation becomes `BLOCKED` immediately, receives `BLOCKER` attention and records the transport reason in its timeline.
+
+Transport cancellation is not equivalent to abandoning the logical workflow. `CANCELLED` remains an explicit operator workflow-close action; a cancelled transport becomes `BLOCKED` so the operator can inspect whether retry/reconciliation is appropriate.
+
+Legacy supervised handoffs left in `SENT`, `RETURN_SENT` or `UPDATE_SENT` across restart recover to `HELD`, not to an automatic resend. B7C will decide retry only after durable Browser Exchange reconciliation.

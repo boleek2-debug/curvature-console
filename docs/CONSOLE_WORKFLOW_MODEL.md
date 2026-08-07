@@ -50,12 +50,32 @@ QUEUED
 
 ## Recovery rules
 
-- queued work survives restart;
-- active work becomes interrupted and requires operator review;
+- every Browser Bridge exchange is durably recorded as `QUEUED` before worker execution;
+- active transport progress is persisted independently from the higher-level operational conversation;
+- B7A records transport truth but does not automatically reconstruct or resend an interrupted worker;
+- B7C must reconcile non-terminal ledger entries after restart before any retry, so a possibly submitted request is never blindly duplicated;
 - completed artifacts remain registered;
 - attachments are not cleared until successful completion;
 - incomplete upload means nothing is sent;
 - resume occurs only from a defined safe checkpoint.
+
+### Durable Browser Exchange lifecycle
+
+```text
+QUEUED
+→ STARTED
+→ SUBMITTED
+→ RESPONSE_RECEIVED
+→ COMPLETED
+```
+
+Terminal alternatives are `FAILED`, `CANCELLED` and `ROUTE_UNVERIFIED`. The ledger stores the logical workflow identifier separately from the Browser Bridge request ID, plus requested/observed route, confirmation marker, timestamps, failure reason and the cancellation submission boundary. This execution ledger does not replace operational-conversation state; it records transport attempts underneath it.
+
+### Failure / cancel closure
+
+A terminal transport failure does not silently leave the logical workflow in a process-owned state. When a Browser Bridge exchange belonging to an operational conversation fails or is cancelled while that conversation is `RUNNING` or `WAITING_SOURCE`, the conversation becomes `BLOCKED`, receives `BLOCKER` attention and records the reason in its timeline. Cancelling transport is therefore distinct from explicitly abandoning the workflow.
+
+Supervised handoffs whose transport-only states survive a process restart are reconciled conservatively: `SENT`, `RETURN_SENT` and `UPDATE_SENT` become `HELD`. They are never automatically resent at B7B.
 
 ## Cross-department result return
 

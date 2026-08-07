@@ -459,3 +459,153 @@ def test_update_sent_handoff_status_persists(tmp_path) -> None:
     assert restored is not None
     assert restored.status is HandoffStatus.UPDATE_SENT
     store.close()
+
+
+def test_browser_exchange_ledger_survives_reopen_and_records_lifecycle(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "state.sqlite3"
+
+    store = SQLiteStateStore(database)
+    store.create_browser_exchange(
+        request_id="exchange-1",
+        department_id="core",
+        exchange_type="OPERATIONAL_REQUEST",
+        workflow_id="operational-chain-1",
+        requested_conversation_url="https://chatgpt.com/c/core",
+        confirmation_marker="CURVATURE_REQUEST_ID: exchange-1",
+    )
+    store.update_browser_exchange_state("exchange-1", "STARTED")
+    store.update_browser_exchange_state("exchange-1", "SUBMITTED")
+    store.update_browser_exchange_state("exchange-1", "RESPONSE_RECEIVED")
+    store.update_browser_exchange_state(
+        "exchange-1",
+        "COMPLETED",
+        observed_conversation_url="https://chatgpt.com/c/core",
+    )
+    store.close()
+
+    reopened = SQLiteStateStore(database)
+    record = reopened.load_browser_exchange("exchange-1")
+
+    assert record is not None
+    assert record.department_id == "core"
+    assert record.exchange_type == "OPERATIONAL_REQUEST"
+    assert record.workflow_id == "operational-chain-1"
+    assert record.state == "COMPLETED"
+    assert record.queued_at
+    assert record.started_at
+    assert record.submitted_at
+    assert record.response_received_at
+    assert record.completed_at
+    assert record.requested_conversation_url == "https://chatgpt.com/c/core"
+    assert record.observed_conversation_url == "https://chatgpt.com/c/core"
+    assert record.confirmation_marker == "CURVATURE_REQUEST_ID: exchange-1"
+    assert record.failure_reason is None
+    assert record.cancel_submitted is None
+    reopened.close()
+
+
+def test_browser_exchange_ledger_records_cancel_submission_boundary(
+    tmp_path: Path,
+) -> None:
+    store = SQLiteStateStore(tmp_path / "state.sqlite3")
+    store.create_browser_exchange(
+        request_id="exchange-cancelled",
+        department_id="project",
+        exchange_type="DEPARTMENT_CHAT",
+        workflow_id=None,
+        requested_conversation_url="https://chatgpt.com/c/project",
+        confirmation_marker=None,
+    )
+    store.update_browser_exchange_state("exchange-cancelled", "STARTED")
+    store.update_browser_exchange_state(
+        "exchange-cancelled",
+        "CANCELLED",
+        failure_reason="Cancelled by operator before submission.",
+        cancel_submitted=False,
+    )
+
+    record = store.load_browser_exchange("exchange-cancelled")
+
+    assert record is not None
+    assert record.state == "CANCELLED"
+    assert record.started_at
+    assert record.submitted_at is None
+    assert record.completed_at
+    assert record.cancel_submitted is False
+    assert record.failure_reason == "Cancelled by operator before submission."
+    store.close()
+
+
+def test_interrupted_supervised_handoff_transports_recover_to_held(tmp_path: Path) -> None:
+    from curvature_console.infrastructure.handoff import HandoffStatus, create_handoff
+
+    store = SQLiteStateStore(tmp_path / "state.sqlite3")
+
+    sent = create_handoff(
+        handoff_id="handoff-sent-recovery",
+        request_id="request-sent-recovery",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="Deliver this.",
+    )
+    for status in (
+        HandoffStatus.PENDING_APPROVAL,
+        HandoffStatus.APPROVED,
+        HandoffStatus.SENT,
+    ):
+        sent = sent.transition(status)
+    store.save_handoff(sent)
+
+    returning = create_handoff(
+        handoff_id="handoff-return-recovery",
+        request_id="request-return-recovery",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="Return this.",
+    )
+    for status in (
+        HandoffStatus.PENDING_APPROVAL,
+        HandoffStatus.APPROVED,
+        HandoffStatus.SENT,
+        HandoffStatus.RECEIVED,
+        HandoffStatus.ANSWERED,
+        HandoffStatus.RETURN_SENT,
+    ):
+        returning = returning.transition(status)
+    store.save_handoff(returning)
+
+    updating = create_handoff(
+        handoff_id="handoff-update-recovery",
+        request_id="request-update-recovery",
+        source_department_id="project",
+        target_department_id="core",
+        user_visible_message="Update this.",
+    )
+    for status in (
+        HandoffStatus.PENDING_APPROVAL,
+        HandoffStatus.APPROVED,
+        HandoffStatus.SENT,
+        HandoffStatus.RECEIVED,
+        HandoffStatus.AWAITING_USER_DECISION,
+        HandoffStatus.IN_PROGRESS,
+        HandoffStatus.UPDATE_SENT,
+    ):
+        updating = updating.transition(status)
+    store.save_handoff(updating)
+
+    assert store.recover_interrupted_handoffs() == 3
+
+    for handoff_id in (
+        "handoff-sent-recovery",
+        "handoff-return-recovery",
+        "handoff-update-recovery",
+    ):
+        record = store.load_handoff(handoff_id)
+        assert record is not None
+        assert record.status is HandoffStatus.HELD
+        assert "interrupted" in record.timeline[-1].body.casefold()
+
+    assert store.recover_interrupted_handoffs() == 0
+    store.close()

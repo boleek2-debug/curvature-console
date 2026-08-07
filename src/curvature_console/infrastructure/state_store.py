@@ -58,6 +58,26 @@ class GeneratedDownloadRecord:
     captured_at: str
 
 
+@dataclass(frozen=True, slots=True)
+class BrowserExchangeRecord:
+    """Durable execution ledger entry for one Browser Bridge exchange."""
+
+    request_id: str
+    department_id: str
+    exchange_type: str
+    workflow_id: str | None
+    state: str
+    requested_conversation_url: str | None
+    observed_conversation_url: str | None
+    confirmation_marker: str | None
+    queued_at: str
+    started_at: str | None
+    submitted_at: str | None
+    response_received_at: str | None
+    completed_at: str | None
+    updated_at: str
+    failure_reason: str | None
+    cancel_submitted: bool | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -809,6 +829,133 @@ class SQLiteStateStore:
             )
 
 
+    def create_browser_exchange(
+        self,
+        *,
+        request_id: str,
+        department_id: str,
+        exchange_type: str,
+        workflow_id: str | None,
+        requested_conversation_url: str | None,
+        confirmation_marker: str | None,
+    ) -> None:
+        """Persist a queued Browser Bridge exchange before worker execution."""
+
+        timestamp = datetime.now(UTC).isoformat()
+        with self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO browser_exchange (
+                    request_id, department_id, exchange_type, workflow_id, state,
+                    requested_conversation_url, confirmation_marker, queued_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, 'QUEUED', ?, ?, ?, ?)
+                ON CONFLICT(request_id) DO NOTHING
+                """,
+                (
+                    request_id, department_id, exchange_type, workflow_id,
+                    requested_conversation_url, confirmation_marker, timestamp,
+                    timestamp,
+                ),
+            )
+
+    def update_browser_exchange_state(
+        self,
+        request_id: str,
+        state: str,
+        *,
+        observed_conversation_url: str | None = None,
+        failure_reason: str | None = None,
+        cancel_submitted: bool | None = None,
+    ) -> None:
+        """Advance one durable Browser Bridge ledger entry."""
+
+        timestamp = datetime.now(UTC).isoformat()
+        started_at = timestamp if state != "QUEUED" else None
+        submitted_at = (
+            timestamp
+            if state in {
+                "SUBMITTED",
+                "RESPONSE_RECEIVED",
+                "COMPLETED",
+                "ROUTE_UNVERIFIED",
+            }
+            or (state == "CANCELLED" and cancel_submitted is True)
+            else None
+        )
+        response_received_at = (
+            timestamp
+            if state in {"RESPONSE_RECEIVED", "COMPLETED", "ROUTE_UNVERIFIED"}
+            else None
+        )
+        completed_at = (
+            timestamp
+            if state in {"COMPLETED", "FAILED", "CANCELLED", "ROUTE_UNVERIFIED"}
+            else None
+        )
+        cancel_value = None if cancel_submitted is None else int(cancel_submitted)
+        with self._connection:
+            self._connection.execute(
+                """
+                UPDATE browser_exchange
+                SET state = ?,
+                    observed_conversation_url = COALESCE(?, observed_conversation_url),
+                    started_at = COALESCE(started_at, ?),
+                    submitted_at = COALESCE(submitted_at, ?),
+                    response_received_at = COALESCE(response_received_at, ?),
+                    completed_at = COALESCE(completed_at, ?),
+                    updated_at = ?,
+                    failure_reason = COALESCE(?, failure_reason),
+                    cancel_submitted = COALESCE(?, cancel_submitted)
+                WHERE request_id = ?
+                """,
+                (
+                    state, observed_conversation_url, started_at, submitted_at,
+                    response_received_at, completed_at, timestamp, failure_reason,
+                    cancel_value, request_id,
+                ),
+            )
+
+    def load_browser_exchange(
+        self, request_id: str
+    ) -> BrowserExchangeRecord | None:
+        row = self._connection.execute(
+            "SELECT * FROM browser_exchange WHERE request_id = ?",
+            (request_id,),
+        ).fetchone()
+        return self._browser_exchange_record(row) if row is not None else None
+
+    def load_browser_exchanges(self) -> tuple[BrowserExchangeRecord, ...]:
+        rows = self._connection.execute(
+            "SELECT * FROM browser_exchange ORDER BY queued_at, request_id"
+        ).fetchall()
+        return tuple(self._browser_exchange_record(row) for row in rows)
+
+    @staticmethod
+    def _browser_exchange_record(row: sqlite3.Row) -> BrowserExchangeRecord:
+        cancel_submitted = row["cancel_submitted"]
+        return BrowserExchangeRecord(
+            request_id=row["request_id"],
+            department_id=row["department_id"],
+            exchange_type=row["exchange_type"],
+            workflow_id=row["workflow_id"],
+            state=row["state"],
+            requested_conversation_url=row["requested_conversation_url"],
+            observed_conversation_url=row["observed_conversation_url"],
+            confirmation_marker=row["confirmation_marker"],
+            queued_at=row["queued_at"],
+            started_at=row["started_at"],
+            submitted_at=row["submitted_at"],
+            response_received_at=row["response_received_at"],
+            completed_at=row["completed_at"],
+            updated_at=row["updated_at"],
+            failure_reason=row["failure_reason"],
+            cancel_submitted=(
+                None if cancel_submitted is None else bool(cancel_submitted)
+            ),
+        )
+
+
     def save_operational_decision(
         self,
         conversation_id: str,
@@ -870,6 +1017,37 @@ class SQLiteStateStore:
                 (status, selected_option, selected_action_type, timestamp, timestamp, conversation_id),
             )
 
+
+    def recover_interrupted_handoffs(self) -> int:
+        """Move process-bound supervised handoff transports to HELD after restart."""
+
+        recovered = 0
+        recovery_reason = (
+            "Console restart interrupted an in-process Browser Bridge transport. "
+            "The handoff was held for operator review before any retry."
+        )
+        for status in (
+            HandoffStatus.SENT,
+            HandoffStatus.RETURN_SENT,
+            HandoffStatus.UPDATE_SENT,
+        ):
+            for record in self.load_handoffs(status=status):
+                if status is HandoffStatus.RETURN_SENT:
+                    author_department_id = record.target_department_id
+                    prefix = "Controlled return interrupted and held: "
+                elif status is HandoffStatus.UPDATE_SENT:
+                    author_department_id = record.source_department_id
+                    prefix = "Progress update interrupted and held: "
+                else:
+                    author_department_id = record.source_department_id
+                    prefix = "Controlled delivery interrupted and held: "
+                held = record.transition(HandoffStatus.HELD).append_message(
+                    author_department_id,
+                    prefix + recovery_reason,
+                )
+                self.save_handoff(held)
+                recovered += 1
+        return recovered
 
     def recover_interrupted_operational_conversations(self) -> int:
         """Mark process-bound operational work as interrupted after restart."""
@@ -1027,6 +1205,31 @@ class SQLiteStateStore:
 
                 CREATE INDEX IF NOT EXISTS idx_generated_download_department
                 ON generated_download (department_id, captured_at);
+
+                CREATE TABLE IF NOT EXISTS browser_exchange (
+                    request_id TEXT PRIMARY KEY,
+                    department_id TEXT NOT NULL,
+                    exchange_type TEXT NOT NULL,
+                    workflow_id TEXT,
+                    state TEXT NOT NULL,
+                    requested_conversation_url TEXT,
+                    observed_conversation_url TEXT,
+                    confirmation_marker TEXT,
+                    queued_at TEXT NOT NULL,
+                    started_at TEXT,
+                    submitted_at TEXT,
+                    response_received_at TEXT,
+                    completed_at TEXT,
+                    updated_at TEXT NOT NULL,
+                    failure_reason TEXT,
+                    cancel_submitted INTEGER
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_browser_exchange_state
+                ON browser_exchange (state, updated_at);
+
+                CREATE INDEX IF NOT EXISTS idx_browser_exchange_workflow
+                ON browser_exchange (workflow_id, updated_at);
 
                 CREATE TABLE IF NOT EXISTS handoff_record (
                     handoff_id TEXT PRIMARY KEY,

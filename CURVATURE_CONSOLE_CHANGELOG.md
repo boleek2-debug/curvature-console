@@ -241,3 +241,22 @@ Prepared:
 - Recorded the agreed sequence through work-state UI, real Chronicle E2E, Console-first promotion and later tool integrations.
 - Reordered planned integrations to put Godot/local build-test tooling and Research source intake before Blender/ComfyUI/image-to-3D composite pipelines.
 - Kept Project Value Monitor explicitly deferred and non-blocking.
+
+## 2026-08-07 — CDU-004B7A Durable Browser Exchange Ledger
+
+- Added durable SQLite `browser_exchange` records created before Browser Bridge worker execution.
+- Persisted request ID, department, exchange type, logical workflow ID, requested/observed conversation route, confirmation marker and lifecycle timestamps.
+- Browser worker lifecycle now records `QUEUED`, `STARTED`, `SUBMITTED`, `RESPONSE_RECEIVED`, `COMPLETED`, `FAILED`, `CANCELLED` and `ROUTE_UNVERIFIED`.
+- Cancellation records whether the operation was cancelled before or after submission.
+- Added persistence and shared-queue regression coverage.
+- Packaging-environment state-store tests: 14 PASS; Python compileall: PASS. Full target-environment validation remains required.
+- Automatic restart reconciliation/resend is intentionally not part of B7A.
+
+## 2026-08-07 — CDU-004B7B Failure / Cancel State Closure
+
+- Operational Browser Bridge failure or cancellation now closes process-bound `RUNNING` / `WAITING_SOURCE` work to `BLOCKED` immediately in the same Console session.
+- The blocked conversation receives `BLOCKER` attention plus an explicit system timeline entry containing the transport reason.
+- Queued operational cancellation uses the same closure path instead of leaving a running ghost until restart.
+- Startup recovery now moves supervised handoffs left in `SENT`, `RETURN_SENT` or `UPDATE_SENT` to `HELD` with a visible interruption timeline entry.
+- Recovery is idempotent; already held records are not changed again.
+- Added state-store and Browser Bridge queue regressions. Packaging-environment state-store tests: 15 PASS; Python compileall: PASS. Full target PySide6 validation remains required.

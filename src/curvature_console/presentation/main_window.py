@@ -207,6 +207,12 @@ class MainWindow(QMainWindow):
             "operational_recovery_complete recovered_count=%s statuses=RUNNING,WAITING_SOURCE",
             recovered_operational_count,
         )
+        recovered_handoff_count = self.state_store.recover_interrupted_handoffs()
+        logger.info(
+            "handoff_recovery_complete recovered_count=%s "
+            "statuses=SENT,RETURN_SENT,UPDATE_SENT final_status=HELD",
+            recovered_handoff_count,
+        )
         self._bootstrap_chat_routes()
         self.context_loader = WorkspaceContextLoader()
         self.transfer_package_builder = TransferPackageBuilder()
@@ -1901,6 +1907,43 @@ class MainWindow(QMainWindow):
         self.state_store.save_handoff(record)
         self._refresh_handoff_controls(record.handoff_id)
 
+    def _block_failed_operational_exchange(
+        self,
+        pending: PendingBrowserExchange,
+        reason: str,
+    ) -> None:
+        """Close in-session process-bound operational work after transport failure."""
+
+        conversation_id = pending.operational_conversation_id
+        if conversation_id is None:
+            return
+        record = self.state_store.load_operational_conversation(conversation_id)
+        if record is None or record.status not in {"RUNNING", "WAITING_SOURCE"}:
+            return
+        clean_reason = reason.strip() or "Browser Bridge transport failed."
+        self.state_store.append_operational_message(
+            conversation_id=conversation_id,
+            author_department_id="system",
+            body="Browser Bridge transport interrupted: " + clean_reason,
+        )
+        self.state_store.update_operational_attention(
+            conversation_id,
+            attention_kind="BLOCKER",
+            attention_reason=clean_reason,
+        )
+        self.state_store.update_operational_conversation_status(
+            conversation_id, "BLOCKED"
+        )
+        logger.info(
+            "operational_transport_blocked conversation_id=%s request_id=%s "
+            "previous_status=%s reason=%r",
+            conversation_id,
+            pending.request_id,
+            record.status,
+            clean_reason,
+        )
+        self._refresh_open_operational_dialog()
+
     def _hold_failed_handoff(
         self,
         pending: PendingBrowserExchange,
@@ -2146,6 +2189,15 @@ class MainWindow(QMainWindow):
             return
 
         self._finish_handoff_progress(request_id)
+        self.state_store.update_browser_exchange_state(
+            request_id,
+            "COMPLETED",
+            observed_conversation_url=conversation_url,
+        )
+        logger.info(
+            "browser_exchange_ledger_state request_id=%s state=COMPLETED",
+            request_id,
+        )
         self._pending_exchanges.pop(request_id, None)
         self._record_handoff_answer(pending, response_text)
         if pending.support_unit:
@@ -2414,6 +2466,16 @@ class MainWindow(QMainWindow):
             return
 
         self._finish_handoff_progress(request_id)
+        self.state_store.update_browser_exchange_state(
+            request_id,
+            "ROUTE_UNVERIFIED",
+            observed_conversation_url=observed_url,
+            failure_reason="Conversation route requires operator verification.",
+        )
+        logger.info(
+            "browser_exchange_ledger_state request_id=%s state=ROUTE_UNVERIFIED",
+            request_id,
+        )
         self._pending_exchanges.pop(request_id, None)
         self._record_handoff_answer(pending, response_text)
         if pending.support_unit:
@@ -2495,12 +2557,29 @@ class MainWindow(QMainWindow):
             return
 
         self._finish_handoff_progress(request_id)
+        self.state_store.update_browser_exchange_state(
+            request_id,
+            "CANCELLED",
+            failure_reason=(
+                "Cancelled by operator after submission."
+                if submitted
+                else "Cancelled by operator before submission."
+            ),
+            cancel_submitted=submitted,
+        )
+        logger.info(
+            "browser_exchange_ledger_state request_id=%s "
+            "state=CANCELLED submitted=%s",
+            request_id,
+            submitted,
+        )
         self._pending_exchanges.pop(request_id, None)
         message = (
             "Browser request cancelled after submission."
             if submitted
             else "Browser request cancelled before submission."
         )
+        self._block_failed_operational_exchange(pending, message)
         self._hold_failed_handoff(pending, message)
         self._set_browser_operation_busy(False, department_id)
         if pending.support_unit:
@@ -2520,7 +2599,17 @@ class MainWindow(QMainWindow):
             return
 
         self._finish_handoff_progress(request_id)
+        self.state_store.update_browser_exchange_state(
+            request_id,
+            "FAILED",
+            failure_reason=error_message,
+        )
+        logger.info(
+            "browser_exchange_ledger_state request_id=%s state=FAILED",
+            request_id,
+        )
         self._pending_exchanges.pop(request_id, None)
+        self._block_failed_operational_exchange(pending, error_message)
         self._hold_failed_handoff(pending, error_message)
         if pending.support_unit:
             dialog = self._support_unit_dialog
@@ -2548,6 +2637,22 @@ class MainWindow(QMainWindow):
     ) -> None:
         if self._pending_exchange(request_id, department_id) is None:
             return
+
+        if stage == "Sending":
+            self.state_store.update_browser_exchange_state(request_id, "SUBMITTED")
+            logger.info(
+                "browser_exchange_ledger_state request_id=%s state=SUBMITTED",
+                request_id,
+            )
+        elif stage == "Receiving":
+            self.state_store.update_browser_exchange_state(
+                request_id, "RESPONSE_RECEIVED"
+            )
+            logger.info(
+                "browser_exchange_ledger_state request_id=%s "
+                "state=RESPONSE_RECEIVED",
+                request_id,
+            )
 
         if pending := self._pending_exchange(request_id, department_id):
             if pending.support_unit:
@@ -2617,12 +2722,85 @@ class MainWindow(QMainWindow):
         panel.set_browser_busy(busy)
 
     def _enqueue_browser_worker(self, worker: BrowserBridgeWorker) -> None:
-        """Queue one browser exchange and start it when the bridge is free."""
+        """Persist and queue one browser exchange before worker execution."""
+
+        request = getattr(worker, "request", None)
+        request_id = getattr(request, "request_id", "")
+        department_id = getattr(request, "department_id", "")
+        if (
+            isinstance(request_id, str)
+            and request_id
+            and isinstance(department_id, str)
+        ):
+            pending = self._pending_exchanges.get(request_id)
+            exchange_type = self._browser_exchange_type(pending)
+            workflow_id = self._browser_exchange_workflow_id(pending)
+            requested_url = getattr(request, "conversation_url", None)
+            confirmation_marker = getattr(request, "confirmation_marker", None)
+            self.state_store.create_browser_exchange(
+                request_id=request_id,
+                department_id=department_id,
+                exchange_type=exchange_type,
+                workflow_id=workflow_id,
+                requested_conversation_url=(
+                    requested_url if isinstance(requested_url, str) else None
+                ),
+                confirmation_marker=(
+                    confirmation_marker
+                    if isinstance(confirmation_marker, str)
+                    else None
+                ),
+            )
+            logger.info(
+                "browser_exchange_ledger_created request_id=%s "
+                "department_id=%s exchange_type=%s workflow_id=%s state=QUEUED",
+                request_id,
+                department_id,
+                exchange_type,
+                workflow_id or "-",
+            )
 
         self._browser_queue.append(worker)
         self._refresh_browser_queue_status()
         if self._browser_worker is None:
             self._start_next_browser_worker()
+
+    @staticmethod
+    def _browser_exchange_type(pending: PendingBrowserExchange | None) -> str:
+        if pending is None:
+            return "UNKNOWN"
+        if pending.operational_operator_followup:
+            return "OPERATOR_FOLLOWUP"
+        if pending.automatic_operational_return:
+            return "OPERATIONAL_RETURN"
+        if pending.automatic_operational_request:
+            return "OPERATIONAL_REQUEST"
+        if pending.automatic_console_return:
+            return "CONSOLE_RETURN"
+        if pending.automatic_console_request:
+            return "CONSOLE_REQUEST"
+        if pending.handoff_return:
+            return "HANDOFF_RETURN"
+        if pending.handoff_update:
+            return "HANDOFF_UPDATE"
+        if pending.handoff_id:
+            return "HANDOFF"
+        if pending.support_unit:
+            return "CONSOLE_CHAT"
+        return "DEPARTMENT_CHAT"
+
+    @staticmethod
+    def _browser_exchange_workflow_id(
+        pending: PendingBrowserExchange | None,
+    ) -> str | None:
+        if pending is None:
+            return None
+        return (
+            pending.operational_conversation_id
+            or pending.handoff_id
+            or pending.escalation_chain_id
+            or pending.source_request_id
+        )
 
     def _start_next_browser_worker(self) -> None:
         if self._browser_worker is not None or not self._browser_queue:
@@ -2640,6 +2818,12 @@ class MainWindow(QMainWindow):
                 handoff_message=spec[1],
             )
         self._refresh_browser_queue_status()
+        if isinstance(request_id, str) and request_id:
+            self.state_store.update_browser_exchange_state(request_id, "STARTED")
+            logger.info(
+                "browser_exchange_ledger_state request_id=%s state=STARTED",
+                request_id,
+            )
         worker.start()
 
     def abort_browser_operation(self, department_id: str) -> None:
@@ -2662,8 +2846,22 @@ class MainWindow(QMainWindow):
             request_id = getattr(request, "request_id", "")
             pending = self._pending_exchanges.pop(request_id, None)
             self._handoff_progress_specs.pop(request_id, None)
+            if isinstance(request_id, str) and request_id:
+                self.state_store.update_browser_exchange_state(
+                    request_id,
+                    "CANCELLED",
+                    failure_reason="Queued request cancelled by operator.",
+                    cancel_submitted=False,
+                )
+                logger.info(
+                    "browser_exchange_ledger_state request_id=%s "
+                    "state=CANCELLED submitted=False",
+                    request_id,
+                )
             if pending is not None:
-                self._hold_failed_handoff(pending, "Queued request cancelled by operator.")
+                cancel_reason = "Queued request cancelled by operator."
+                self._block_failed_operational_exchange(pending, cancel_reason)
+                self._hold_failed_handoff(pending, cancel_reason)
             self._set_browser_operation_busy(False, department_id)
             worker.deleteLater()
             self._refresh_browser_queue_status()

@@ -228,3 +228,21 @@ Future milestones must add regression and live coverage for durable operational 
 - Revised-plan APPROVE is gated before Core and resumes Project: PASS.
 - No tested approval path automatically starts implementation, commit, push or merge.
 - CDU-004B6 closure: PASS.
+
+## CDU-004B7A — durable Browser Exchange Ledger
+
+- SQLite ledger survives close/reopen with request/workflow identity and lifecycle timestamps: targeted packaging test PASS.
+- Cancellation boundary persists `cancel_submitted=False` for pre-submission cancellation: targeted packaging test PASS.
+- Shared queue creates the durable ledger record before worker execution and leaves waiting work as `QUEUED`: target PySide6 regression added; target validation pending.
+- Queued operator cancellation persists `CANCELLED`, terminal timestamp and reason: target PySide6 regression added; target validation pending.
+- Python `compileall`: PASS in packaging environment.
+- Full target suite and `git diff --check`: pending operator-environment validation.
+
+## CDU-004B7B — failure / cancel state closure
+
+- Queued operational Browser Bridge cancellation immediately changes `RUNNING` conversation to `BLOCKED` with `BLOCKER` reason: target PySide6 regression added; target validation pending.
+- Active operational Browser Bridge failure immediately changes `WAITING_SOURCE` conversation to `BLOCKED`, records `BLOCKER` reason and appends a system timeline entry: target PySide6 regression added; target validation pending.
+- Interrupted supervised handoffs in `SENT`, `RETURN_SENT` and `UPDATE_SENT` recover to `HELD` and recovery is idempotent: packaging state-store test PASS.
+- Packaging-environment `tests/test_state_store.py`: 15 PASS.
+- Python `compileall`: PASS.
+- Full target suite and `git diff --check`: pending operator-environment validation.
