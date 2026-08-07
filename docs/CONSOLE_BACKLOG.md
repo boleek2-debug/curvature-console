@@ -78,3 +78,7 @@ After the real E2E workflow is restart-safe and documented, make Console the pri
 - local LLM provider;
 - paid providers;
 - unrestricted shell execution.
+
+### B7C controlled retry follow-up
+
+After restart classification is validated, expose the bounded controlled-retry/reconciliation action that consumes `RETRY_PENDING` or resolves `RECONCILE_REQUIRED` without reusing an ambiguous transport attempt. Preserve logical workflow identity while using a fresh transport request identity and the same target/payload unless the operator explicitly changes the work.

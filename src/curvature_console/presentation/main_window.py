@@ -200,6 +200,13 @@ class MainWindow(QMainWindow):
             backup_root=self.data_directory / "package-backups",
         )
         self.state_store = SQLiteStateStore(state_path)
+        browser_recovery = self.state_store.reconcile_interrupted_browser_exchanges()
+        logger.info(
+            "browser_exchange_recovery_complete retry_pending=%s "
+            "reconcile_required=%s automatic_resend=False",
+            browser_recovery["retry_pending"],
+            browser_recovery["reconcile_required"],
+        )
         recovered_operational_count = (
             self.state_store.recover_interrupted_operational_conversations()
         )

@@ -260,3 +260,12 @@ Prepared:
 - Startup recovery now moves supervised handoffs left in `SENT`, `RETURN_SENT` or `UPDATE_SENT` to `HELD` with a visible interruption timeline entry.
 - Recovery is idempotent; already held records are not changed again.
 - Added state-store and Browser Bridge queue regressions. Packaging-environment state-store tests: 15 PASS; Python compileall: PASS. Full target PySide6 validation remains required.
+
+## 2026-08-07 — CDU-004B7C — restart reconciliation
+
+- classify interrupted Browser Bridge ledger entries conservatively at startup;
+- mark pre-submission attempts `RETRY_PENDING` / `SAFE_RETRY`;
+- mark possibly submitted attempts `RECONCILE_REQUIRED` / `RECONCILE_BEFORE_RETRY`;
+- preserve terminal attempts unchanged;
+- log startup reconciliation counts and prohibit automatic resend;
+- add idempotency and submission-boundary regression coverage.

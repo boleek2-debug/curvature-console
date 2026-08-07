@@ -246,3 +246,12 @@ Future milestones must add regression and live coverage for durable operational 
 - Packaging-environment `tests/test_state_store.py`: 15 PASS.
 - Python `compileall`: PASS.
 - Full target suite and `git diff --check`: pending operator-environment validation.
+
+## CDU-004B7C restart reconciliation
+
+- interrupted `QUEUED` and pre-submission `STARTED` Browser exchanges become `RETRY_PENDING`;
+- interrupted `SUBMITTED` and `RESPONSE_RECEIVED` exchanges become `RECONCILE_REQUIRED`;
+- terminal Browser exchanges remain unchanged;
+- reconciliation stores explicit `SAFE_RETRY` versus `RECONCILE_BEFORE_RETRY` disposition;
+- running reconciliation twice is idempotent and performs no automatic resend;
+- full target validation remains required after package application.

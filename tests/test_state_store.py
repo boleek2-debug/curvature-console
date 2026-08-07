@@ -609,3 +609,72 @@ def test_interrupted_supervised_handoff_transports_recover_to_held(tmp_path: Pat
 
     assert store.recover_interrupted_handoffs() == 0
     store.close()
+
+
+def test_browser_exchange_restart_reconciliation_separates_safe_retry_from_possible_submission(
+    tmp_path: Path,
+) -> None:
+    store = SQLiteStateStore(tmp_path / "state.sqlite3")
+
+    for request_id, state in (
+        ("queued-safe", "QUEUED"),
+        ("started-safe", "STARTED"),
+        ("submitted-unsafe", "SUBMITTED"),
+        ("response-unsafe", "RESPONSE_RECEIVED"),
+        ("completed-terminal", "COMPLETED"),
+    ):
+        store.create_browser_exchange(
+            request_id=request_id,
+            department_id="core",
+            exchange_type="OPERATIONAL_REQUEST",
+            workflow_id="operational-chain-recovery",
+            requested_conversation_url="https://chatgpt.com/c/core",
+            confirmation_marker=f"CURVATURE_REQUEST_ID: {request_id}",
+        )
+        if state != "QUEUED":
+            store.update_browser_exchange_state(request_id, state)
+
+    counts = store.reconcile_interrupted_browser_exchanges()
+
+    assert counts == {"retry_pending": 2, "reconcile_required": 2}
+
+    queued = store.load_browser_exchange("queued-safe")
+    started = store.load_browser_exchange("started-safe")
+    submitted = store.load_browser_exchange("submitted-unsafe")
+    response = store.load_browser_exchange("response-unsafe")
+    completed = store.load_browser_exchange("completed-terminal")
+
+    assert queued is not None and queued.state == "RETRY_PENDING"
+    assert queued.recovery_disposition == "SAFE_RETRY"
+    assert started is not None and started.state == "RETRY_PENDING"
+    assert started.recovery_disposition == "SAFE_RETRY"
+    assert submitted is not None and submitted.state == "RECONCILE_REQUIRED"
+    assert submitted.recovery_disposition == "RECONCILE_BEFORE_RETRY"
+    assert response is not None and response.state == "RECONCILE_REQUIRED"
+    assert response.recovery_disposition == "RECONCILE_BEFORE_RETRY"
+    assert completed is not None and completed.state == "COMPLETED"
+    assert completed.recovery_disposition is None
+    store.close()
+
+
+def test_browser_exchange_restart_reconciliation_is_idempotent(tmp_path: Path) -> None:
+    store = SQLiteStateStore(tmp_path / "state.sqlite3")
+    store.create_browser_exchange(
+        request_id="queued-once",
+        department_id="project",
+        exchange_type="DEPARTMENT_CHAT",
+        workflow_id=None,
+        requested_conversation_url="https://chatgpt.com/c/project",
+        confirmation_marker=None,
+    )
+
+    first = store.reconcile_interrupted_browser_exchanges()
+    second = store.reconcile_interrupted_browser_exchanges()
+    record = store.load_browser_exchange("queued-once")
+
+    assert first == {"retry_pending": 1, "reconcile_required": 0}
+    assert second == {"retry_pending": 0, "reconcile_required": 0}
+    assert record is not None
+    assert record.state == "RETRY_PENDING"
+    assert record.recovery_disposition == "SAFE_RETRY"
+    store.close()

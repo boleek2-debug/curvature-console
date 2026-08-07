@@ -44,3 +44,7 @@ Every run records parameters, stage transitions, timestamps, logs, outputs, fail
 ## Extension boundary
 
 CDU may integrate tools required by Project, Core or Research, but the requesting department owns the functional requirement and acceptance contract.
+
+### Restart reconciliation sits beneath workflow state
+
+The Browser Exchange Ledger is the transport source of truth across process restart. Startup reconciliation classifies interrupted attempts independently of the operational-conversation or supervised-handoff state. `RETRY_PENDING` records are known not to have durable submission evidence; `RECONCILE_REQUIRED` records may already exist remotely. Neither classification automatically starts a worker.

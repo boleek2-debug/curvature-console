@@ -154,3 +154,18 @@ Supported production routes are Project ↔ Core, Project ↔ Research and Core 
 ## Authority and consequence gate
 
 Before an operational request is routed, Console evaluates whether the request crosses an operator-owned boundary. Routine consultation, research, implementation analysis and validation continue automatically. Product direction, scope, canon, art direction, financial commitment, installation, security-sensitive action, shared repository mutation and unresolved departmental conflict become `AWAITING_OPERATOR_DECISION` before target execution. The stop records a decision domain, concrete question, options and consequences.
+
+### Restart reconciliation classification
+
+At Console startup, Browser Exchange Ledger entries that still represent process-owned transport are classified before any retry:
+
+```text
+QUEUED / STARTED + no submitted_at
+→ RETRY_PENDING / SAFE_RETRY
+
+SUBMITTED / RESPONSE_RECEIVED
+(or STARTED carrying submitted_at)
+→ RECONCILE_REQUIRED / RECONCILE_BEFORE_RETRY
+```
+
+`COMPLETED`, `FAILED`, `CANCELLED` and `ROUTE_UNVERIFIED` remain terminal and are not changed. Reconciliation is idempotent: restarting again does not create another transition or resend. `RETRY_PENDING` means transport is safe to retry only through a controlled retry action; it does not itself enqueue work. `RECONCILE_REQUIRED` explicitly forbids blind resend until the existing ChatGPT conversation is checked against the durable request marker.

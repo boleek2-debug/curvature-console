@@ -131,3 +131,7 @@ Decision: Browser Bridge transport failure/cancellation must not leave an operat
 Transport cancellation is not equivalent to abandoning the logical workflow. `CANCELLED` remains an explicit operator workflow-close action; a cancelled transport becomes `BLOCKED` so the operator can inspect whether retry/reconciliation is appropriate.
 
 Legacy supervised handoffs left in `SENT`, `RETURN_SENT` or `UPDATE_SENT` across restart recover to `HELD`, not to an automatic resend. B7C will decide retry only after durable Browser Exchange reconciliation.
+
+## B7C restart recovery decision
+
+Browser Bridge restart recovery is conservative and transport-aware. Absence of durable submission evidence permits a future controlled retry, but does not trigger one automatically. Any attempt at or beyond the durable submission boundary requires reconciliation against the existing ChatGPT conversation before retry. This keeps higher-level workflow identity separate from transport-attempt state and prevents blind duplicate sends after crash/restart.

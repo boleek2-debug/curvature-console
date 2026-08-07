@@ -39,9 +39,9 @@ CDU-004B7 — Console-first reliability and recovery hardening.
 
 ## Immediate next step
 
-CDU-004B7A established the durable Browser Exchange Ledger and passed the full target suite at 283 tests. CDU-004B7B is the current repair: Browser Bridge failure/cancellation associated with operational `RUNNING` or `WAITING_SOURCE` work must immediately move the logical conversation to `BLOCKED`, attach `BLOCKER` attention and preserve the transport reason in the timeline. Queued cancellation follows the same rule.
+CDU-004B7A established the durable Browser Exchange Ledger and CDU-004B7B closed in-session operational failure/cancel ghosts plus interrupted supervised-handoff transport states. The combined B7A+B7B target suite passed at 286 tests with `git diff --check` clean.
 
-B7B also closes the legacy supervised-handoff restart gap: `SENT`, `RETURN_SENT` and `UPDATE_SENT` records recover to `HELD` after restart with an explicit interruption entry. No automatic resend occurs. B7C will use the durable Browser Exchange Ledger for deterministic restart reconciliation and idempotent retry; B7D supplies live crash/recovery evidence. After B7 closure, rebuild the main Console work-state surface, then run one real Chronicle Console-first end-to-end workflow before promotion.
+CDU-004B7C is now the current repair. On startup, non-terminal Browser Exchange Ledger entries are reconciled conservatively. `QUEUED`/`STARTED` attempts with no durable submission evidence become `RETRY_PENDING` with `SAFE_RETRY`; `SUBMITTED`/`RESPONSE_RECEIVED` attempts, and any started attempt carrying durable submission evidence, become `RECONCILE_REQUIRED` with `RECONCILE_BEFORE_RETRY`. Terminal attempts are left unchanged. Startup never resends automatically. B7D supplies live crash/recovery evidence. After B7 closure, rebuild the main Console work-state surface, then run one real Chronicle Console-first end-to-end workflow before promotion.
 
 ## Known follow-up
 

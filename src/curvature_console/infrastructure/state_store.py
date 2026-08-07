@@ -78,6 +78,7 @@ class BrowserExchangeRecord:
     updated_at: str
     failure_reason: str | None
     cancel_submitted: bool | None
+    recovery_disposition: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -953,6 +954,7 @@ class SQLiteStateStore:
             cancel_submitted=(
                 None if cancel_submitted is None else bool(cancel_submitted)
             ),
+            recovery_disposition=row["recovery_disposition"],
         )
 
 
@@ -1017,6 +1019,48 @@ class SQLiteStateStore:
                 (status, selected_option, selected_action_type, timestamp, timestamp, conversation_id),
             )
 
+
+
+    def reconcile_interrupted_browser_exchanges(self) -> dict[str, int]:
+        """Classify non-terminal Browser Bridge attempts conservatively after restart.
+
+        Attempts with no evidence of submission become RETRY_PENDING. Attempts that
+        may already have crossed the submission boundary become RECONCILE_REQUIRED.
+        No resend is performed here.
+        """
+
+        timestamp = datetime.now(UTC).isoformat()
+        safe_reason = (
+            "Console restart interrupted this Browser Bridge exchange before any "
+            "durable evidence of submission. A controlled retry is permitted; no "
+            "automatic resend was performed."
+        )
+        reconcile_reason = (
+            "Console restart interrupted this Browser Bridge exchange after the "
+            "submission boundary may have been crossed. Reconcile the existing "
+            "ChatGPT conversation before any retry; blind resend is prohibited."
+        )
+        with self._connection:
+            retry_cursor = self._connection.execute(
+                "UPDATE browser_exchange "
+                "SET state = 'RETRY_PENDING', recovery_disposition = 'SAFE_RETRY', "
+                "updated_at = ?, failure_reason = COALESCE(failure_reason, ?) "
+                "WHERE state IN ('QUEUED', 'STARTED') AND submitted_at IS NULL",
+                (timestamp, safe_reason),
+            )
+            reconcile_cursor = self._connection.execute(
+                "UPDATE browser_exchange "
+                "SET state = 'RECONCILE_REQUIRED', "
+                "recovery_disposition = 'RECONCILE_BEFORE_RETRY', "
+                "updated_at = ?, failure_reason = COALESCE(failure_reason, ?) "
+                "WHERE (state IN ('SUBMITTED', 'RESPONSE_RECEIVED') "
+                "OR (state IN ('QUEUED', 'STARTED') AND submitted_at IS NOT NULL))",
+                (timestamp, reconcile_reason),
+            )
+        return {
+            "retry_pending": int(retry_cursor.rowcount),
+            "reconcile_required": int(reconcile_cursor.rowcount),
+        }
 
     def recover_interrupted_handoffs(self) -> int:
         """Move process-bound supervised handoff transports to HELD after restart."""
@@ -1222,7 +1266,8 @@ class SQLiteStateStore:
                     completed_at TEXT,
                     updated_at TEXT NOT NULL,
                     failure_reason TEXT,
-                    cancel_submitted INTEGER
+                    cancel_submitted INTEGER,
+                    recovery_disposition TEXT
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_browser_exchange_state
@@ -1353,7 +1398,25 @@ class SQLiteStateStore:
         self._migrate_department_reply_state()
         self._migrate_handoff_status_constraint()
         self._migrate_operational_conversation_lifecycle()
+        self._migrate_browser_exchange_recovery()
 
+
+
+    def _migrate_browser_exchange_recovery(self) -> None:
+        """Add restart-reconciliation metadata to pre-B7C databases."""
+
+        columns = {
+            row["name"]
+            for row in self._connection.execute(
+                "PRAGMA table_info(browser_exchange)"
+            ).fetchall()
+        }
+        if "recovery_disposition" in columns:
+            return
+        with self._connection:
+            self._connection.execute(
+                "ALTER TABLE browser_exchange ADD COLUMN recovery_disposition TEXT"
+            )
 
     def _migrate_operational_conversation_lifecycle(self) -> None:
         """Add lifecycle columns to databases created before CDU-004B2A."""
