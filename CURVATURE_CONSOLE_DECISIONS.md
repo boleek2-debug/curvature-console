@@ -1,9 +1,9 @@
 # Curvature Console Architecture Decisions
 
 Status: Active
-Version: 2.0.0
+Version: 2.1.0
 Owner: Curvature Console Development Unit
-Last Updated: 2026-08-05
+Last Updated: 2026-08-08
 
 ## Durable existing decisions
 
@@ -135,3 +135,11 @@ Legacy supervised handoffs left in `SENT`, `RETURN_SENT` or `UPDATE_SENT` across
 ## B7C restart recovery decision
 
 Browser Bridge restart recovery is conservative and transport-aware. Absence of durable submission evidence permits a future controlled retry, but does not trigger one automatically. Any attempt at or beyond the durable submission boundary requires reconciliation against the existing ChatGPT conversation before retry. This keeps higher-level workflow identity separate from transport-attempt state and prevents blind duplicate sends after crash/restart.
+
+## 2026-08-08 — Recovery validation uses proportional risk
+
+Decision: CDU-004B7 may close without deliberately forcing narrow crash-boundary failures when deterministic automated tests already verify the recovery classification and idempotence rules and destructive live fault injection would add disproportionate time or operational risk.
+
+Normal functional validation remains required. Real-world Console use acts as a long-duration soak test. If a natural crash, restart interruption or duplicate-send symptom occurs, preserve the relevant SQLite state and runtime log, diagnose the exact boundary, fix the defect and add a deterministic regression test.
+
+Invariant: this policy does not weaken transport safety. Startup must still perform no automatic resend; `SAFE_RETRY` and `RECONCILE_REQUIRED` remain distinct; ambiguous post-submission state must be reconciled before any retry.

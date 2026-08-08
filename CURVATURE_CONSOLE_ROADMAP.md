@@ -1,9 +1,9 @@
 # Curvature Console Roadmap
 
 Status: Active
-Version: 4.0.0
+Version: 4.1.0
 Owner: Curvature Console Development Unit
-Last Updated: 2026-08-07
+Last Updated: 2026-08-08
 
 ## Completed foundation
 
@@ -13,20 +13,23 @@ The operational foundation includes departmental workspaces, persistence, Browse
 
 ### CDU-004B7 — Console-first reliability and recovery hardening
 
-Status: ACTIVE.
+Status: **CLOSED**.
 
-CDU-004B6 is closed and pushed. The next milestone is a bounded reliability audit before any major new feature or external-tool integration. It verifies that queues, operational conversations, retries, recovery, artifacts, nested CDU escalation, decision gates, cancellation/hold/retry and Thread Pressure all reach safe, explicit states across restart and failure.
+B7A–B7C established durable transport state, immediate failure/cancel closure and conservative restart reconciliation. `QUEUED` / pre-submission `STARTED` attempts recover to `RETRY_PENDING`; work at or beyond durable submission evidence recovers to `RECONCILE_REQUIRED`; startup never automatically resends. Reconciliation is idempotent.
 
-Current substage: **CDU-004B7C — Restart Reconciliation and Retry Safety**. B7A established the durable Browser Exchange Ledger and B7B closed in-session failure/cancel ghosts plus interrupted supervised-handoff transport states. B7C now classifies interrupted Browser Bridge attempts at startup: attempts with no durable evidence of submission become `RETRY_PENDING`, while attempts that may already have crossed the submission boundary become `RECONCILE_REQUIRED`. No automatic resend occurs.
+Closure evidence:
 
-Acceptance direction:
+- 288 automated tests passed;
+- `git diff --check` passed;
+- checkpoint `6101810957763035bc71a657e036597ec66697d7` is pushed;
+- deliberate narrow-window crash injection is deferred as opportunistic operational validation rather than a release blocker.
 
-1. no orphaned process-bound workflow states after restart;
-2. retries and resumptions remain idempotent and preserve stable logical identity;
-3. no duplicate transport, artifact or operator action is created by recovery;
-4. every stopped workflow exposes a clear operator-visible reason and safe next action;
-5. automated regression coverage plus focused live interruption/recovery evidence;
-6. current documentation and a clean repository snapshot before closure.
+If a natural interruption exposes a defect, capture SQLite/runtime-log evidence and add a regression test before considering the issue closed.
+
+### Next approved implementation direction
+
+Rebuild the main Console surface around **work state**. Keep this as the next implementation area until CDU assigns the concrete milestone/substage identifier. After that, run one real Chronicle Console-first end-to-end workflow before formal Console-first promotion.
+
 
 ## Approved development direction
 

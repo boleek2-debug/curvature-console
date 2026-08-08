@@ -1,392 +1,116 @@
 # CURVATURE CONSOLE — CURRENT STATE
 
-Status: Operational; B5.5D2A implemented and automated-verified; real workflow validation pending
-Version: 2.4.0
-Owner: Curvature Core
-Last Updated: 2026-07-30
+Status: Operational; CDU-004B7 closed
+Version: 3.0.0
+Owner: Curvature Console Development Unit
+Last Updated: 2026-08-08
 
 # Purpose
 
-This document is the concise source of truth for the current operational state
-of Curvature Console.
+This is the concise operational checkpoint for Curvature Console. Detailed history belongs in `CURVATURE_CONSOLE_CHANGELOG.md`, architecture and policy in the documentation set, and detailed validation evidence in `docs/CONSOLE_TEST_MATRIX.md` and `docs/CONSOLE_STATE_SNAPSHOT.md`.
 
 # Repository Baseline
 
 ```text
 Repository: ~/curvature-console
 Branch: main
-Base commit: 34bf968a5c9b9d3bee9a50f0adf501e20a475a02
-Push state before D2A commit: main == origin/main
-Working tree: B5.5D2A implementation and tests pending commit
-Current snapshot: curvature-console-snapshot-20260730-185252-34bf968.zip
+Verified commit: 6101810957763035bc71a657e036597ec66697d7
+origin/main: same
+Working tree at clean B7 checkpoint: clean
 ```
 
-# B5.2R Verification
-
-Automated verification:
+# Verified Baseline
 
 ```text
-111 tests passed
+288 automated tests passed
 git diff --check passed
 ```
 
-Live Core verification:
+Operationally verified foundations include:
+
+- three departmental workspaces and persisted routing;
+- Browser Bridge request/response transport;
+- generated-file capture;
+- package review and safe apply;
+- supervised handoffs and return path;
+- Console Development Unit diagnostics and escalation;
+- durable operational conversations and Operator Review;
+- result/blocker/decision attention classification;
+- authority/consequence decision gates;
+- bounded decision resolution and workflow resume;
+- durable Browser Exchange Ledger;
+- failure/cancel workflow closure;
+- conservative restart reconciliation with no automatic resend.
+
+# CDU-004B7 Closure
+
+CDU-004B7 reliability/recovery hardening is closed.
+
+Recovery rules:
 
 ```text
-request_id: 930f45e9ba1a41f6a75842fd1e788f32
-department_id: core
-route: exact persisted Core conversation URL
-message marker: confirmed
-assistant response: captured
-exchange status: success
-background browser: normal Chrome inside Xvfb
-physical Chrome window: not shown
-owned process cleanup: complete
-CDP port 9222 released: true
+QUEUED / STARTED without durable submission evidence
+→ RETRY_PENDING
+→ SAFE_RETRY
+
+SUBMITTED / RESPONSE_RECEIVED
+or STARTED carrying durable submission evidence
+→ RECONCILE_REQUIRED
+→ RECONCILE_BEFORE_RETRY
+
+terminal exchange
+→ unchanged
+
+startup
+→ never automatic resend
 ```
 
-# Implemented B5.2R Capabilities
+Repeated reconciliation is idempotent.
 
-- lightweight normal Task payloads;
-- full context reserved for Thread Handoff;
-- immutable `request_id`;
-- exact `department_id` and persisted conversation URL binding;
-- one dedicated Playwright page per exchange;
-- confirmation of the current user message through a unique request marker;
-- response acceptance only for the matching request and department;
-- stale or foreign result rejection;
-- normal Chrome on an invisible Xvfb display;
-- visible Chrome only for confirmed login or human verification;
-- per-panel activity heartbeat, stage and elapsed time;
-- timestamped runtime logs under `data/logs/`;
-- request, stage, selector, route and traceback diagnostics;
-- owned Chrome/Xvfb process-group cleanup;
-- verified release of CDP port 9222.
+Deliberately forcing narrow crash-boundary failures is not a blocking requirement. Normal functional testing continues, and real long-term use acts as a soak test. If a natural interruption occurs, preserve the SQLite state and matching runtime log; any defect must be converted into a deterministic regression test.
 
-# Department Validation Policy
+# Current Direction
 
-The implementation is shared by Project, Core and Research.
-
-B5.2R received deep live validation in Core. Automated tests cover shared
-department routing and isolation. Separate Project and Research repetition is
-not required unless a department-specific defect appears.
-
-# Known Follow-Up
-
-Generated-file capture exists in earlier repository history and persistence
-models, but the current rewritten exchange result does not yet return captured
-files. The next corrective sprint must restore and generalise download capture
-without assuming ZIP format.
-
-# Exact Next Step
-
-Close, commit and push B5.2R.
-
-Then start:
+The next approved implementation area is:
 
 ```text
-ASSISTANT-001B5.R2D2 — General Generated-File Capture
+Main Console work-state surface
 ```
 
-The sprint must support arbitrary generated files such as `.txt`, `.md`,
-`.json`, `.csv`, `.pdf`, images, office documents and `.zip`, preserving the
-actual filename and extension.
+Do not invent a new milestone identifier in this checkpoint. Assign the concrete CDU milestone/substage identifier before implementation begins.
 
-
-# B5.R2D2 Active Implementation
-
-The current candidate restores generated-file capture on the deterministic
-browser bridge.
-
-Files are captured only from links in the newly completed assistant response.
-The actual suggested filename and extension are preserved. No `.zip` extension
-is forced.
-
-Captured files are stored under:
+After the work-state surface is operational:
 
 ```text
-data/inbox/<department>/
+one real Chronicle Console-first end-to-end workflow
+→ formal Console-first promotion
+→ Tool Adapter Foundation
+→ Godot/local build-test integration
+→ Research source intake
+→ Blender / ComfyUI / controlled image-to-3D pipelines
+→ composite workflows
+→ Chronicle Beta Feedback Hub
+→ voice accessibility
 ```
 
-with collision-safe suffixes such as `report-2.txt`.
+Project Value Monitor remains deferred and non-blocking.
 
-# B5.R2D2 File-Card Diagnostic Candidate
+# Operational Recovery Evidence
 
-The first live `.txt` test completed the assistant response but captured zero
-files because the generated file was not represented by an `a[href]` inside the
-assistant text node.
-
-The active candidate now searches the complete assistant conversation turn,
-including file cards and download buttons, and records bounded DOM diagnostics
-when no file is captured.
-
-# B5.R2D2 Two-Stage Download Candidate
-
-Live diagnostics proved that ChatGPT can render generated files as buttons
-rather than direct links. The active candidate first waits for a direct browser
-download. If none starts, it treats the click as opening a preview and searches
-the visible page for the real Download control.
-
-
-# B5.R2D2 Citation Interaction Diagnostic
-
-The current candidate is diagnostic only after a non-downloading generated-file
-control is clicked. It records bounded before/after DOM evidence and does not
-choose or click a second control.
-
-
-# B5.R2D2 Active-Layer Diagnostic
-
-The previous general page snapshot was dominated by sidebar controls. The active
-diagnostic now follows the focused Close control, records its ancestor chain,
-selects a bounded blocking-layer candidate and records every visible interactive
-control inside that layer. It still performs no inferred follow-up click.
-
-
-# B5.R2D2 Generated-File Button Activation
-
-Live evidence confirmed a generated-file card rendered as a button with
-`aria-label="curvature-download-test.txt"`. A normal Playwright locator click
-focused the button but did not emit a browser download event.
-
-The current implementation now tries five bounded activation methods for the
-same candidate: locator click, centre-coordinate mouse click, dispatched
-pointer/mouse sequence, Enter and Space. Each method is wrapped in its own
-download expectation and logged separately.
-
-# B5.R2D2 Existing File-Card Observer
-
-A dedicated observer now captures browser request/response, download, popup,
-console, fetch, XHR, object-URL and anchor-click activity around one exact
-file-card activation. This is intended to identify the actual delivery channel
-before any further production download logic is added.
-
-
-# B5.R2D2 Fetch-Response Capture
-
-Live TEST-01 proved that ChatGPT generated-file buttons do not emit a native
-Playwright download event. The button starts a fetch chain ending in a
-successful `/backend-api/estuary/content` response with
-`Content-Disposition: attachment`.
-
-The browser bridge now captures that response body and adapts it to the same
-save pipeline used for native downloads.
-
-# B5.R2D2 Generated-File Capture — Closed
-
-Status: **LIVE PASS**
-
-Verified on 2026-07-28:
+Runtime state:
 
 ```text
-128 automated tests passed
-git diff --check passed
-Core generated a real curvature-download-test.txt file card
-Console activated the exact file card
-ChatGPT delivered the file through a fetch response
-final endpoint: /backend-api/estuary/content
-HTTP status: 200
-Content-Disposition: attachment
-captured size: 29 bytes
-saved path: data/inbox/core/curvature-download-test.txt
-saved content: CURVATURE_DOWNLOAD_CAPTURE_OK
-exchange result: downloads=1
+data/curvature_console.sqlite3
 ```
 
-Confirmed delivery model:
+Runtime logs:
 
 ```text
-assistant file card
-→ button activation
-→ interpreter/download metadata
-→ Estuary attachment fetch
-→ response body capture
-→ collision-safe department inbox write
+data/logs/console-YYYYMMDD-HHMMSS.log
 ```
 
-A native Playwright download event, Blob URL, programmatic anchor click and popup
-were not used in the verified flow.
+If a real crash/restart issue appears, preserve both before cleanup.
 
-`Coding Citation` is not a generated-file candidate and must not be activated by
-the download scanner.
+# Next Step
 
-The temporary TEST-01 observer served its diagnostic purpose and is not part of
-the production workflow.
-
-# B5.5A — First Contact Foundation
-
-Status: Completed and verified.
-
-This sprint adds the backend-only foundation for supervised
-interdepartmental communication:
-
-- immutable structured handoff records;
-- strict Project/Core/Research source and target validation;
-- stable handoff and request identifiers;
-- explicit lifecycle states and allowed transitions;
-- complete visible correspondence timelines;
-- SQLite persistence and restart continuity;
-- participant and status filtering;
-- no UI controls and no automatic delivery.
-
-The implementation intentionally stops before browser routing, approval UI,
-loop automation or background sends.
-
-# B5.5B — Bridge Controls
-
-Status: Completed and verified.
-
-A dedicated `Bridge Controls` dialog now provides supervised handoff actions:
-
-- create draft;
-- edit draft instruction;
-- request approval;
-- approve without sending;
-- reject;
-- hold;
-- redirect before delivery;
-- stop;
-- inspect the complete visible timeline.
-
-Approval is represented by the explicit `approved` state. It is deliberately
-separate from `sent`; B5.5B performs no browser delivery and no background
-automation.
-
-# B5.5C — Engage Controlled Delivery
-
-Status: Completed, committed and verified.
-
-Commit `10dbf6c` added one-shot supervised delivery of an approved handoff:
-
-- only an explicitly approved handoff may be delivered;
-- the user confirms the delivery before browser activity begins;
-- the exact persisted target department conversation URL is used;
-- the handoff identifier is included in the delivered message;
-- success records received and answered timeline entries;
-- browser failure moves the handoff to held with a visible reason;
-- no autonomous loop or background interdepartmental conversation is introduced.
-
-# B5.5F — Bounded Normal Task Context
-
-Status: Completed and verified.
-
-Direct comparison of commit `2d21958` with `10dbf6c` confirmed that
-`browser_bridge.py` and `transfer_package.py` were byte-identical. The browser
-entry path was not changed by B5.5A–B5.5C.
-
-The normal Task payload grew because the two full authoritative Markdown
-documents grew while the builder continued embedding both without a size
-boundary. Normal Task context is now bounded at document boundaries. Current
-state has priority; additional authoritative documents are omitted when the
-12,000-character section budget would be exceeded. Thread Handoff remains the
-full-context route.
-
-# B5.6A — Reply Viewer
-
-Status: Completed and user-verified.
-
-Panels show `Reply received` and activate `View Replies (N)`. Full transcripts remain persisted and feed Task context and Thread Pressure. A large resizable viewer shows saved tasks and replies.
-
-# 2026-07-30 Closeout Verification
-
-Verified state before final repository commit:
-
-```text
-154 automated tests passed
-git diff --check passed
-Reply Viewer manually verified by the user
-normal task ordering and continuity manually verified
-B5.5C remains the committed controlled-delivery baseline
-```
-
-The next activity is a fresh repository snapshot and an audit of the remaining
-interdepartmental communication scope. No further Console feature is approved by
-this closeout.
-
-# B5.5D1 — Department-Generated Draft Intake
-
-Status: Completed, committed and live-verified.
-
-Commit `f50e89c` completed the supervised department-generated handoff intake and
-its live delivery hardening.
-
-Delivered:
-
-- strict `BEGIN_CURVATURE_HANDOFF_PROPOSAL` schema-version-1 envelopes;
-- source identity bound to the originating department response;
-- validation of target and all required proposal fields;
-- duplicate-safe persistence in the shared Supervised Communication Hub;
-- department-generated proposals entering directly as `PENDING_APPROVAL`;
-- manual draft creation retained as a fallback;
-- explicit operator approval and `Deliver once` confirmation before any
-  department boundary is crossed;
-- resizable and scrollable delivery confirmation;
-- visible delivery stage and elapsed-time feedback;
-- verified ProseMirror keyboard entry;
-- active Send-button activation with Enter only as fallback;
-- robust post-submit confirmation through request markers and new assistant
-  turns;
-- robust assistant reply capture through stable message identity;
-- failure-to-`HELD` behaviour preserved;
-- timestamped snapshots stored under `data/snapshots/` with a `latest.zip`
-  symlink and no duplicate archive copy.
-
-Final verification:
-
-```text
-175 automated tests passed
-git diff --check passed
-Project proposal intake: live pass
-explicit approval gate: live pass
-controlled Project → Core delivery: live pass
-Core exact reply capture: live pass
-reply persisted by Console: live pass
-no timeout: live pass
-no autonomous loop: preserved
-```
-
-Live verification reply:
-
-```text
-B5.5D1-H6 REPLY CAPTURE RECEIVED
-```
-
-# B5.5D2A — Supervised Return Path Foundation
-
-Status: Implemented and automated-verified; real workflow validation pending.
-
-Delivered candidate:
-
-- captured target replies remain attached to the originating handoff;
-- target replies move the handoff to `AWAITING_USER_DECISION`;
-- operator decisions: `Continue in Target`, `Return to Source`, `Hold`, `Close`;
-- `Continue in Target` keeps the handoff open as `IN_PROGRESS`;
-- `Return to Source` requires a separate preview and `Return once` confirmation;
-- returned messages use the original source department and the same handoff identity;
-- return success and failure are recorded in the same visible timeline;
-- new return-path statuses are persisted through an in-place SQLite schema migration;
-- the open Communication Hub refreshes after delivery, reply capture, return and failure while preserving selection;
-- the obsolete inline `Reply received` field is removed;
-- `View Replies (N) • X new` exposes persistent unread state;
-- opening Reply Viewer marks replies read, including across restart;
-- the three-panel shell test now reflects the intentional removal of the old inline conversation widget.
-
-Automated verification:
-
-```text
-184 automated tests passed
-git diff --check passed
-```
-
-The earlier controlled return-path trial confirmed that the reply could reach the
-source and the handoff could reach `RETURNED`; it also exposed the stale open-Hub
-refresh and reply-notification UX defects now corrected by this candidate. A new
-real Project → Core → Project workflow using an actual Curvature change remains
-the required live validation.
-
-# Exact Next Step
-
-Commit and push B5.5D2A with this documentation, create a fresh clean snapshot,
-then run one real supervised Project → Core → Project workflow. Do not mark D2A
-complete until the open Hub refresh, unread reply state, same-handoff timeline and
-explicit Return once path are verified in that real workflow.
+Update the B7 closure documentation, validate the documentation-only diff, commit and push it, create a fresh clean snapshot, then begin the main Console work-state surface milestone.

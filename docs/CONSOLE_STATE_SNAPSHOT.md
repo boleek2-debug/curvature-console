@@ -1,33 +1,36 @@
 # Console Development Unit State Snapshot
 
 Status: Operational
-Version: 1.3.0
+Version: 1.4.0
 Owner: Curvature Console Development Unit
-Last Updated: 2026-08-07
+Last Updated: 2026-08-08
 
 ## Repository
 
 ```text
 Repository: ~/curvature-console
 Branch: main
-Verified commit: 21643599e7e735a22ae5d6ecafe78bea9fcc5c22
+Verified commit: 6101810957763035bc71a657e036597ec66697d7
 origin/main: same
 Working tree at supplied snapshot: clean
 ```
 
 ## Verified baseline
 
-- 231 automated tests passed after CDU-002B;
+- 288 automated tests passed after CDU-004B7C;
 - `git diff --check` passed;
-- CDU identity migration and resilient attachments live PASS;
-- generated downloads live PASS;
-- normal department and CDU requests share one FIFO Browser Bridge queue;
-- supervised handoff delivery, progress update and return path use the same queue;
-- active and queued operations have controlled cancellation semantics.
+- durable Browser Exchange Ledger is active;
+- interrupted transport reconciliation is conservative and idempotent;
+- startup performs no automatic Browser Bridge resend;
+- operational conversations, supervised handoffs, generated artifacts and decision gates retain their existing verified behaviour.
+
 
 ## Current milestone
 
-CDU-004B7 — Console-first reliability and recovery hardening.
+CDU-004B7 — Console-first reliability and recovery hardening — **CLOSED**.
+
+The next approved implementation area is the main Console work-state surface. A concrete milestone/substage identifier should be assigned before implementation begins.
+
 
 ## CDU-003 package scope
 
@@ -39,9 +42,12 @@ CDU-004B7 — Console-first reliability and recovery hardening.
 
 ## Immediate next step
 
-CDU-004B7A established the durable Browser Exchange Ledger and CDU-004B7B closed in-session operational failure/cancel ghosts plus interrupted supervised-handoff transport states. The combined B7A+B7B target suite passed at 286 tests with `git diff --check` clean.
+Start the main Console work-state surface redesign from the clean B7 checkpoint.
 
-CDU-004B7C is now the current repair. On startup, non-terminal Browser Exchange Ledger entries are reconciled conservatively. `QUEUED`/`STARTED` attempts with no durable submission evidence become `RETRY_PENDING` with `SAFE_RETRY`; `SUBMITTED`/`RESPONSE_RECEIVED` attempts, and any started attempt carrying durable submission evidence, become `RECONCILE_REQUIRED` with `RECONCILE_BEFORE_RETRY`. Terminal attempts are left unchanged. Startup never resends automatically. B7D supplies live crash/recovery evidence. After B7 closure, rebuild the main Console work-state surface, then run one real Chronicle Console-first end-to-end workflow before promotion.
+B7 live crash-boundary validation is no longer a blocking substage. Do not deliberately force narrow crash timing solely to satisfy a matrix. Continue normal functional testing. If a real interruption occurs during ordinary use, preserve `data/curvature_console.sqlite3` and the matching `data/logs/console-*.log`, verify whether the durable ledger classification was truthful, and turn any defect into a deterministic regression test.
+
+After the work-state surface is operational, run one real Chronicle Console-first end-to-end workflow before formal Console-first promotion.
+
 
 ## Known follow-up
 
@@ -156,3 +162,11 @@ Repository closure complete: commit and push succeeded, and the clean post-push 
 ## 2026-08-07 — post-B6 planning state
 
 The operator approved the next ordered development sequence: reliability/recovery hardening; main work-state UI; one real Chronicle Console-first E2E; formal Console-first promotion; Tool Adapter Foundation; Godot/local build-test integration; Research source intake; Blender/ComfyUI/image-to-3D pipelines; composite workflows; Chronicle Beta Feedback Hub; then voice accessibility. Project Value Monitor remains a non-blocking deferred feature.
+
+## 2026-08-08 — CDU-004B7 closure
+
+CDU-004B7 is closed after 288 passing target-environment tests, clean `git diff --check` and pushed checkpoint `6101810957763035bc71a657e036597ec66697d7`.
+
+B7A records Browser Bridge transport truth durably. B7B closes in-session transport failure/cancel workflow ghosts and safely recovers interrupted supervised-handoff transport. B7C performs conservative startup reconciliation: no durable submission evidence permits `SAFE_RETRY`; possible or confirmed submission requires `RECONCILE_BEFORE_RETRY`; terminal exchanges remain terminal; a second reconciliation pass makes no further change; startup never automatically resends.
+
+Deliberate fault injection at narrow timing boundaries is deferred as opportunistic operational validation. Natural crash/restart evidence collected during normal long-term Console use is preferred; any discovered defect must become a reproducible regression test.

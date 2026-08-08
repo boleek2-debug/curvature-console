@@ -1,5 +1,28 @@
 # Curvature Console Changelog
 
+Status: Active
+Version: 2.1.0
+Owner: Curvature Console Development Unit
+Last Updated: 2026-08-08
+
+## 2026-08-08 — CDU-004B7 reliability/recovery hardening closed
+
+- Closed the bounded Console-first reliability and recovery hardening milestone after B7A–B7C.
+- Durable Browser Exchange Ledger records transport state independently from higher-level workflow state.
+- In-session Browser Bridge failure and cancellation close process-bound workflow ghosts immediately.
+- Interrupted supervised-handoff transport states recover to a safe held state.
+- Startup reconciliation classifies interrupted `QUEUED` / pre-submission `STARTED` attempts as `RETRY_PENDING` with `SAFE_RETRY`.
+- Attempts at or beyond durable submission evidence become `RECONCILE_REQUIRED` with `RECONCILE_BEFORE_RETRY`.
+- Startup reconciliation is idempotent and never performs an automatic resend.
+- Full target validation passed with 288 automated tests and clean `git diff --check`.
+- Deliberate destructive crash injection is not required for milestone closure. Rare crash-boundary behaviour remains an operational observation item: if a natural interruption occurs, preserve SQLite/log evidence and convert any defect into a deterministic regression test.
+- Next approved implementation direction is the main Console work-state surface, followed by one real Chronicle Console-first end-to-end workflow.
+
+Repository checkpoint:
+
+```text
+6101810957763035bc71a657e036597ec66697d7
+```
 
 ## 2026-08-06 — CDU-004B6 decision resolution candidate
 
@@ -11,10 +34,6 @@
 - Existing Accept behaviour for ordinary completed results remains unchanged.
 - Targeted persistence validation: 8 tests passed in the packaging environment; full target-environment validation remains required.
 
-Status: Active
-Version: 2.0.0
-Owner: Curvature Console Development Unit
-Last Updated: 2026-08-06
 
 
 ## 2026-08-06 — CDU-004B4 production-department operational conversations
