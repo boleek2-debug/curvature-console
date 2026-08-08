@@ -1,7 +1,7 @@
 # Curvature Console Architecture Decisions
 
 Status: Active
-Version: 2.1.0
+Version: 2.2.0
 Owner: Curvature Console Development Unit
 Last Updated: 2026-08-08
 
@@ -143,3 +143,18 @@ Decision: CDU-004B7 may close without deliberately forcing narrow crash-boundary
 Normal functional validation remains required. Real-world Console use acts as a long-duration soak test. If a natural crash, restart interruption or duplicate-send symptom occurs, preserve the relevant SQLite state and runtime log, diagnose the exact boundary, fix the defect and add a deterministic regression test.
 
 Invariant: this policy does not weaken transport safety. Startup must still perform no automatic resend; `SAFE_RETRY` and `RECONCILE_REQUIRED` remain distinct; ambiguous post-submission state must be reconciled before any retry.
+
+## 2026-08-08 — Main work-state surface preserves first-class operational controls
+
+Decision: `CDU-004B8 — Main Console Work-State Surface` may reorganise the operator UI, but it must not remove or hide critical workflows merely to simplify the dashboard.
+
+The operator surface must preserve:
+
+- direct Project interaction for direction, scope, priorities and approvals;
+- thread continuity controls used when ChatGPT conversation capacity is reached;
+- Core generated-file/package review with explicit operator-controlled repository application;
+- Research source/material intake for books, papers, PDFs, notes, scans and later structured evidence workflows;
+- department authority boundaries and drill-down access;
+- operator attention, artifacts/results and CDU/system diagnostics.
+
+The legacy departmental view remains available through B8 functional evaluation. The new surface becomes default only after normal use shows that it reduces navigation without losing operational capability.

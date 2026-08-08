@@ -1,7 +1,7 @@
 # Curvature Console Roadmap
 
 Status: Active
-Version: 4.1.0
+Version: 4.2.0
 Owner: Curvature Console Development Unit
 Last Updated: 2026-08-08
 
@@ -11,24 +11,52 @@ The operational foundation includes departmental workspaces, persistence, Browse
 
 ## Current
 
-### CDU-004B7 — Console-first reliability and recovery hardening
+### CDU-004B8 — Main Console Work-State Surface
 
-Status: **CLOSED**.
+Status: **ACTIVE**.
 
-B7A–B7C established durable transport state, immediate failure/cancel closure and conservative restart reconciliation. `QUEUED` / pre-submission `STARTED` attempts recover to `RETRY_PENDING`; work at or beyond durable submission evidence recovers to `RECONCILE_REQUIRED`; startup never automatically resends. Reconciliation is idempotent.
+Goal:
 
-Closure evidence:
+Rebuild the main Console operator experience around meaningful work state while preserving all critical existing departmental workflows and authority boundaries.
 
-- 288 automated tests passed;
-- `git diff --check` passed;
-- checkpoint `6101810957763035bc71a657e036597ec66697d7` is pushed;
-- deliberate narrow-window crash injection is deferred as opportunistic operational validation rather than a release blocker.
+The new surface is an operator shell above the existing Project, Core, Research and CDU workspaces. It must not become a shallow dashboard that hides necessary controls.
 
-If a natural interruption exposes a defect, capture SQLite/runtime-log evidence and add a regression test before considering the issue closed.
+### CDU-004B8A — Operator Surface Contract
 
-### Next approved implementation direction
+Status: **COMPLETED / APPROVED**.
 
-Rebuild the main Console surface around **work state**. Keep this as the next implementation area until CDU assigns the concrete milestone/substage identifier. After that, run one real Chronicle Console-first end-to-end workflow before formal Console-first promotion.
+Before UI implementation, define and accept the first-class operator requirements:
+
+- Project remains directly usable as the primary operator-facing workspace;
+- Task Package, Thread Handoff and thread-continuity controls remain easy to reach;
+- Active Work and Operator Attention aggregate meaningful cross-department state;
+- Core generated output exposes controlled Package Review / Apply entry points without autonomous repository-write authority;
+- Research exposes first-class Add Sources / Attach Materials input, queue state and future knowledge/evidence access;
+- department drill-down and authority isolation remain intact;
+- artifacts/results and CDU/system status remain accessible;
+- the legacy departmental view remains available during functional evaluation.
+
+Accepted B8 implementation sequence:
+
+1. B8A — Operator Surface Contract;
+2. B8B — Read-only Work-State Prototype;
+3. B8C — Project and Continuity Integration;
+4. B8D — Core Output / Package Review Integration;
+5. B8E — Research Source Intake Integration;
+6. B8F — Attention / Results / Department Drill-down;
+7. B8G — Functional Evaluation.
+
+B8G is a real-use evaluation gate: accept, adjust or redesign the new surface before making it the default.
+
+Next substage:
+
+```text
+CDU-004B8B — Read-only Work-State Prototype
+```
+
+B8B must be non-destructive and must preserve the legacy departmental view while the new work-state surface is evaluated.
+
+After B8, run one real Chronicle Console-first end-to-end workflow before formal Console-first promotion.
 
 
 ## Approved development direction
@@ -36,7 +64,7 @@ Rebuild the main Console surface around **work state**. Keep this as the next im
 The capability-based Console-first plan in `docs/CURVATURE_CONSOLE_FIRST_ACTION_PLAN.md` remains authoritative. The agreed execution order after CDU-004B6 is now:
 
 1. CDU-004B7 reliability/recovery hardening;
-2. rebuild the main Console surface around work state;
+2. complete CDU-004B8 Main Console Work-State Surface (B8A–B8G);
 3. run one real Chronicle end-to-end Console workflow;
 4. formally promote Console to the primary Curvature operating interface;
 5. implement the Tool Adapter Foundation;

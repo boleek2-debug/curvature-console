@@ -1,9 +1,22 @@
 # Curvature Console Changelog
 
 Status: Active
-Version: 2.1.0
+Version: 2.2.0
 Owner: Curvature Console Development Unit
 Last Updated: 2026-08-08
+
+## 2026-08-08 — CDU-004B8A Operator Surface Contract accepted
+
+- Assigned `CDU-004B8 — Main Console Work-State Surface` as the next Console milestone.
+- Defined `CDU-004B8A — Operator Surface Contract` before any UI implementation.
+- Confirmed that the new work-state surface is an operator shell above existing departmental workspaces, not a replacement for them.
+- Kept Project directly usable as the primary operator-facing workspace.
+- Kept thread-pressure, Task Package and Thread Handoff continuity controls as first-class UI requirements.
+- Required Core generated-output visibility with existing controlled Package Review / Apply authority boundaries.
+- Required first-class Research source/material intake, queue visibility and future evidence/knowledge-base access.
+- Required Active Work, Operator Attention, artifacts/results, department drill-down and CDU/system status.
+- Required the legacy departmental view to remain available during functional evaluation.
+- Split B8 into B8A–B8G so the UI can be prototyped, used and revised without destabilising existing workflows.
 
 ## 2026-08-08 — CDU-004B7 reliability/recovery hardening closed
 

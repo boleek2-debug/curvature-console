@@ -1,7 +1,7 @@
 # CURVATURE CONSOLE — CURRENT STATE
 
-Status: Operational; CDU-004B7 closed
-Version: 3.0.0
+Status: Operational; CDU-004B8A approved
+Version: 3.1.0
 Owner: Curvature Console Development Unit
 Last Updated: 2026-08-08
 
@@ -71,22 +71,57 @@ Deliberately forcing narrow crash-boundary failures is not a blocking requiremen
 
 # Current Direction
 
-The next approved implementation area is:
+Current milestone:
 
 ```text
-Main Console work-state surface
+CDU-004B8 — Main Console Work-State Surface
 ```
 
-Do not invent a new milestone identifier in this checkpoint. Assign the concrete CDU milestone/substage identifier before implementation begins.
+Completed substage:
 
-After the work-state surface is operational:
+```text
+CDU-004B8A — Operator Surface Contract
+```
+
+B8A is approved. It defines the operator-facing contract before UI implementation. The new surface must reduce navigation without removing critical existing workflows.
+
+Next substage:
+
+```text
+CDU-004B8B — Read-only Work-State Prototype
+```
+
+First-class requirements:
+
+- Project remains directly usable as the primary operator workspace;
+- thread-pressure, Task Package and Thread Handoff continuity controls remain easy to reach;
+- Active Work and Operator Attention aggregate meaningful state across departments;
+- Core generated output remains subject to Package Review and explicit operator Apply/Reject/Request Changes control;
+- Research retains first-class source/material intake and future evidence/knowledge-base access;
+- departmental authority and full drill-down remain intact;
+- artifacts, results, CDU and system diagnostics remain accessible;
+- the legacy departmental view remains available while B8 is evaluated in normal use.
+
+The accepted implementation sequence is:
+
+```text
+B8A — Operator Surface Contract
+B8B — Read-only Work-State Prototype
+B8C — Project and Continuity Integration
+B8D — Core Output / Package Review Integration
+B8E — Research Source Intake Integration
+B8F — Attention / Results / Department Drill-down
+B8G — Functional Evaluation
+```
+
+After B8:
 
 ```text
 one real Chronicle Console-first end-to-end workflow
 → formal Console-first promotion
 → Tool Adapter Foundation
 → Godot/local build-test integration
-→ Research source intake
+→ Research source intake tooling
 → Blender / ComfyUI / controlled image-to-3D pipelines
 → composite workflows
 → Chronicle Beta Feedback Hub
@@ -113,4 +148,6 @@ If a real crash/restart issue appears, preserve both before cleanup.
 
 # Next Step
 
-Update the B7 closure documentation, validate the documentation-only diff, commit and push it, create a fresh clean snapshot, then begin the main Console work-state surface milestone.
+Begin `CDU-004B8B — Read-only Work-State Prototype`.
+
+Start with reconnaissance of the current `MainWindow` and persisted state sources, then build a non-destructive read-only prototype. Do not remove the legacy departmental view or change repository-write, Browser Bridge, handoff or decision semantics during B8B.
