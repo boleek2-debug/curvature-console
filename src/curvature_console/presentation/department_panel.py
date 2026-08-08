@@ -23,6 +23,7 @@ from curvature_console.infrastructure.state_store import GeneratedDownloadRecord
 from curvature_console.infrastructure.thread_pressure import (
     ThreadPressureEstimator,
     ThreadPressureLevel,
+    active_thread_conversation_text,
 )
 from curvature_console.presentation.attachment_list import AttachmentList
 
@@ -434,11 +435,9 @@ class DepartmentPanel(QFrame):
     def _active_thread_conversation_text(self) -> str:
         """Return only the transcript belonging to the active ChatGPT thread."""
 
-        marker = "=== NEW THREAD AFTER HANDOFF ==="
-        if marker not in self._conversation_history_text:
-            return self._conversation_history_text
-        _, _, active_text = self._conversation_history_text.rpartition(marker)
-        return marker + active_text
+        return active_thread_conversation_text(
+            self._conversation_history_text
+        )
 
     @property
     def last_read_reply_count(self) -> int:

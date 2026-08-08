@@ -117,7 +117,7 @@ def test_work_surface_exposes_recovery_state_without_retrying(
     window.close()
 
 
-def test_work_surface_is_read_only_and_has_no_apply_or_send_controls(
+def test_work_surface_has_no_repository_apply_controls(
     tmp_path: Path,
 ) -> None:
     window = _window(tmp_path)
@@ -128,8 +128,7 @@ def test_work_surface_is_read_only_and_has_no_apply_or_send_controls(
         is not None
     )
     assert surface.findChild(type(window.restore_button), "applyButton") is None
-    assert surface.findChild(type(window.restore_button), "sendTaskButton") is None
-    assert "view only" in surface.footer_label.text().lower()
+    assert "operator-controlled" in surface.footer_label.text().lower()
     window.close()
 
 
@@ -277,4 +276,196 @@ def test_in_progress_handoff_remains_active_work(tmp_path: Path) -> None:
     assert window.work_state_surface.active_summary.findChild(
         type(window.work_state_surface.footer_label), "workStateSummaryValue"
     ).text() == "1"
+    window.close()
+
+
+def test_work_surface_exposes_project_draft_pressure_route_and_attachments(
+    tmp_path: Path,
+) -> None:
+    window = _window(tmp_path)
+    project = window.department_panels["project"]
+    project.input_editor.setPlainText("Current Project direction")
+    note = tmp_path / "project-note.txt"
+    note.write_text("Project continuity note.", encoding="utf-8")
+    project.attachment_list.add_paths([note])
+    window.save_department_state("project")
+
+    window.work_state_surface.refresh()
+
+    assert (
+        window.work_state_surface.project_draft_preview.toPlainText()
+        == "Current Project direction"
+    )
+    status = window.work_state_surface.project_status_label.text()
+    assert "Thread pressure: GREEN" in status
+    assert "Attachments: 1" in status
+    assert "Route:" in status
+    window.close()
+
+
+def test_open_project_from_work_surface_reuses_existing_department_workspace(
+    tmp_path: Path,
+) -> None:
+    window = _window(tmp_path)
+    window.show_work_surface()
+
+    window.work_state_surface.open_project_button.click()
+
+    assert window.main_surface_stack.currentWidget() is window.splitter
+    assert window.focused_department_id == "project"
+    # The test window itself is never shown, so QWidget.isVisible() would be
+    # false even for the selected child. Verify the explicit hidden state that
+    # focus_department() controls instead.
+    assert not window.department_panels["project"].isHidden()
+    assert window.department_panels["core"].isHidden()
+    assert window.department_panels["research"].isHidden()
+    window.close()
+
+
+def test_project_transfer_controls_reuse_existing_supervised_package_entrypoint(
+    tmp_path: Path,
+) -> None:
+    window = _window(tmp_path)
+    calls: list[tuple[str, str]] = []
+
+    def capture(department_id: str, mode_value: str) -> None:
+        calls.append((department_id, mode_value))
+
+    window.prepare_transfer_package = capture
+    window.work_state_surface.department_transfer_requested.disconnect()
+    window.work_state_surface.department_transfer_requested.connect(
+        window.prepare_department_transfer
+    )
+
+    window.work_state_surface.project_task_button.click()
+    window.work_state_surface.project_handoff_button.click()
+
+    assert calls == [
+        ("project", "task"),
+        ("project", "thread_handoff"),
+    ]
+    window.close()
+
+
+def test_all_departments_expose_independent_continuity_controls(
+    tmp_path: Path,
+) -> None:
+    window = _window(tmp_path)
+    calls: list[tuple[str, str]] = []
+
+    window.prepare_transfer_package = (
+        lambda department_id, mode_value: calls.append(
+            (department_id, mode_value)
+        )
+    )
+    window.work_state_surface.department_transfer_requested.disconnect()
+    window.work_state_surface.department_transfer_requested.connect(
+        window.prepare_department_transfer
+    )
+
+    surface = window.work_state_surface
+    surface.project_handoff_button.click()
+    surface.research_handoff_button.click()
+    surface.core_handoff_button.click()
+
+    assert calls == [
+        ("project", "thread_handoff"),
+        ("research", "thread_handoff"),
+        ("core", "thread_handoff"),
+    ]
+    window.close()
+
+
+def test_research_workspace_surfaces_queued_sources(
+    tmp_path: Path,
+) -> None:
+    window = _window(tmp_path)
+    source = tmp_path / "source-paper.pdf"
+    source.write_bytes(b"%PDF-test")
+    research = window.department_panels["research"]
+    research.attachment_list.add_paths([source])
+    window.save_department_state("research")
+
+    window.work_state_surface.refresh()
+
+    rows = [
+        window.work_state_surface.research_sources_list.item(i).text()
+        for i in range(
+            window.work_state_surface.research_sources_list.count()
+        )
+    ]
+    assert any("source-paper.pdf" in row for row in rows)
+    assert "Sources/materials: 1" in (
+        window.work_state_surface.research_status_label.text()
+    )
+    window.close()
+
+
+def test_core_workspace_surfaces_generated_outputs(
+    tmp_path: Path,
+) -> None:
+    window = _window(tmp_path)
+
+    class _CapturedDownload:
+        original_filename = "core-package.zip"
+        saved_path = tmp_path / "core-package.zip"
+        source_url = "https://example.invalid/core-package.zip"
+
+    window.state_store.save_generated_downloads(
+        request_id="req-1",
+        department_id="core",
+        conversation_url="https://chatgpt.com/c/core",
+        downloads=[_CapturedDownload()],
+    )
+
+    window.work_state_surface.refresh()
+
+    rows = [
+        window.work_state_surface.core_outputs_list.item(i).text()
+        for i in range(window.work_state_surface.core_outputs_list.count())
+    ]
+    assert any("core-package.zip" in row for row in rows)
+    window.close()
+
+def test_project_workspace_surfaces_persisted_conversation_preview(
+    tmp_path: Path,
+) -> None:
+    window = _window(tmp_path)
+    project = window.department_panels["project"]
+    project.restore_conversation_text(
+        "Earlier Project discussion.\n\nCurrent direction discussion."
+    )
+    window.save_department_state("project")
+
+    window.work_state_surface.refresh()
+
+    assert "Current direction discussion." in (
+        window.work_state_surface.project_conversation_preview.toPlainText()
+    )
+    window.close()
+
+
+def test_work_surface_pressure_ignores_pre_handoff_history(
+    tmp_path: Path,
+) -> None:
+    window = _window(tmp_path)
+    core = window.department_panels["core"]
+
+    old_history = "x" * (60_000 * 4)
+    core.restore_conversation_text(
+        old_history
+        + "\n\n=== NEW THREAD AFTER HANDOFF ==="
+        + "\n\n=== USER TASK ===\nsmall new task"
+        + "\n\n=== ASSISTANT RESPONSE ===\nsmall new answer"
+    )
+    window.save_department_state("core")
+
+    window.work_state_surface.refresh()
+
+    panel_tokens = core.thread_pressure_snapshot.estimated_tokens
+    label = window.work_state_surface.core_status_label.text()
+
+    assert panel_tokens < 1_000
+    assert f"~{panel_tokens:,} tokens" in label
+    assert "GREEN" in label
     window.close()

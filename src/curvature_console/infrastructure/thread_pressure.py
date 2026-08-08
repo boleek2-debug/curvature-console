@@ -8,6 +8,25 @@ from pathlib import Path
 from typing import Iterable
 
 
+ACTIVE_THREAD_HANDOFF_MARKER = "=== NEW THREAD AFTER HANDOFF ==="
+
+
+def active_thread_conversation_text(conversation_text: str) -> str:
+    """Return only the transcript belonging to the current ChatGPT thread.
+
+    Console keeps cumulative department history for operator review. A successful
+    Thread Handoff appends ACTIVE_THREAD_HANDOFF_MARKER; pressure must be
+    calculated only from the newest marker onward.
+    """
+
+    if ACTIVE_THREAD_HANDOFF_MARKER not in conversation_text:
+        return conversation_text
+    _, _, active_text = conversation_text.rpartition(
+        ACTIVE_THREAD_HANDOFF_MARKER
+    )
+    return ACTIVE_THREAD_HANDOFF_MARKER + active_text
+
+
 class ThreadPressureLevel(str, Enum):
     """Advisory pressure state derived only from local Console data."""
 

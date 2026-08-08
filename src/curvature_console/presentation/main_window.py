@@ -281,6 +281,15 @@ class MainWindow(QMainWindow):
         self.work_state_surface = WorkStateSurface(
             state_store=self.state_store, parent=self
         )
+        self.work_state_surface.open_department_requested.connect(
+            self.open_department_workspace
+        )
+        self.work_state_surface.department_transfer_requested.connect(
+            self.prepare_department_transfer
+        )
+        self.work_state_surface.research_add_sources_requested.connect(
+            self.add_research_sources
+        )
         self.main_surface_stack = QStackedWidget()
         self.main_surface_stack.setObjectName("mainSurfaceStack")
         self.main_surface_stack.addWidget(self.work_state_surface)
@@ -370,8 +379,9 @@ class MainWindow(QMainWindow):
         self._restoring_state = False
 
     def show_work_surface(self) -> None:
-        """Show the read-only B8 work-state prototype."""
+        """Show the B8 operator work-state surface."""
 
+        self.save_all_state()
         self.work_state_surface.refresh()
         self.main_surface_stack.setCurrentWidget(self.work_state_surface)
         self.work_surface_button.setEnabled(False)
@@ -385,6 +395,40 @@ class MainWindow(QMainWindow):
         self.work_surface_button.setEnabled(True)
         self.departments_surface_button.setEnabled(False)
         self.statusBar().showMessage("Department workspaces")
+
+    def open_department_workspace(self, department_id: str) -> None:
+        """Open and focus an existing department workspace from Work."""
+
+        self.show_departments_surface()
+        self.focus_department(department_id)
+
+    def open_project_workspace(self) -> None:
+        """Backward-compatible helper for Project workspace focus."""
+
+        self.open_department_workspace("project")
+
+    def prepare_department_transfer(
+        self,
+        department_id: str,
+        mode_value: str,
+    ) -> None:
+        """Reuse the existing supervised transfer-package workflow."""
+
+        self.save_department_state(department_id)
+        self.prepare_transfer_package(department_id, mode_value)
+
+    def prepare_project_transfer(self, mode_value: str) -> None:
+        """Backward-compatible Project transfer helper."""
+
+        self.prepare_department_transfer("project", mode_value)
+
+    def add_research_sources(self) -> None:
+        """Open Research file intake using the existing attachment widget."""
+
+        panel = self.department_panels["research"]
+        panel.attachment_list.choose_files()
+        self.save_department_state("research")
+        self._refresh_work_state_surface()
 
     def _refresh_work_state_surface(self) -> None:
         surface = getattr(self, "work_state_surface", None)

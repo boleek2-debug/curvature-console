@@ -5,8 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from curvature_console.infrastructure.thread_pressure import (
+    ACTIVE_THREAD_HANDOFF_MARKER,
     ThreadPressureEstimator,
     ThreadPressureLevel,
+    active_thread_conversation_text,
 )
 
 
@@ -56,3 +58,34 @@ def test_pressure_snapshot_exposes_handoff_actions() -> None:
     assert not amber.should_avoid_regular_task
     assert red.should_prepare_handoff
     assert red.should_avoid_regular_task
+
+
+def test_active_thread_text_uses_only_latest_handoff_epoch() -> None:
+    transcript = (
+        ("old-history " * 1000)
+        + "\n\n"
+        + ACTIVE_THREAD_HANDOFF_MARKER
+        + "\n\n=== USER TASK ===\nnew task"
+        + "\n\n=== ASSISTANT RESPONSE ===\nnew answer"
+    )
+
+    active = active_thread_conversation_text(transcript)
+
+    assert active.startswith(ACTIVE_THREAD_HANDOFF_MARKER)
+    assert "old-history" not in active
+    assert "new task" in active
+    assert "new answer" in active
+
+
+def test_active_thread_text_uses_latest_marker_when_multiple_handoffs_exist() -> None:
+    transcript = (
+        "first"
+        + ACTIVE_THREAD_HANDOFF_MARKER
+        + "second"
+        + ACTIVE_THREAD_HANDOFF_MARKER
+        + "third"
+    )
+
+    assert active_thread_conversation_text(transcript) == (
+        ACTIVE_THREAD_HANDOFF_MARKER + "third"
+    )
