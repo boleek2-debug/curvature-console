@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSplitter,
+    QStackedWidget,
     QStatusBar,
     QToolBar,
     QWidget,
@@ -102,6 +103,7 @@ from curvature_console.presentation.reply_viewer_dialog import (
 from curvature_console.presentation.support_unit_dialog import (
     ConsoleDevelopmentUnitDialog,
 )
+from curvature_console.presentation.work_state_surface import WorkStateSurface
 
 
 logger = logging.getLogger(__name__)
@@ -275,7 +277,30 @@ class MainWindow(QMainWindow):
             self.splitter.addWidget(panel)
 
         self.splitter.setSizes(self._three_panel_sizes)
-        self.setCentralWidget(self.splitter)
+
+        self.work_state_surface = WorkStateSurface(
+            state_store=self.state_store, parent=self
+        )
+        self.main_surface_stack = QStackedWidget()
+        self.main_surface_stack.setObjectName("mainSurfaceStack")
+        self.main_surface_stack.addWidget(self.work_state_surface)
+        self.main_surface_stack.addWidget(self.splitter)
+        self.main_surface_stack.setCurrentWidget(self.splitter)
+        self.setCentralWidget(self.main_surface_stack)
+
+        self.work_surface_button = QPushButton("Work")
+        self.work_surface_button.setObjectName("showWorkSurfaceButton")
+        self.work_surface_button.clicked.connect(self.show_work_surface)
+        self.work_surface_button.setEnabled(True)
+
+        self.departments_surface_button = QPushButton("Departments")
+        self.departments_surface_button.setObjectName(
+            "showDepartmentsSurfaceButton"
+        )
+        self.departments_surface_button.clicked.connect(
+            self.show_departments_surface
+        )
+        self.departments_surface_button.setEnabled(False)
 
         self.restore_button = QPushButton("Show All Departments")
         self.restore_button.setObjectName("restoreThreePanelButton")
@@ -309,6 +334,9 @@ class MainWindow(QMainWindow):
         toolbar = QToolBar("Workspace")
         toolbar.setObjectName("workspaceToolbar")
         toolbar.setMovable(False)
+        toolbar.addWidget(self.work_surface_button)
+        toolbar.addWidget(self.departments_surface_button)
+        toolbar.addSeparator()
         toolbar.addWidget(self.restore_button)
         toolbar.addWidget(self.refresh_all_button)
         toolbar.addWidget(self.handoff_controls_button)
@@ -340,6 +368,28 @@ class MainWindow(QMainWindow):
         self.restore_persisted_state()
         self._refresh_operational_review_button()
         self._restoring_state = False
+
+    def show_work_surface(self) -> None:
+        """Show the read-only B8 work-state prototype."""
+
+        self.work_state_surface.refresh()
+        self.main_surface_stack.setCurrentWidget(self.work_state_surface)
+        self.work_surface_button.setEnabled(False)
+        self.departments_surface_button.setEnabled(True)
+        self.statusBar().showMessage("Work-state overview — read only")
+
+    def show_departments_surface(self) -> None:
+        """Restore the legacy departmental workspace surface."""
+
+        self.main_surface_stack.setCurrentWidget(self.splitter)
+        self.work_surface_button.setEnabled(True)
+        self.departments_surface_button.setEnabled(False)
+        self.statusBar().showMessage("Department workspaces")
+
+    def _refresh_work_state_surface(self) -> None:
+        surface = getattr(self, "work_state_surface", None)
+        if surface is not None:
+            surface.refresh()
 
     def open_operational_conversations(self) -> None:
         """Open the durable background conversation review surface."""
@@ -374,6 +424,7 @@ class MainWindow(QMainWindow):
                     parts.append(f"{count} {noun}")
             label += " (" + ", ".join(parts) + ")"
         self.operational_conversations_button.setText(label)
+        self._refresh_work_state_surface()
 
     def _refresh_open_operational_dialog(self) -> None:
         dialog = self._operational_conversations_dialog
@@ -2887,6 +2938,7 @@ class MainWindow(QMainWindow):
             department_id = getattr(request, "department_id", "unknown")
             text = f"Bridge active: {department_id} · {waiting} waiting"
         self.browser_queue_label.setText(text)
+        self._refresh_work_state_surface()
 
     def _clear_browser_worker(self) -> None:
         worker = self._browser_worker

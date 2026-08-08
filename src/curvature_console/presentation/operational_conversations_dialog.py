@@ -280,21 +280,29 @@ class OperationalConversationsDialog(QDialog):
             bool(record.decision_status)
             and record.decision_status != "PENDING"
         )
+        resolved_result_review = (
+            record.status == "RESULT_READY" and resolved_decision
+        )
         ordinary_review = not pending_decision and not resolved_decision
+        review_visible = pending_decision or ordinary_review or resolved_result_review
 
         self.decision_option_label.setVisible(pending_decision)
         self.decision_option.setVisible(pending_decision)
         self.confirm_decision_button.setVisible(pending_decision)
         self.review_note_label.setVisible(pending_decision or ordinary_review)
         self.review_note.setVisible(pending_decision or ordinary_review)
-        self.validation_label.setVisible(pending_decision or ordinary_review)
-        self.accept_button.setVisible(ordinary_review)
+        self.validation_label.setVisible(review_visible)
+        self.accept_button.setText(
+            "Accept result & close" if resolved_result_review else "Close as accepted"
+        )
+        self.accept_button.setVisible(ordinary_review or resolved_result_review)
         self.reject_button.setVisible(ordinary_review)
         self.ask_button.setVisible(ordinary_review)
-        self.abandon_button.setVisible(ordinary_review)
-        self._set_review_enabled(
-            record.status in self.REVIEWABLE_STATUSES and not resolved_decision
+        self.abandon_button.setVisible(ordinary_review or resolved_result_review)
+        enabled = record.status in self.REVIEWABLE_STATUSES and (
+            not resolved_decision or resolved_result_review
         )
+        self._set_review_enabled(enabled)
 
     def _set_review_enabled(self, enabled: bool) -> None:
         self.review_note.setEnabled(enabled)

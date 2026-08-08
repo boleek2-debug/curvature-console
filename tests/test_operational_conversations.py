@@ -453,3 +453,83 @@ def test_close_as_abandoned_is_local_and_audited(tmp_path, caplog) -> None:
     assert "operator_resume_enqueued" not in caplog.text
 
     window.close()
+
+
+def test_resolved_result_ready_can_be_acknowledged_and_closed(tmp_path) -> None:
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from curvature_console.main import create_application
+    from curvature_console.presentation.main_window import MainWindow
+    from curvature_console.presentation.operational_conversations_dialog import (
+        OperationalConversationsDialog,
+    )
+
+    create_application(["curvature-console-resolved-result-closure-test"])
+    window = MainWindow(
+        state_path=tmp_path / "state.sqlite3",
+        data_directory=tmp_path / "data",
+        config_directory=tmp_path / "config",
+    )
+    store = window.state_store
+    store.create_operational_conversation(
+        conversation_id="resolved-result-ready-ui",
+        source_request_id="source-ui",
+        title="Resolved implementation decision",
+        participants=("project", "core"),
+        status="RESULT_READY",
+    )
+    store.save_operational_decision(
+        "resolved-result-ready-ui",
+        domain="IMPLEMENTATION_PLAN_APPROVAL",
+        question="Approve plan?",
+        options=("Approve", "Reject"),
+        consequences=("Proceed", "Stop"),
+        action_types=("APPROVE", "REJECT"),
+        blocked_request_body="blocked request",
+        source_department_id="project",
+        target_department_id="core",
+    )
+    store.resolve_operational_decision(
+        "resolved-result-ready-ui",
+        status="APPROVED",
+        selected_option="Approve",
+        selected_action_type="APPROVE",
+    )
+    store.update_operational_attention(
+        "resolved-result-ready-ui",
+        attention_kind="RESULT",
+        attention_reason="Completed result.",
+    )
+    store.update_operational_conversation_status(
+        "resolved-result-ready-ui", "RESULT_READY"
+    )
+
+    dialog = OperationalConversationsDialog(state_store=store, parent=window)
+    dialog.show()
+    dialog.refresh()
+
+    assert dialog.accept_button.isVisible()
+    assert dialog.accept_button.isEnabled()
+    assert dialog.accept_button.text() == "Accept result & close"
+    assert dialog.abandon_button.isVisible()
+    assert dialog.abandon_button.isEnabled()
+    assert not dialog.reject_button.isVisible()
+    assert not dialog.ask_button.isVisible()
+    assert not dialog.review_note.isVisible()
+
+    window._handle_operational_review_action(
+        "resolved-result-ready-ui", "ACCEPT", "", ""
+    )
+
+    record = store.load_operational_conversation("resolved-result-ready-ui")
+    assert record is not None
+    assert record.status == "ACCEPTED"
+    assert record.closed_at is not None
+    messages = store.load_operational_messages("resolved-result-ready-ui")
+    assert messages[-1].author_department_id == "operator"
+    assert "Closed as accepted" in messages[-1].body
+
+    dialog.close()
+    window.close()
